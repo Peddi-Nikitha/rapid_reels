@@ -32,16 +32,83 @@ class _EventDetailsFormScreenState extends State<EventDetailsFormScreen> {
   int _duration = 4; // hours
   final List<String> _selectedKeyMoments = [];
 
-  final List<String> _keyMomentOptions = [
-    'Bride Entry',
-    'Groom Entry',
-    'Ring Exchange',
-    'Varmala Ceremony',
-    'First Dance',
-    'Cake Cutting',
-    'Family Photos',
-    'Couple Photos',
-  ];
+  // Get event-specific key moments based on event type
+  List<String> get _keyMomentOptions {
+    switch (widget.eventType.toLowerCase()) {
+      case 'wedding':
+        return [
+          'Bride Entry',
+          'Groom Entry',
+          'Ring Exchange',
+          'Varmala Ceremony',
+          'Saptapadi',
+          'First Dance',
+          'Cake Cutting',
+          'Family Photos',
+          'Couple Photos',
+          'Reception Entry',
+        ];
+      case 'birthday':
+        return [
+          'Birthday Song',
+          'Cake Cutting',
+          'Candle Blowing',
+          'Gift Opening',
+          'Party Games',
+          'Dance Moments',
+          'Group Photos',
+          'Birthday Wishes',
+          'Food & Decor',
+          'Fun Moments',
+        ];
+      case 'engagement':
+        return [
+          'Ring Ceremony',
+          'Couple Entry',
+          'Exchange of Rings',
+          'Family Blessings',
+          'Photoshoot',
+          'Traditional Rituals',
+          'Group Photos',
+          'Couple Moments',
+          'Celebration',
+          'Food & Decor',
+        ];
+      case 'corporate':
+        return [
+          'Inauguration',
+          'Keynote Speeches',
+          'Award Ceremony',
+          'Networking',
+          'Product Launch',
+          'Team Photos',
+          'Panel Discussions',
+          'Workshop Sessions',
+          'Closing Ceremony',
+          'Group Activities',
+        ];
+      case 'brand':
+        return [
+          'Product Launch',
+          'Brand Reveal',
+          'Celebrity Appearance',
+          'Press Conference',
+          'Behind the Scenes',
+          'Event Highlights',
+          'Social Media Moments',
+          'Brand Showcase',
+          'Networking',
+          'Closing Remarks',
+        ];
+      default:
+        return [
+          'Key Moment 1',
+          'Key Moment 2',
+          'Key Moment 3',
+          'Key Moment 4',
+        ];
+    }
+  }
 
   @override
   void dispose() {

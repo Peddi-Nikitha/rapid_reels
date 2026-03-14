@@ -5,10 +5,14 @@ import 'package:go_router/go_router.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/mock/mock_venues.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../providers/presentation/screens/provider_details_screen.dart';
@@ -24,12 +28,19 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentBannerIndex = 0;
   int _currentReviewIndex = 0;
-  String _selectedCity = 'Siddipet';
+  String _selectedCity = 'Detecting...';
   int _onboardingStep = 0;
   bool _showOnboarding = false;
   bool _showOfferPopup = false;
+  
+  // Location and nearby venues state
+  final _mockData = MockDataService();
+  LatLng _currentLocation = const LatLng(18.1023, 78.8514); // Default: Siddipet
+  List<Venue> _nearbyVenues = [];
+  bool _isLoadingVenues = false;
 
   final List<String> _cities = [
+    // Indian Cities
     'Siddipet',
     'Hyderabad',
     'Warangal',
@@ -39,15 +50,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     'Chennai',
     'Bangalore',
     'Vijayawada',
-    'Warangal',
+    'Delhi',
+    'Kolkata',
+    'Pune',
+    // UK Cities
+    'London',
+    'Manchester',
+    'Birmingham',
+    'Liverpool',
+    'Leeds',
+    'Glasgow',
+    'Edinburgh',
+    'Bristol',
+    'Cardiff',
+    'Belfast',
   ];
 
   @override
   void initState() {
     super.initState();
-    _loadSelectedCity();
     _checkOnboardingStatus();
     _checkOfferPopup();
+    // Get location first, then load saved city as fallback
+    _getCurrentLocation();
   }
 
   Future<void> _checkOnboardingStatus() async {
@@ -84,17 +109,199 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  Future<void> _loadSelectedCity() async {
+
+  Future<void> _getCurrentLocation() async {
+    if (!mounted) return;
+    
+    setState(() {
+      _selectedCity = 'Detecting location...';
+    });
+    
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('Location services are disabled');
+        _handleLocationError('Location services are disabled. Please enable location services.');
+        return;
+      }
+
+      // Request location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        debugPrint('Location permission denied, requesting...');
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint('Location permission denied by user');
+          _handleLocationError('Location permission denied. Showing default location.');
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        debugPrint('Location permission denied forever');
+        _handleLocationError('Location permission denied. Please enable it in app settings.');
+        return;
+      }
+
+      // Get current position
+      debugPrint('Getting current position...');
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
+
+      if (mounted) {
+        setState(() {
+          _currentLocation = LatLng(position.latitude, position.longitude);
+        });
+        
+        debugPrint('Location obtained: ${position.latitude}, ${position.longitude}');
+        
+        // Reverse geocode to get city name
+        await _getCityFromLocation(position.latitude, position.longitude);
+        
+        // Load nearby venues with detected location
+        _loadNearbyVenues();
+      }
+    } catch (e) {
+      debugPrint('Error getting location: $e');
+      _handleLocationError('Unable to detect location. Using default.');
+    }
+  }
+
+  Future<void> _getCityFromLocation(double latitude, double longitude) async {
+    try {
+      debugPrint('Reverse geocoding location: $latitude, $longitude');
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        latitude,
+        longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        final placemark = placemarks.first;
+        String? cityName = placemark.locality ?? 
+                          placemark.subAdministrativeArea ?? 
+                          placemark.administrativeArea ??
+                          placemark.name;
+        
+        // If city name is available, use it; otherwise try to find a better match
+        if (cityName != null && cityName.isNotEmpty) {
+          // Clean up city name (remove extra spaces, etc.)
+          cityName = cityName.trim();
+          
+          // Check if it matches any of our known cities
+          String? matchedCity = _findMatchingCity(cityName);
+          
+          final finalCityName = matchedCity ?? cityName;
+          
+          debugPrint('Detected city: $finalCityName');
+          
+          if (mounted && finalCityName.isNotEmpty) {
+            setState(() {
+              _selectedCity = finalCityName;
+            });
+            
+            // Save detected city to preferences
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('selected_city', finalCityName);
+            await prefs.setDouble('last_latitude', latitude);
+            await prefs.setDouble('last_longitude', longitude);
+          }
+        } else {
+          debugPrint('City name not found in placemark');
+          _loadFallbackCity();
+        }
+      } else {
+        debugPrint('No placemarks found');
+        _loadFallbackCity();
+      }
+    } catch (e) {
+      debugPrint('Error reverse geocoding: $e');
+      _loadFallbackCity();
+    }
+  }
+
+  String? _findMatchingCity(String cityName) {
+    // Try to match with known cities (case-insensitive)
+    for (String city in _cities) {
+      if (cityName.toLowerCase().contains(city.toLowerCase()) || 
+          city.toLowerCase().contains(cityName.toLowerCase())) {
+        return city;
+      }
+    }
+    return null;
+  }
+
+  void _loadFallbackCity() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedCity = prefs.getString('selected_city');
+      
       if (savedCity != null && savedCity.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _selectedCity = savedCity;
+          });
+        }
+      } else {
+        // Use default city
+        if (mounted) {
+          setState(() {
+            _selectedCity = 'Siddipet';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading fallback city: $e');
+      if (mounted) {
         setState(() {
-          _selectedCity = savedCity;
+          _selectedCity = 'Siddipet';
+        });
+      }
+    }
+  }
+
+  void _handleLocationError(String message) {
+    debugPrint(message);
+    _loadFallbackCity();
+    _loadNearbyVenues();
+  }
+
+  void _loadNearbyVenues() {
+    if (!mounted) return;
+    
+    setState(() => _isLoadingVenues = true);
+    
+    try {
+      // Increase radius to 25km to find more venues
+      final allVenues = _mockData.getNearbyVenues(
+        _currentLocation.latitude,
+        _currentLocation.longitude,
+        radiusKm: 25.0,
+      );
+
+      // Only keep photography studios for homepage nearby section
+      final photographyVenues = allVenues.where((venue) {
+        return venue.venueType == 'photography';
+      }).toList();
+
+      debugPrint('Loading nearby photography venues for location: ${_currentLocation.latitude}, ${_currentLocation.longitude}');
+      debugPrint('Found ${photographyVenues.length} nearby photography venues');
+
+      if (mounted) {
+        setState(() {
+          _nearbyVenues = photographyVenues;
+          _isLoadingVenues = false;
         });
       }
     } catch (e) {
-      debugPrint('Error loading city: $e');
+      debugPrint('Error loading nearby venues: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingVenues = false;
+        });
+      }
     }
   }
 
@@ -417,6 +624,106 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ),
             ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+            // Nearby Vendors Section - Location Based
+            SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Nearby Photography Studios',
+                            style: AppTypography.headlineMedium.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          if (_nearbyVenues.isNotEmpty)
+                            TextButton(
+                              onPressed: () {
+                                _showSnackbar('View all nearby photography studios');
+                              },
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              ),
+                              child: Text(
+                                AppStrings.viewAll,
+                                style: AppTypography.labelMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_isLoadingVenues)
+                      SizedBox(
+                        height: 180,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      )
+                    else if (_nearbyVenues.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: AppColors.cardBackground.withValues(alpha: 0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.location_off_rounded,
+                                color: AppColors.textSecondary,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'No photography studios found nearby',
+                                  style: AppTypography.bodyMedium.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        height: 180,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          itemCount: _nearbyVenues.length,
+                          itemBuilder: (context, index) {
+                            final venue = _nearbyVenues[index];
+                            return _buildVenueCard(venue);
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
 
@@ -1069,6 +1376,163 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVenueCard(Venue venue) {
+    return GestureDetector(
+      onTap: () {
+        _showSnackbar('Viewing ${venue.name}');
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 280,
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.surface.withValues(alpha: 0.7),
+                  AppColors.surface.withValues(alpha: 0.5),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.cardBackground.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Venue Image
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: venue.imageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: venue.imageUrl!,
+                          width: double.infinity,
+                          height: 120,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            height: 120,
+                            decoration: BoxDecoration(
+                              gradient: AppColors.primaryGradient,
+                            ),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            height: 120,
+                            decoration: BoxDecoration(
+                              gradient: AppColors.primaryGradient,
+                            ),
+                            child: const Icon(
+                              Icons.business_rounded,
+                              size: 40,
+                              color: Colors.white,
+                            ),
+                          ),
+                        )
+                      : Container(
+                          height: 120,
+                          decoration: BoxDecoration(
+                            gradient: AppColors.primaryGradient,
+                          ),
+                          child: const Icon(
+                            Icons.business_rounded,
+                            size: 40,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+                // Venue Details
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        venue.name,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on_rounded,
+                            size: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              venue.address,
+                              style: AppTypography.captionMedium.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (venue.rating != null) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 14,
+                              color: Color(0xFFFFB800),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              venue.rating!.toStringAsFixed(1),
+                              style: AppTypography.labelSmall.copyWith(
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            if (venue.reviewCount != null) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '(${venue.reviewCount})',
+                                style: AppTypography.captionSmall.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1793,7 +2257,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Column(
             children: [
               Text(
-                '#Flashoot',
+                'Rapid Reels',
                 style: AppTypography.displaySmall.copyWith(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w800,

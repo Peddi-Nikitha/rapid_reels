@@ -32,6 +32,7 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
   LatLng _currentLocation = const LatLng(18.1023, 78.8514); // Default: Siddipet
   LatLng? _manualVenueLocation; // Location for manual venue entry
   Set<Marker> _markers = {};
+  Set<Circle> _circles = {};
   Venue? _selectedVenue;
   List<Venue> _nearbyVenues = [];
   bool _isLoadingLocation = false;
@@ -40,6 +41,7 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
   String? _mapError;
   bool _isMapLoading = true;
   bool _showManualEntry = false; // Toggle for manual entry section
+  double _searchRadiusKm = 15.0; // Search radius in kilometers (increased to show all photography studios)
 
   @override
   void initState() {
@@ -117,6 +119,7 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
         _loadNearbyVenues();
         if (_mapController != null && _mapInitialized) {
           _moveCameraToLocation(_currentLocation);
+          _updateCircles();
         }
       }
     } catch (e) {
@@ -129,37 +132,49 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
   }
 
   void _loadNearbyVenues() {
-    final venues = _mockData.getNearbyVenues(
+    // Get all nearby venues
+    final allVenues = _mockData.getNearbyVenues(
       _currentLocation.latitude,
       _currentLocation.longitude,
-      radiusKm: 15.0,
+      radiusKm: _searchRadiusKm,
     );
 
+    // Filter to show only photography studios
+    final photographyVenues = allVenues.where((venue) {
+      return venue.venueType == 'photography';
+    }).toList();
+
     setState(() {
-      _nearbyVenues = venues;
+      // Only show photography studios in Select Venue screen
+      _nearbyVenues = photographyVenues;
       // Show manual entry if no venues found
-      if (venues.isEmpty) {
+      if (_nearbyVenues.isEmpty) {
         _showManualEntry = true;
       }
     });
 
     _updateMarkers();
+    _updateCircles();
   }
 
   void _updateMarkers() {
     final markers = <Marker>{};
 
-    // Add current location marker
+    // Add current location marker with custom styling
     markers.add(
       Marker(
         markerId: const MarkerId('current_location'),
         position: _currentLocation,
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        infoWindow: const InfoWindow(title: 'Your Location'),
+        infoWindow: const InfoWindow(
+          title: 'Your Location',
+          snippet: 'Current position',
+        ),
+        anchor: const Offset(0.5, 0.5),
       ),
     );
 
-    // Add venue markers
+    // Add venue markers with improved styling
     for (var venue in _nearbyVenues) {
       final isSelected = _selectedVenue?.venueId == venue.venueId;
       markers.add(
@@ -167,13 +182,21 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
           markerId: MarkerId(venue.venueId),
           position: LatLng(venue.latitude, venue.longitude),
           icon: BitmapDescriptor.defaultMarkerWithHue(
-            isSelected ? BitmapDescriptor.hueRed : BitmapDescriptor.hueGreen,
+            isSelected 
+                ? BitmapDescriptor.hueRed 
+                : (venue.venueType == 'photography' 
+                    ? BitmapDescriptor.hueViolet 
+                    : BitmapDescriptor.hueGreen),
           ),
           infoWindow: InfoWindow(
             title: venue.name,
             snippet: venue.address,
           ),
+          anchor: const Offset(0.5, 1.0),
           onTap: () {
+            // Show bottom sheet with vendor details
+            _showVendorBottomSheet(venue);
+            // Also select the venue
             setState(() {
               _selectedVenue = venue;
               // Clear manual entry when venue is selected
@@ -197,6 +220,7 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
           position: _manualVenueLocation!,
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
           infoWindow: const InfoWindow(title: 'Selected Location'),
+          anchor: const Offset(0.5, 1.0),
         ),
       );
     }
@@ -206,9 +230,368 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
     });
   }
 
+  void _updateCircles() {
+    final circles = <Circle>{};
+
+    // Add radius circle around current location
+    circles.add(
+      Circle(
+        circleId: const CircleId('search_radius'),
+        center: _currentLocation,
+        radius: _searchRadiusKm * 1000, // Convert km to meters
+        fillColor: AppColors.primary.withValues(alpha: 0.15),
+        strokeColor: AppColors.primary.withValues(alpha: 0.5),
+        strokeWidth: 2,
+      ),
+    );
+
+    setState(() {
+      _circles = circles;
+    });
+  }
+
   void _moveCameraToLocation(LatLng location) {
     _mapController?.animateCamera(
       CameraUpdate.newLatLngZoom(location, 14.0),
+    );
+  }
+
+  void _showVendorBottomSheet(Venue venue) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // Drag handle
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.textTertiary,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Venue Images Gallery
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Main Image
+                              Container(
+                                height: 250,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  color: AppColors.cardBackground,
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: venue.imageUrl != null
+                                      ? Image.network(
+                                          venue.imageUrl!,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return Container(
+                                              color: AppColors.cardBackground,
+                                              child: const Center(
+                                                child: Icon(
+                                                  Icons.camera_alt,
+                                                  size: 64,
+                                                  color: AppColors.textTertiary,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        )
+                                      : Container(
+                                          color: AppColors.cardBackground,
+                                          child: const Center(
+                                            child: Icon(
+                                              Icons.camera_alt,
+                                              size: 64,
+                                              color: AppColors.textTertiary,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              // Image Gallery
+                              SizedBox(
+                                height: 80,
+                                child: ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: 5, // Show 5 static images
+                                  itemBuilder: (context, index) {
+                                    return Container(
+                                      width: 80,
+                                      margin: EdgeInsets.only(
+                                        right: index < 4 ? 12 : 0,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        color: AppColors.cardBackground,
+                                        border: Border.all(
+                                          color: AppColors.textTertiary.withValues(alpha: 0.2),
+                                        ),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: venue.imageUrl != null
+                                            ? Image.network(
+                                                venue.imageUrl!,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (context, error, stackTrace) {
+                                                  return Container(
+                                                    color: AppColors.cardBackground,
+                                                    child: const Icon(
+                                                      Icons.image,
+                                                      size: 32,
+                                                      color: AppColors.textTertiary,
+                                                    ),
+                                                  );
+                                                },
+                                              )
+                                            : Container(
+                                                color: AppColors.cardBackground,
+                                                child: const Icon(
+                                                  Icons.image,
+                                                  size: 32,
+                                                  color: AppColors.textTertiary,
+                                                ),
+                                              ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          // Venue Name
+                          Text(
+                            venue.name,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Address
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on,
+                                size: 20,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  venue.address,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${venue.city}, ${venue.pincode}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          // Rating and Reviews
+                          if (venue.rating != null) ...[
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.star,
+                                        color: Colors.amber,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${venue.rating}',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (venue.reviewCount != null) ...[
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    '${venue.reviewCount} reviews',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                          // Venue Type
+                          if (venue.venueType != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.cardBackground,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    venue.venueType == 'photography'
+                                        ? Icons.camera_alt
+                                        : venue.venueType == 'wedding'
+                                            ? Icons.favorite
+                                            : venue.venueType == 'corporate'
+                                                ? Icons.business
+                                                : Icons.park,
+                                    size: 18,
+                                    color: AppColors.primary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    venue.venueType!.toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                          // Capacity
+                          if (venue.capacity != null) ...[
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.people,
+                                  size: 20,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Capacity: ${venue.capacity} people',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                          // Action Buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _selectVenue(venue);
+                                  },
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Select Venue'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.primary,
+                                    side: const BorderSide(color: AppColors.primary),
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _selectVenue(venue);
+                                    _continueWithVenue();
+                                  },
+                                  icon: const Icon(Icons.arrow_forward),
+                                  label: const Text('Continue'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -224,9 +607,10 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
         });
       }
       
-      // Wait a bit for map to fully initialize
-      await Future.delayed(const Duration(milliseconds: 500));
-      _moveCameraToLocation(_currentLocation);
+        // Wait a bit for map to fully initialize
+        await Future.delayed(const Duration(milliseconds: 500));
+        _moveCameraToLocation(_currentLocation);
+        _updateCircles();
     } catch (e) {
       debugPrint('Error initializing map: $e');
       if (mounted) {
@@ -342,21 +726,37 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
                       ),
                     ),
                     onChanged: (value) {
-                      // Filter venues based on search
+                      // Filter venues based on search (name, address, city, pincode)
+                      final query = value.trim().toLowerCase();
+
                       setState(() {
-                        if (value.isEmpty) {
+                        if (query.isEmpty) {
+                          // Reset to nearby venues around current location
                           _loadNearbyVenues();
                         } else {
-                          final allVenues = _mockData.getNearbyVenues(
+                          // Start from a wide-radius nearby list (effectively all mock venues),
+                          // then filter by search text.
+                          final allNearby = _mockData.getNearbyVenues(
                             _currentLocation.latitude,
                             _currentLocation.longitude,
-                            radiusKm: 15.0,
+                            radiusKm: 20000.0, // large radius to cover global mock venues
                           );
-                          _nearbyVenues = allVenues
-                              .where((venue) =>
-                                  venue.name.toLowerCase().contains(value.toLowerCase()) ||
-                                  venue.address.toLowerCase().contains(value.toLowerCase()))
-                              .toList();
+
+                          _nearbyVenues = allNearby.where((venue) {
+                            // Only photography venues should be shown in this screen
+                            if (venue.venueType != 'photography') return false;
+
+                            final name = venue.name.toLowerCase();
+                            final address = venue.address.toLowerCase();
+                            final city = venue.city.toLowerCase();
+                            final pincode = venue.pincode.toLowerCase();
+
+                            return name.contains(query) ||
+                                address.contains(query) ||
+                                city.contains(query) ||
+                                pincode.contains(query);
+                          }).toList();
+
                           _updateMarkers();
                         }
                       });
@@ -521,17 +921,27 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
           if (_showMapView && _nearbyVenues.isNotEmpty)
             Container(
               height: 200,
-              color: AppColors.surface,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Nearby Venues',
+                        Text(
+                          'Nearby Photography Studios',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -540,7 +950,7 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
                         ),
                         Text(
                           '${_nearbyVenues.length} found',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             color: AppColors.textSecondary,
                           ),
@@ -551,6 +961,7 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
                   Expanded(
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: _nearbyVenues.length,
                       itemBuilder: (context, index) {
@@ -701,11 +1112,10 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
       onTap: () => _selectVenue(venue),
       child: Container(
         width: 280,
+        height: 220, // Fixed height to prevent overflow
         margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withValues(alpha: 0.1)
-              : AppColors.background,
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected
@@ -713,85 +1123,144 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
                 : AppColors.cardBackground.withValues(alpha: 0.5),
             width: isSelected ? 2 : 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Venue Image
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: venue.imageUrl != null
-                  ? Image.network(
-                      venue.imageUrl!,
-                      width: double.infinity,
-                      height: 120,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
+            // Venue Image with overlay
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  child: venue.imageUrl != null
+                      ? Image.network(
+                          venue.imageUrl!,
+                          width: double.infinity,
+                          height: 120, // Reduced from 140
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              height: 120,
+                              color: AppColors.cardBackground,
+                              child: const Icon(Icons.camera_alt, size: 40, color: AppColors.textSecondary),
+                            );
+                          },
+                        )
+                      : Container(
                           height: 120,
-                          color: AppColors.surface,
-                          child: const Icon(Icons.business, size: 40),
-                        );
-                      },
-                    )
-                  : Container(
-                      height: 120,
-                      color: AppColors.surface,
-                      child: const Icon(Icons.business, size: 40),
+                          color: AppColors.cardBackground,
+                          child: const Icon(Icons.camera_alt, size: 40, color: AppColors.textSecondary),
+                        ),
+                ),
+                // Gradient overlay for better text visibility if needed
+                if (isSelected)
+                  Container(
+                    height: 120,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppColors.primary.withValues(alpha: 0.3),
+                          Colors.transparent,
+                        ],
+                      ),
                     ),
+                  ),
+              ],
             ),
-            // Venue Details
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    venue.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            // Venue Details with solid background
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), // Reduced padding
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppColors.primary.withValues(alpha: 0.1)
+                      : AppColors.surface,
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(12),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    venue.address,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Text(
+                      venue.name,
+                      style: TextStyle(
+                        fontSize: 14, // Slightly reduced
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (venue.rating != null) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4), // Reduced spacing
                     Row(
                       children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${venue.rating}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
+                        Icon(
+                          Icons.location_on,
+                          size: 12, // Reduced icon size
+                          color: AppColors.textSecondary,
                         ),
-                        if (venue.reviewCount != null)
-                          Text(
-                            ' (${venue.reviewCount})',
-                            style: const TextStyle(
-                              fontSize: 11,
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            venue.address,
+                            style: TextStyle(
+                              fontSize: 11, // Slightly reduced
                               color: AppColors.textSecondary,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        ),
                       ],
                     ),
+                    if (venue.rating != null) ...[
+                      const SizedBox(height: 6), // Reduced spacing
+                      Row(
+                        children: [
+                          const Icon(Icons.star, color: Colors.amber, size: 14), // Reduced icon size
+                          const SizedBox(width: 4),
+                          Text(
+                            '${venue.rating}',
+                            style: TextStyle(
+                              fontSize: 12, // Reduced
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (venue.reviewCount != null) ...[
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                '(${venue.reviewCount})',
+                                style: TextStyle(
+                                  fontSize: 11, // Reduced
+                                  color: AppColors.textSecondary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],
@@ -889,9 +1358,10 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
               zoom: 13.0,
             ),
             markers: _markers,
+            circles: _circles,
             onTap: _onMapTap,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
             mapType: MapType.normal,
             zoomControlsEnabled: false,
             compassEnabled: true,
@@ -912,9 +1382,10 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
             zoom: 13.0,
           ),
           markers: _markers,
+          circles: _circles,
           onTap: _onMapTap,
-          myLocationEnabled: false,
-          myLocationButtonEnabled: false,
+          myLocationEnabled: true,
+          myLocationButtonEnabled: true,
           mapType: MapType.normal,
           zoomControlsEnabled: true,
           compassEnabled: true,

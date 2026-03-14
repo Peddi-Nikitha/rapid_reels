@@ -1,5 +1,6 @@
-package com.example.rapid_reels_app
+package com.rapidreel.app
 
 import io.flutter.embedding.android.FlutterActivity
 
 class MainActivity : FlutterActivity()
+

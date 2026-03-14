@@ -331,7 +331,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Booking confirmed! Check your email for details.'),
-        backgroundColor: AppColors.success,
+        backgroundColor: AppColors.primary,
       ),
     );
 

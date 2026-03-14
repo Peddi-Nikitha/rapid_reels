@@ -75,9 +75,24 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
+        // Extract user-friendly error message
+        String errorMessage = e.toString();
+        
+        // Remove "Exception: " prefix if present
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.substring(11);
+        }
+        
+        // Show specific message for billing errors
+        if (errorMessage.contains('BILLING_NOT_ENABLED') || 
+            errorMessage.contains('billing') ||
+            errorMessage.contains('billing-not-enabled')) {
+          errorMessage = 'Phone authentication requires billing to be enabled in Firebase Console. Please enable billing to use this feature.';
+        }
+        
         Helpers.showSnackBar(
           context,
-          e.toString(),
+          errorMessage,
           isError: true,
         );
       }

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'app.dart';
 
-void main() async {
+import 'app.dart';
+import 'core/firebase/services/firebase_init_service.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase (Auth, Firestore, Analytics, Crashlytics)
+  await FirebaseInitService.initialize();
   
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(

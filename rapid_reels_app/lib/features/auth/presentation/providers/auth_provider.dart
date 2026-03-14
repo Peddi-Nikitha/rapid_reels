@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../data/repositories/auth_repository.dart';
 import '../../data/models/user_model.dart';
 
@@ -7,23 +9,18 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository();
 });
 
-// Auth State Provider (Stream of Mock User)
-final authStateProvider = StreamProvider<MockUser?>((ref) {
+// Auth State Provider (Stream of Firebase User)
+final authStateProvider = StreamProvider<User?>((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 });
 
 // Current User Provider
-final currentUserProvider = Provider<MockUser?>((ref) {
+final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(authRepositoryProvider).currentUser;
 });
 
-// User Profile Provider
-final userProfileProvider = StreamProvider.family<UserModel?, String>((ref, userId) {
-  return Stream.value(null);
-});
-
 // Auth State Notifier
-class AuthNotifier extends StateNotifier<AsyncValue<MockUser?>> {
+class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final AuthRepository _authRepository;
 
   AuthNotifier(this._authRepository) : super(const AsyncValue.loading()) {
@@ -36,6 +33,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<MockUser?>> {
   Future<String?> verifyPhone(String phoneNumber) async {
     state = const AsyncValue.loading();
     String? verificationId;
+    String? errorMessage;
     
     await _authRepository.verifyPhoneNumber(
       phoneNumber: phoneNumber,
@@ -44,10 +42,18 @@ class AuthNotifier extends StateNotifier<AsyncValue<MockUser?>> {
         state = AsyncValue.data(_authRepository.currentUser);
       },
       onError: (String error) {
+        errorMessage = error;
         state = AsyncValue.error(error, StackTrace.current);
       },
     );
     
+    // If verificationId is still null and we captured an error message,
+    // throw it so UI can display the actual Firebase error instead of a
+    // generic "Failed to send OTP" message.
+    if (verificationId == null && errorMessage != null) {
+      throw Exception(errorMessage);
+    }
+
     return verificationId;
   }
 
@@ -155,7 +161,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<MockUser?>> {
 }
 
 // Auth Notifier Provider
-final authNotifierProvider = StateNotifierProvider<AuthNotifier, AsyncValue<MockUser?>>((ref) {
+final authNotifierProvider = StateNotifierProvider<AuthNotifier, AsyncValue<User?>>((ref) {
   return AuthNotifier(ref.watch(authRepositoryProvider));
 });
 
