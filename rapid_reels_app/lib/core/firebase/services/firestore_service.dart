@@ -36,6 +36,14 @@ class FirestoreService {
     try {
       await _firestore.collection('users').doc(user.userId).set(user.toFirestore());
     } catch (e) {
+      // Provide more detailed error information
+      if (e.toString().contains('PERMISSION_DENIED')) {
+        throw Exception(
+          'Permission denied: Firestore security rules are blocking this operation. '
+          'Please deploy the security rules from firestore.rules file to Firebase Console. '
+          'See FIRESTORE_SECURITY_RULES_SETUP.md for instructions. Error: $e'
+        );
+      }
       throw Exception('Error setting user: $e');
     }
   }

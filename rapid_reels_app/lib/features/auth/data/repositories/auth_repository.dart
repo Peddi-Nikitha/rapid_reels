@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/user_model.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart' as fb;
 import '../../../../core/firebase/services/firestore_service.dart';
-import '../../../../core/firebase/services/firebase_rest_api_service.dart';
 
 /// Authentication Repository backed by FirebaseAuth + Firestore
 class AuthRepository {
@@ -21,98 +22,116 @@ class AuthRepository {
 
   User? get currentUser => _firebaseAuth.currentUser;
 
-  // Phone Authentication - Step 1: Send OTP via Firebase REST API
-  // Uses REST API approach (like Python code) to bypass reCAPTCHA for test numbers
+  // Phone Authentication - Step 1: Send OTP
+  // Uses Firebase Auth SDK which properly handles reCAPTCHA for real devices
   Future<void> verifyPhoneNumber({
     required String phoneNumber,
     required Function(String) onCodeSent,
     required Function(String) onError,
     Function(UserCredential)? onAutoVerify,
   }) async {
+    final completer = Completer<void>();
+
     try {
-      // Use REST API to send OTP (works for test numbers without reCAPTCHA)
-      final result = await FirebaseRestApiService.sendOtp(phoneNumber);
+      // Force reCAPTCHA v2 flow for better compatibility
+      await _firebaseAuth.setSettings(
+        forceRecaptchaFlow: true,
+      );
       
-      if (result.containsKey('error')) {
-        final error = result['error'] as Map<String, dynamic>;
-        final errorMessage = error['message'] as String? ?? 'Failed to send OTP';
+      await _firebaseAuth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: const Duration(seconds: 60),
         
-        // Provide user-friendly error messages
-        String friendlyMessage = errorMessage;
-        if (errorMessage.contains('BILLING_NOT_ENABLED') || 
-            errorMessage.contains('billing')) {
-          friendlyMessage = 'Phone authentication requires billing to be enabled in Firebase. Please contact support or enable billing in Firebase Console.';
-        } else if (errorMessage.contains('INVALID_PHONE_NUMBER') ||
-                   errorMessage.contains('invalid-phone-number')) {
-          friendlyMessage = 'Invalid phone number format. Please check and try again.';
-        } else if (errorMessage.contains('TOO_MANY_REQUESTS') ||
-                   errorMessage.contains('too-many-requests')) {
-          friendlyMessage = 'Too many requests. Please try again later.';
-        } else if (errorMessage.contains('QUOTA_EXCEEDED') ||
-                   errorMessage.contains('quota-exceeded')) {
-          friendlyMessage = 'SMS quota exceeded. Please try again later.';
-        }
+        // Android only: SMS retrieved and verified automatically
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          if (onAutoVerify != null) {
+            try {
+              final result = await _firebaseAuth.signInWithCredential(credential);
+              onAutoVerify(result);
+            } catch (e) {
+              debugPrint('[Auth] Auto sign-in failed: $e');
+            }
+          }
+          if (!completer.isCompleted) completer.complete();
+        },
         
-        onError(friendlyMessage);
-        return;
-      }
-      
-      // Success - we got sessionInfo (equivalent to verificationId)
-      final sessionInfo = result['sessionInfo'] as String?;
-      if (sessionInfo == null || sessionInfo.isEmpty) {
-        onError('Failed to get session info from Firebase');
-        return;
-      }
-      
-      // Store sessionInfo as verificationId for the verifyOTP step
-      // The sessionInfo from REST API serves the same purpose as verificationId from SDK
-      onCodeSent(sessionInfo);
+        // OTP SMS sent successfully
+        codeSent: (String verificationId, int? resendToken) {
+          onCodeSent(verificationId);
+          if (!completer.isCompleted) completer.complete();
+        },
+        
+        // Error occurred
+        verificationFailed: (FirebaseAuthException e) {
+          String friendlyMessage = _getFriendlyError(e);
+          onError(friendlyMessage);
+          if (!completer.isCompleted) completer.completeError(e);
+        },
+        
+        // Auto-retrieval timed out; verificationId still valid for manual entry
+        codeAutoRetrievalTimeout: (String verificationId) {
+          // Timeout is not an error - verificationId is still valid
+          // User can manually enter the OTP
+          if (!completer.isCompleted) completer.complete();
+        },
+      );
+
+      await completer.future; // Wait for codeSent before returning
     } catch (e) {
-      onError('Network error: ${e.toString()}');
+      if (e is! FirebaseAuthException) {
+        onError('Failed to send OTP: ${e.toString()}');
+      }
+    }
+  }
+  
+  // Helper method for user-friendly error messages
+  String _getFriendlyError(FirebaseAuthException e) {
+    final errorMessage = e.message?.toLowerCase() ?? '';
+    
+    // Check for Play Integrity / reCAPTCHA errors
+    if (errorMessage.contains('play integrity') || 
+        errorMessage.contains('missing a valid app identifier') ||
+        errorMessage.contains('recaptcha') ||
+        e.code == 'missing-client-identifier') {
+      return 'App verification failed. Please ensure:\n'
+          '1. SHA-1/SHA-256 fingerprints are added in Firebase Console\n'
+          '2. Wait 10-15 minutes after adding fingerprints\n'
+          '3. Rebuild the app completely\n'
+          'OR use a test phone number added in Firebase Console';
+    }
+    
+    switch (e.code) {
+      case 'invalid-phone-number':
+        return 'Invalid phone number. Use format: +919876543210';
+      case 'too-many-requests':
+        return 'Too many attempts. Wait a few minutes and try again.';
+      case 'quota-exceeded':
+        return 'SMS quota exceeded. Try again later.';
+      case 'billing-not-enabled':
+        return 'Phone auth needs Firebase Blaze plan. Enable billing in Firebase Console.';
+      case 'captcha-check-failed':
+        return 'Verification failed. Please try again or use a test phone number.';
+      case 'missing-client-identifier':
+        return 'App not verified. Add SHA-1 fingerprint in Firebase Console → Project Settings → Your apps → Android app.';
+      default:
+        return e.message ?? 'Failed to send OTP. Please try again.';
     }
   }
 
-  // Phone Authentication - Step 2: Verify OTP using REST API
-  // Uses REST API approach (like Python code) to verify OTP
+  // Phone Authentication - Step 2: Verify OTP
+  // Uses Firebase Auth SDK to verify OTP with the verificationId from step 1
   Future<UserCredential> verifyOTP({
-    required String verificationId, // This is actually sessionInfo from REST API
+    required String verificationId,
     required String otp,
   }) async {
-    // Use REST API to verify OTP
-    final result = await FirebaseRestApiService.verifyOtp(verificationId, otp);
-    
-    if (result.containsKey('error')) {
-      final error = result['error'] as Map<String, dynamic>;
-      final errorMessage = error['message'] as String? ?? 'OTP verification failed';
-      throw FirebaseAuthException(
-        code: 'invalid-verification-code',
-        message: errorMessage,
-      );
-    }
-    
-    // REST API verification succeeded - we have idToken, phoneNumber, etc.
-    final idToken = result['idToken'] as String?;
-    final phoneNumber = result['phoneNumber'] as String?;
-    
-    if (idToken == null || phoneNumber == null) {
-      throw FirebaseAuthException(
-        code: 'invalid-credential',
-        message: 'Invalid response from Firebase REST API',
-      );
-    }
-    
-    // After REST API verification, we need to sign in with Firebase Auth
-    // The REST API's sessionInfo (passed as verificationId) should work
-    // with PhoneAuthProvider.credential() to create a valid credential.
-    // The sessionInfo from REST API serves the same purpose as verificationId from SDK.
     try {
-      // Create a PhoneAuthCredential using the sessionInfo as verificationId
-      // This is the key: sessionInfo from REST API can be used as verificationId
+      // Create a PhoneAuthCredential using the verificationId and OTP
       final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId, // This is sessionInfo from REST API
+        verificationId: verificationId,
         smsCode: otp,
       );
       
+      // Sign in with the credential
       final userCredential = await _firebaseAuth.signInWithCredential(credential);
       
       // Ensure a user document exists
@@ -122,16 +141,16 @@ class AuthRepository {
       }
       
       return userCredential;
-    } catch (e) {
-      // If using sessionInfo as verificationId doesn't work, we have a fallback:
-      // The REST API has already verified the OTP and returned an idToken.
-      // However, Firebase Auth SDK doesn't directly accept REST API idTokens.
-      // 
-      // In this case, we throw an error. The user would need to use the
-      // standard Firebase Auth SDK flow for real phone numbers.
+    } on FirebaseAuthException catch (e) {
+      // Re-throw Firebase Auth exceptions with friendly messages
       throw FirebaseAuthException(
-        code: 'sign-in-failed',
-        message: 'Failed to sign in after OTP verification: ${e.toString()}',
+        code: e.code,
+        message: _getFriendlyError(e),
+      );
+    } catch (e) {
+      throw FirebaseAuthException(
+        code: 'verification-failed',
+        message: 'Failed to verify OTP: ${e.toString()}',
       );
     }
   }

@@ -80,7 +80,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         if (mounted) {
           Helpers.showSnackBar(
             context,
-            'Failed to create profile',
+            'Failed to create profile. Please check Firestore security rules.',
             isError: true,
           );
         }
@@ -89,12 +89,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       setState(() => _isLoading = false);
       if (mounted) {
         debugPrint('Profile setup error: $e');
-        // Even if there's an error, navigate to city selection for better UX
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            context.go(AppRoutes.citySelection);
-          }
-        });
+        String errorMessage = 'Failed to create profile';
+        if (e.toString().contains('PERMISSION_DENIED')) {
+          errorMessage = 'Permission denied. Please deploy Firestore security rules.';
+        }
+        Helpers.showSnackBar(
+          context,
+          errorMessage,
+          isError: true,
+        );
       }
     }
   }

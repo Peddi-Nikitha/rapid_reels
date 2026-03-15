@@ -22,11 +22,7 @@
         "appinvite_service": {
           "other_platform_oauth_client": []
         }
-      },
-      "certificate_hash": [
-        "1F7E5CCC968A4B44EF01311ADDA8E2009580A424",
-        "8547C4310CF4F5BB355A44020AC5690A6169330AF0B3923FB0AEC91491C5C791"
-      ]
+      }
     }
   ],
   "configuration_version": "1"

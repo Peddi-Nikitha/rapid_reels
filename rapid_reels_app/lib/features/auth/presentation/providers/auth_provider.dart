@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -130,6 +131,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _authRepository.createUserProfile(user);
       return true;
     } catch (e) {
+      debugPrint('Error creating user profile: $e');
+      // Log the full error for debugging
+      if (e.toString().contains('PERMISSION_DENIED')) {
+        debugPrint('PERMISSION_DENIED: Firestore security rules need to be deployed!');
+        debugPrint('See FIRESTORE_SECURITY_RULES_SETUP.md for instructions');
+      }
       return false;
     }
   }
