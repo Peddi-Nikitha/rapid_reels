@@ -1,16 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/mock_data_service.dart';
-import '../../../../core/mock/mock_reels.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../booking/data/models/service_provider_model.dart';
 
 // Selected City Provider
 final selectedCityProvider = StateProvider<String>((ref) => 'Siddipet');
 
 // Trending Reels Provider
-final trendingReelsProvider = FutureProvider<List<ReelModel>>((ref) async {
-  // Simulate API delay
-  await Future.delayed(const Duration(milliseconds: 500));
-  return MockReels.getTrendingReels();
+final trendingReelsProvider = FutureProvider<List<FirebaseReelModel>>((ref) async {
+  return FirestoreService().getDiscoverReels();
 });
 
 // Featured Providers Provider

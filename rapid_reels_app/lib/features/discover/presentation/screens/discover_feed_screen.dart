@@ -3,7 +3,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../shared/widgets/reel_viewer_screen.dart';
+import '../../../../core/adapters/firebase_provider_adapter.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/theme/text_styles.dart';
 
 class DiscoverFeedScreen extends StatefulWidget {
@@ -14,15 +18,20 @@ class DiscoverFeedScreen extends StatefulWidget {
 }
 
 class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
-  final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
   late PageController _pageController;
   String _selectedFilter = 'all';
   final Map<String, bool> _followedCreators = {};
+  List<FirebaseReelModel> _reels = [];
+  final Map<String, FirebaseProviderModel?> _providerCache = {};
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _loadReels();
   }
 
   @override
@@ -31,11 +40,90 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
     super.dispose();
   }
 
+  Future<void> _loadReels() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final reels = await _firestoreService.getDiscoverReels(
+        eventType: _selectedFilter == 'all' ? null : _selectedFilter,
+      );
+      final providerIds = reels.map((r) => r.providerId).toSet().toList();
+      final providers = await Future.wait(
+        providerIds.map((id) => _firestoreService.getProvider(id)),
+      );
+      final cache = <String, FirebaseProviderModel?>{};
+      for (var i = 0; i < providerIds.length; i++) {
+        cache[providerIds[i]] = providers[i];
+      }
+      if (mounted) {
+        setState(() {
+          _reels = reels;
+          _providerCache.addAll(cache);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _viewReel(FirebaseReelModel reel) {
+    final videoUrl = reel.videoUrl.trim().isNotEmpty
+        ? reel.videoUrl.trim()
+        : (reel.thumbnailUrl.trim().isNotEmpty &&
+                (reel.thumbnailUrl.contains('firebasestorage') ||
+                    reel.thumbnailUrl.contains('.mp4') ||
+                    reel.thumbnailUrl.contains('.mov')))
+            ? reel.thumbnailUrl.trim()
+            : reel.videoUrl;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ReelViewerScreen(videoUrl: videoUrl, title: reel.title),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    var reels = _mockData.getPublicReels();
-    if (_selectedFilter != 'all') {
-      reels = reels.where((r) => r.eventType == _selectedFilter).toList();
+    if (_isLoading && _reels.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
+    if (_error != null && _reels.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: _loadReels,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     return Scaffold(
@@ -46,16 +134,26 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
           PageView.builder(
             controller: _pageController,
             scrollDirection: Axis.vertical,
-            itemCount: reels.length,
+            itemCount: _reels.isEmpty ? 1 : _reels.length,
             itemBuilder: (context, index) {
-              final reel = reels[index];
-              final provider = _mockData.getProviderById(reel.providerId);
+              if (_reels.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'No reels yet',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                );
+              }
+              final reel = _reels[index];
+              final provider = _providerCache[reel.providerId];
               
-              return Stack(
-                children: [
-                  // Reel Background - Image Thumbnail
-                  Positioned.fill(
-                    child: CachedNetworkImage(
+              return GestureDetector(
+                onTap: () => _viewReel(reel),
+                child: Stack(
+                  children: [
+                    // Reel Background - Image Thumbnail
+                    Positioned.fill(
+                      child: CachedNetworkImage(
                       imageUrl: reel.thumbnailUrl,
                       fit: BoxFit.cover,
                       placeholder: (context, url) => Container(
@@ -143,7 +241,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                               context.push(
                                 AppRoutes.providerPortfolio,
                                 extra: {
-                                  'provider': provider,
+                                  'provider': serviceProviderFromFirebase(provider),
                                   'bookingData': {},
                                 },
                               );
@@ -351,7 +449,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                         
                         // Description
                         Text(
-                          reel.description,
+                          reel.description ?? '',
                           style: AppTypography.bodySmall.copyWith(
                             color: Colors.white.withValues(alpha: 0.92),
                           ),
@@ -400,7 +498,8 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                   ),
                   
                 ],
-              );
+              ),
+            );
             },
           ),
           
@@ -560,7 +659,10 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => setState(() => _selectedFilter = value),
+        onTap: () {
+          setState(() => _selectedFilter = value);
+          _loadReels();
+        },
         borderRadius: BorderRadius.circular(20),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),

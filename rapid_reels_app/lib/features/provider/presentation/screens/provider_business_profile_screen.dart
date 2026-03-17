@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/custom_text_field.dart';
 
@@ -24,6 +28,11 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
   String? _selectedProfileImage;
   List<String> _selectedCoverImages = [];
   List<String> _selectedEventTypes = [];
+  bool _isSaving = false;
+
+  final _auth = FirebaseAuth.instance;
+  final _firestoreService = FirestoreService();
+  final _picker = ImagePicker();
   
   final List<String> _availableEventTypes = [
     'Wedding',
@@ -333,7 +342,8 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
               
               CustomButton(
                 text: 'Continue',
-                onPressed: _handleContinue,
+                isLoading: _isSaving,
+                onPressed: _isSaving ? null : _handleContinue,
               ),
             ],
           ),
@@ -342,24 +352,84 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
     );
   }
 
-  void _selectProfileImage() {
-    // Simulate image selection
-    setState(() {
-      _selectedProfileImage = 'https://i.pravatar.cc/300?img=51';
-    });
+  Future<void> _selectProfileImage() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (picked == null) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('providers')
+          .child(user.uid)
+          .child('profile.jpg');
+
+      await ref.putData(await picked.readAsBytes());
+      final url = await ref.getDownloadURL();
+
+      await _firestoreService.updateProvider(user.uid, {
+        'profileImage': url,
+      });
+
+      setState(() {
+        _selectedProfileImage = url;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to upload profile photo: $e')),
+      );
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
 
-  void _selectCoverImages() {
-    // Simulate cover image selection
-    setState(() {
-      _selectedCoverImages.addAll([
-        'https://images.unsplash.com/photo-1519741497674-611481863552?w=400',
-        'https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?w=400',
-      ]);
-    });
+  Future<void> _selectCoverImages() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final pickedList = await _picker.pickMultiImage(imageQuality: 80);
+    if (pickedList.isEmpty) return;
+
+    setState(() => _isSaving = true);
+
+    final storage = FirebaseStorage.instance;
+    final urls = <String>[];
+
+    try {
+      for (final file in pickedList) {
+        final fileName = DateTime.now().millisecondsSinceEpoch.toString();
+        final ref = storage
+            .ref()
+            .child('providers')
+            .child(user.uid)
+            .child('covers')
+            .child('$fileName.jpg');
+
+        await ref.putData(await file.readAsBytes());
+        urls.add(await ref.getDownloadURL());
+      }
+
+      await _firestoreService.updateProvider(user.uid, {
+        'coverImages': urls,
+      });
+
+      setState(() {
+        _selectedCoverImages.addAll(urls);
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to upload cover images: $e')),
+      );
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
 
-  void _handleContinue() {
+  Future<void> _handleContinue() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -371,8 +441,47 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
       return;
     }
 
-    // Navigate to portfolio upload
-    context.push(AppRoutes.providerPortfolioUpload);
+    final user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in as provider')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final teamSize = int.tryParse(_teamSizeController.text.trim()) ?? 1;
+
+      await _firestoreService.updateProvider(user.uid, {
+        'bio': _bioController.text.trim(),
+        'eventTypes': _selectedEventTypes.map((e) => e.toLowerCase()).toList(),
+        'location': {
+          'address': _addressController.text.trim(),
+          'city': _cityController.text.trim(),
+          'state': _stateController.text.trim(),
+          'pincode': _pincodeController.text.trim(),
+          'coordinates': {
+            'latitude': 0.0,
+            'longitude': 0.0,
+          },
+        },
+        'teamSize': teamSize,
+      });
+
+      if (!mounted) return;
+      context.push(AppRoutes.providerPortfolioUpload);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save business profile: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 }
 

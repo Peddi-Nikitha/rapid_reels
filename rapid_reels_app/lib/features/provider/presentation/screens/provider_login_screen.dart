@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/utils/helpers.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 
 class ProviderLoginScreen extends StatefulWidget {
   const ProviderLoginScreen({super.key});
@@ -21,6 +22,8 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String _selectedCountryCode = '+91';
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirestoreService _firestoreService = FirestoreService();
 
   // Common country codes
   final List<Map<String, String>> _countryCodes = [
@@ -46,27 +49,83 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // Simulate login delay
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      final phone = _phoneController.text.trim();
 
-    // Mock authentication - in real app, this would call an API
-    final mockData = MockDataService();
-    final providers = mockData.getAllProviders();
-    
-    // For demo, use first provider
-    if (providers.isNotEmpty) {
-      setState(() => _isLoading = false);
-      
-      if (mounted) {
-        // Navigate to provider dashboard
-        context.go('${AppRoutes.providerDashboard}/${providers.first.providerId}');
+      // 1) Find provider by phone number in Firestore (handles multiple formats internally)
+      final provider = await _firestoreService.getProviderByPhone(
+        phone,
+        countryCode: _selectedCountryCode,
+      );
+      if (provider == null) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          Helpers.showSnackBar(
+            context,
+            'Provider not found. Please check your phone number or register first.',
+            isError: true,
+          );
+        }
+        return;
       }
-    } else {
+
+      // 2) Ensure admin has approved this provider
+      if (provider.verificationStatus != 'approved' || !provider.isActive) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          final status = provider.verificationStatus;
+          String message;
+          if (status == 'pending') {
+            message = 'Your provider account is pending admin approval.';
+          } else if (status == 'rejected') {
+            message = 'Your provider account was rejected. Please contact support.';
+          } else {
+            message = 'Your provider account is not active. Please contact support.';
+          }
+          Helpers.showSnackBar(
+            context,
+            message,
+            isError: true,
+          );
+        }
+        return;
+      }
+
+      // 3) Sign in with email/password using provider's email
+      await _auth.signInWithEmailAndPassword(
+        email: provider.email,
+        password: _passwordController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      // 4) Navigate to provider dashboard for this providerId
+      context.go('${AppRoutes.providerDashboard}/${provider.providerId}');
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+      String message = 'Login failed. Please try again.';
+      if (e.code == 'wrong-password') {
+        message = 'Incorrect password. Please try again.';
+      } else if (e.code == 'user-not-found') {
+        message = 'No user found for these credentials.';
+      } else if (e.code == 'user-disabled') {
+        message = 'This account has been disabled.';
+      }
+      if (mounted) {
+        Helpers.showSnackBar(
+          context,
+          message,
+          isError: true,
+        );
+      }
+    } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
         Helpers.showSnackBar(
           context,
-          'Invalid credentials. Please try again.',
+          'Unexpected error: $e',
           isError: true,
         );
       }
@@ -74,30 +133,12 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-
-    // Simulate Google Sign-In delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    final mockData = MockDataService();
-    final providers = mockData.getAllProviders();
-    
-    if (providers.isNotEmpty) {
-      setState(() => _isLoading = false);
-      
-      if (mounted) {
-        context.go('${AppRoutes.providerDashboard}/${providers.first.providerId}');
-      }
-    } else {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        Helpers.showSnackBar(
-          context,
-          'Google Sign-In failed',
-          isError: true,
-        );
-      }
-    }
+    // TODO: Implement real Google Sign-In for providers if needed.
+    Helpers.showSnackBar(
+      context,
+      'Google Sign-In for providers is not available yet. Please use phone & password.',
+      isError: true,
+    );
   }
 
   @override

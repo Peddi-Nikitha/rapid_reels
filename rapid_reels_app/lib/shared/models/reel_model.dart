@@ -1,3 +1,5 @@
+import '../../core/firebase/firebase_utils.dart';
+
 /// Shared Reel Model
 /// Domain model for reel/video data
 class ReelModel {
@@ -65,8 +67,8 @@ class ReelModel {
       analytics: ReelAnalytics.fromMap(data['analytics'] ?? {}),
       tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
       hashtags: data['hashtags'] != null ? List<String>.from(data['hashtags']) : null,
-      isPublic: data['isPublic'] ?? false,
-      isFeatured: data['isFeatured'] ?? false,
+      isPublic: firebaseToBool(data['isPublic'], false),
+      isFeatured: firebaseToBool(data['isFeatured'], false),
       createdAt: data['createdAt'] is String
           ? DateTime.parse(data['createdAt'])
           : DateTime.now(),

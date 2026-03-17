@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:carousel_slider/carousel_slider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
 
-/// Provider Details & Portfolio Screen
+/// Provider Details & Portfolio Screen - loads provider dynamically from Firestore
 class ProviderDetailsScreen extends ConsumerStatefulWidget {
   final String providerId;
 
@@ -20,7 +21,7 @@ class ProviderDetailsScreen extends ConsumerStatefulWidget {
 class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  int _currentBannerIndex = 0;
+  final _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -36,88 +37,140 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final provider = MockDataService().getProviderById(widget.providerId);
-
-    if (provider == null) {
-      return Scaffold(
-        body: Center(
-          child: Text('Provider not found'),
-        ),
-      );
-    }
-
-    final portfolioReels = MockDataService().getTrendingReels().take(6).toList();
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: CustomScrollView(
-        slivers: [
-          // App Bar with Image
-          SliverAppBar(
-            expandedHeight: 280,
-            pinned: true,
+    return FutureBuilder<FirebaseProviderModel?>(
+      future: _firestoreService.getProvider(widget.providerId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
             backgroundColor: AppColors.background,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                fit: StackFit.expand,
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Background gradient
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary.withOpacity(0.3),
-                          AppColors.secondary.withOpacity(0.5),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Provider initial
-                  Center(
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          provider.businessName.substring(0, 2).toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 48,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Gradient overlay
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 100,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            AppColors.background,
-                          ],
-                        ),
-                      ),
+                  Icon(Icons.error_outline, size: 48, color: AppColors.textSecondary),
+                  const SizedBox(height: 16),
+                  Text(
+                    snapshot.hasError ? 'Error loading provider' : 'Provider not found',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
-            actions: [
+          );
+        }
+        final provider = snapshot.data!;
+        final initials = provider.businessName.length >= 2
+            ? provider.businessName.substring(0, 2).toUpperCase()
+            : (provider.businessName.isNotEmpty ? provider.businessName.toUpperCase() : 'PR');
+        final coverUrl = provider.coverImages.isNotEmpty
+            ? provider.coverImages[0]
+            : provider.profileImage;
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 280,
+                pinned: true,
+                backgroundColor: AppColors.background,
+                flexibleSpace: FlexibleSpaceBar(
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (coverUrl.isNotEmpty)
+                        CachedNetworkImage(
+                          imageUrl: coverUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  AppColors.primary.withOpacity(0.3),
+                                  AppColors.secondary.withOpacity(0.5),
+                                ],
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  AppColors.primary.withOpacity(0.3),
+                                  AppColors.secondary.withOpacity(0.5),
+                                ],
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                initials,
+                                style: const TextStyle(
+                                  fontSize: 48,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                AppColors.primary.withOpacity(0.3),
+                                AppColors.secondary.withOpacity(0.5),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              initials,
+                              style: const TextStyle(
+                                fontSize: 48,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: 100,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                AppColors.background,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
               IconButton(
                 icon: const Icon(Icons.share),
                 onPressed: () {
@@ -161,7 +214,11 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                           Icon(Icons.location_on, size: 16, color: AppColors.textSecondary),
                           const SizedBox(width: 4),
                           Text(
-                            provider.serviceAreas.isNotEmpty ? provider.serviceAreas.first : 'Hyderabad',
+                            provider.location.city.isNotEmpty
+                                ? provider.location.city
+                                : (provider.serviceAreas.isNotEmpty
+                                    ? provider.serviceAreas.first
+                                    : '—'),
                             style: TextStyle(
                               fontSize: 14,
                               color: AppColors.textSecondary,
@@ -187,7 +244,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                         children: [
                           _buildStatChip(
                             Icons.star,
-                            '${provider.rating}',
+                            provider.rating.toStringAsFixed(1),
                             Colors.amber,
                           ),
                           const SizedBox(width: 12),
@@ -199,7 +256,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                           const SizedBox(width: 12),
                           _buildStatChip(
                             Icons.video_library,
-                            '${portfolioReels.length}',
+                            '${provider.portfolio.length}',
                             AppColors.primary,
                           ),
                         ],
@@ -231,7 +288,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: () {
-                                _showContactDialog();
+                                _showContactDialog(provider);
                               },
                               icon: const Icon(Icons.phone, size: 18),
                               label: const Text('Contact'),
@@ -285,7 +342,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildPortfolioTab(portfolioReels),
+                      _buildPortfolioTab(provider.portfolio),
                       _buildPackagesTab(provider),
                       _buildReviewsTab(provider),
                     ],
@@ -296,6 +353,8 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
           ),
         ],
       ),
+    );
+    },
     );
   }
 
@@ -325,7 +384,18 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     );
   }
 
-  Widget _buildPortfolioTab(List<dynamic> reels) {
+  Widget _buildPortfolioTab(List<PortfolioItem> reels) {
+    if (reels.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'No portfolio reels yet',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
     return GridView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -342,7 +412,8 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     );
   }
 
-  Widget _buildPortfolioCard(dynamic reel) {
+  Widget _buildPortfolioCard(PortfolioItem reel) {
+    final thumbUrl = reel.thumbnailUrl.isNotEmpty ? reel.thumbnailUrl : reel.videoUrl;
     return GestureDetector(
       onTap: () {
         _showReelPreview(reel);
@@ -350,92 +421,141 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              _getEventColor(reel.eventType).withOpacity(0.3),
-              _getEventColor(reel.eventType),
-            ],
-          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        child: Stack(
-          children: [
-            Center(
-              child: Icon(
-                _getEventIcon(reel.eventType),
-                size: 50,
-                color: Colors.white.withOpacity(0.5),
-              ),
-            ),
-            const Center(
-              child: Icon(
-                Icons.play_circle_filled,
-                size: 60,
-                color: Colors.white,
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(
-                    bottom: Radius.circular(16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (thumbUrl.isNotEmpty)
+                CachedNetworkImage(
+                  imageUrl: thumbUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    color: _getEventColor(reel.eventType).withOpacity(0.3),
+                    child: Center(
+                      child: Icon(
+                        _getEventIcon(reel.eventType),
+                        size: 50,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                    ),
                   ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.8),
+                  errorWidget: (context, url, error) => Container(
+                    color: _getEventColor(reel.eventType).withOpacity(0.5),
+                    child: Center(
+                      child: Icon(
+                        _getEventIcon(reel.eventType),
+                        size: 50,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        _getEventColor(reel.eventType).withOpacity(0.3),
+                        _getEventColor(reel.eventType),
+                      ],
+                    ),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      _getEventIcon(reel.eventType),
+                      size: 50,
+                      color: Colors.white.withOpacity(0.5),
+                    ),
+                  ),
+                ),
+              const Center(
+                child: Icon(
+                  Icons.play_circle_filled,
+                  size: 60,
+                  color: Colors.white,
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.8),
+                      ],
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        reel.eventType,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.remove_red_eye,
+                            size: 12,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatViews(reel.views),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      reel.eventType,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.remove_red_eye,
-                          size: 12,
-                          color: Colors.white70,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatViews(reel.views),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPackagesTab(dynamic provider) {
+  Widget _buildPackagesTab(FirebaseProviderModel provider) {
     final packages = provider.packages;
-    
+    if (packages.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'No packages added yet',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       itemCount: packages.length,
@@ -446,7 +566,10 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     );
   }
 
-  Widget _buildPackageCard(dynamic package) {
+  Widget _buildPackageCard(PackageOffering package) {
+    final description = package.features.isNotEmpty
+        ? 'Includes: ${package.features.join(', ')}'
+        : '${package.reelsCount} reels • ${package.deliveryTime} min delivery';
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
@@ -482,7 +605,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '₹${package.price}',
+                  '₹${package.price.toStringAsFixed(0)}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -492,15 +615,17 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            package.description,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-              height: 1.5,
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 16),
           const Text(
             'Includes:',
@@ -554,7 +679,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     );
   }
 
-  Widget _buildReviewsTab(dynamic provider) {
+  Widget _buildReviewsTab(FirebaseProviderModel provider) {
     final reviews = [
       {
         'name': 'Rajesh Kumar',
@@ -740,7 +865,8 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     return views.toString();
   }
 
-  void _showReelPreview(dynamic reel) {
+  void _showReelPreview(PortfolioItem reel) {
+    final thumbUrl = reel.thumbnailUrl.isNotEmpty ? reel.thumbnailUrl : reel.videoUrl;
     showDialog(
       context: context,
       builder: (context) {
@@ -749,43 +875,77 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
           child: Container(
             height: 500,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  _getEventColor(reel.eventType).withOpacity(0.3),
-                  _getEventColor(reel.eventType),
-                ],
-              ),
               borderRadius: BorderRadius.circular(20),
+              color: Colors.black,
             ),
             child: Stack(
+              fit: StackFit.expand,
               children: [
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
+                if (thumbUrl.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: CachedNetworkImage(
+                      imageUrl: thumbUrl,
+                      fit: BoxFit.cover,
+                      errorWidget: (context, url, error) => Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              _getEventColor(reel.eventType).withOpacity(0.3),
+                              _getEventColor(reel.eventType),
+                            ],
+                          ),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            _getEventIcon(reel.eventType),
+                            size: 100,
+                            color: Colors.white.withOpacity(0.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          _getEventColor(reel.eventType).withOpacity(0.3),
+                          _getEventColor(reel.eventType),
+                        ],
+                      ),
+                    ),
+                    child: Center(
+                      child: Icon(
                         _getEventIcon(reel.eventType),
                         size: 100,
                         color: Colors.white.withOpacity(0.5),
                       ),
-                      const SizedBox(height: 20),
-                      const Icon(
-                        Icons.play_circle_filled,
-                        size: 80,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        '${reel.eventType} Reel',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                    ),
+                  ),
+                Center(
+                  child: const Icon(
+                    Icons.play_circle_filled,
+                    size: 80,
+                    color: Colors.white,
+                  ),
+                ),
+                Positioned(
+                  bottom: 20,
+                  left: 20,
+                  right: 20,
+                  child: Text(
+                    '${reel.eventType} Reel',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 Positioned(
@@ -842,7 +1002,9 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     );
   }
 
-  void _showContactDialog() {
+  void _showContactDialog(FirebaseProviderModel provider) {
+    final phone = provider.phoneNumber.isNotEmpty ? provider.phoneNumber : '—';
+    final email = provider.email.isNotEmpty ? provider.email : '—';
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -855,9 +1017,9 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Contact Provider',
-                style: TextStyle(
+              Text(
+                'Contact ${provider.businessName}',
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
@@ -873,11 +1035,11 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                   child: const Icon(Icons.phone, color: Colors.green),
                 ),
                 title: const Text('Call Provider'),
-                subtitle: const Text('+91 98765 43210'),
+                subtitle: Text(phone),
                 onTap: () {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Opening dialer...')),
+                    SnackBar(content: Text('Opening dialer: $phone')),
                   );
                 },
               ),
@@ -891,7 +1053,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                   child: const Icon(Icons.message, color: Colors.blue),
                 ),
                 title: const Text('Send Message'),
-                subtitle: const Text('Chat with provider'),
+                subtitle: Text(phone),
                 onTap: () {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -909,11 +1071,11 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                   child: const Icon(Icons.email, color: Colors.orange),
                 ),
                 title: const Text('Send Email'),
-                subtitle: const Text('provider@rapidreels.com'),
+                subtitle: Text(email),
                 onTap: () {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Opening email...')),
+                    SnackBar(content: Text('Opening email: $email')),
                   );
                 },
               ),

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 
 class ReelShareScreen extends StatelessWidget {
@@ -15,17 +16,24 @@ class ReelShareScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final reel = mockData.getReelById(reelId);
+    return FutureBuilder<FirebaseReelModel?>(
+      future: FirestoreService().getReel(reelId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            appBar: const CustomAppBar(title: 'Share Reel'),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final reel = snapshot.data;
+        if (reel == null || snapshot.hasError) {
+          return Scaffold(
+            appBar: const CustomAppBar(title: 'Share Reel'),
+            body: const Center(child: Text('Reel not found')),
+          );
+        }
 
-    if (reel == null) {
-      return Scaffold(
-        appBar: const CustomAppBar(title: 'Share Reel'),
-        body: const Center(child: Text('Reel not found')),
-      );
-    }
-
-    return Scaffold(
+        return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomAppBar(title: 'Share Reel'),
       body: SingleChildScrollView(
@@ -276,18 +284,18 @@ class ReelShareScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDownloadButton(
-                    context,
-                    'HD (1080p)',
-                    '${reel.fileSize.toStringAsFixed(1)} MB',
-                    () => _downloadReel(context, 'HD'),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildDownloadButton(
+                      context,
+                      'HD (${reel.resolution})',
+                      '${reel.fileSize.toStringAsFixed(1)} MB',
+                      () => _downloadReel(context, 'HD'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                if (reel.resolution == '4K')
+                  const SizedBox(width: 12),
+                  if (reel.resolution == '4K')
                   Expanded(
                     child: _buildDownloadButton(
                       context,
@@ -301,6 +309,8 @@ class ReelShareScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+      },
     );
   }
 

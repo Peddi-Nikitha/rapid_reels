@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
 
 class ProviderPortfolioUploadScreen extends StatefulWidget {
@@ -13,6 +18,10 @@ class ProviderPortfolioUploadScreen extends StatefulWidget {
 
 class _ProviderPortfolioUploadScreenState extends State<ProviderPortfolioUploadScreen> {
   final List<Map<String, dynamic>> _portfolioItems = [];
+  final _auth = FirebaseAuth.instance;
+  final _firestoreService = FirestoreService();
+  final _picker = ImagePicker();
+  bool _isSaving = false;
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +140,8 @@ class _ProviderPortfolioUploadScreenState extends State<ProviderPortfolioUploadS
               padding: const EdgeInsets.all(24),
               child: CustomButton(
                 text: 'Continue',
-                onPressed: _handleContinue,
+                isLoading: _isSaving,
+                onPressed: _isSaving ? null : _handleContinue,
               ),
             ),
         ],
@@ -210,14 +220,62 @@ class _ProviderPortfolioUploadScreenState extends State<ProviderPortfolioUploadS
     );
   }
 
-  void _addPortfolioItem() {
-    setState(() {
-      _portfolioItems.add({
-        'thumbnail': 'https://images.unsplash.com/photo-1519741497674-611481863552?w=400',
-        'eventType': 'Wedding',
-        'duration': '0:45',
+  Future<void> _addPortfolioItem() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in as provider')),
+      );
+      return;
+    }
+
+    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (picked == null) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      final storage = FirebaseStorage.instance;
+      final fileName = DateTime.now().millisecondsSinceEpoch.toString();
+      final ref = storage
+          .ref()
+          .child('providers')
+          .child(user.uid)
+          .child('portfolio')
+          .child('$fileName.jpg');
+
+      await ref.putData(await picked.readAsBytes());
+      final url = await ref.getDownloadURL();
+
+      // Simple metadata for now
+      final item = {
+        'reelId': fileName,
+        'eventType': 'wedding',
+        'thumbnailUrl': url,
+        'videoUrl': url,
+        'duration': 45,
+        'views': 0,
+        'likes': 0,
+      };
+
+      await _firestoreService.updateProvider(user.uid, {
+        'portfolio': FieldValue.arrayUnion([item]),
       });
-    });
+
+      setState(() {
+        _portfolioItems.add({
+          'thumbnail': url,
+          'eventType': 'Wedding',
+          'duration': '0:45',
+        });
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to upload portfolio item: $e')),
+      );
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
 
   void _handleContinue() {

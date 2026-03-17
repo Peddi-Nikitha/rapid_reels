@@ -1,28 +1,27 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/mock/mock_reels.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+
+final _firestoreService = FirestoreService();
 
 // User Reels Provider
-final userReelsProvider = FutureProvider.family<List<ReelModel>, String>((ref, userId) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return MockReels.getUserReels(userId);
+final userReelsProvider = FutureProvider.family<List<FirebaseReelModel>, String>((ref, userId) async {
+  return _firestoreService.getUserReels(userId);
 });
 
 // Public Reels Provider (for Discover)
-final publicReelsProvider = FutureProvider<List<ReelModel>>((ref) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return MockReels.getPublicReels();
+final publicReelsProvider = FutureProvider<List<FirebaseReelModel>>((ref) async {
+  return _firestoreService.getDiscoverReels();
 });
 
 // Trending Reels Provider
-final trendingReelsProvider2 = FutureProvider<List<ReelModel>>((ref) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  return MockReels.getTrendingReels();
+final trendingReelsProvider2 = FutureProvider<List<FirebaseReelModel>>((ref) async {
+  return _firestoreService.getDiscoverReels();
 });
 
 // Reel by ID Provider
-final reelByIdProvider = FutureProvider.family<ReelModel?, String>((ref, reelId) async {
-  await Future.delayed(const Duration(milliseconds: 200));
-  return MockReels.getReelById(reelId);
+final reelByIdProvider = FutureProvider.family<FirebaseReelModel?, String>((ref, reelId) async {
+  return _firestoreService.getReel(reelId);
 });
 
 // Reel Filter State

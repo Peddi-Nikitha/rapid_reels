@@ -57,6 +57,7 @@ class AppRoutes {
   static const String liveEventMode = '/live-event-mode';
   static const String reelEditor = '/reel-editor';
   static const String uploadFootage = '/upload-footage';
+  static const String providerMyReels = '/provider-my-reels';
   static const String providerBookings = '/provider-bookings';
   static const String providerEarnings = '/provider-earnings';
   static const String providerBookingCalendar = '/provider-booking-calendar';
@@ -85,5 +86,6 @@ class AppRoutes {
   static const String adminAnalytics = '/admin-analytics';
   static const String adminPaymentManagement = '/admin-payment-management';
   static const String adminSupportTickets = '/admin-support-tickets';
+  static const String adminProviderEarnings = '/admin-provider-earnings';
 }
 

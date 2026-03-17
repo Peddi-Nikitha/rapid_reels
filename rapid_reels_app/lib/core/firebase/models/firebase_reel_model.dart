@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../firebase_utils.dart';
 
 /// Firebase Reel Model
 /// Collection: reels
@@ -52,6 +53,13 @@ class FirebaseReelModel {
     this.editingDetails,
   });
 
+  // Display helpers for UI compatibility
+  int get views => analytics.views;
+  int get likes => analytics.likes;
+  int get shares => analytics.shares;
+  double get fileSize => metadata.fileSize / 1024 / 1024; // bytes to MB
+  String get resolution => metadata.quality;
+
   factory FirebaseReelModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return FirebaseReelModel(
@@ -71,8 +79,8 @@ class FirebaseReelModel {
       analytics: ReelAnalytics.fromMap(data['analytics'] ?? {}),
       tags: data['tags'] != null ? List<String>.from(data['tags']) : null,
       hashtags: data['hashtags'] != null ? List<String>.from(data['hashtags']) : null,
-      isPublic: data['isPublic'] ?? false,
-      isFeatured: data['isFeatured'] ?? false,
+      isPublic: firebaseToBool(data['isPublic'], false),
+      isFeatured: firebaseToBool(data['isFeatured'], false),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       deliveredAt: (data['deliveredAt'] as Timestamp?)?.toDate(),
       publishedAt: (data['publishedAt'] as Timestamp?)?.toDate(),

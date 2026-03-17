@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/adapters/firebase_provider_adapter.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../shared/widgets/reel_video_layer.dart';
+import '../../../../shared/widgets/reel_viewer_screen.dart';
 
 /// Main Discover Screen - TikTok-style vertical feed
 class MainDiscoverScreen extends ConsumerStatefulWidget {
@@ -17,8 +22,13 @@ class MainDiscoverScreen extends ConsumerStatefulWidget {
 class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late PageController _pageController;
+  int _currentIndex = 0;
   final Map<String, bool> _followedCreators = {};
-  final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
+  List<FirebaseReelModel> _reels = [];
+  final Map<String, FirebaseProviderModel?> _providerCache = {};
+  bool _isLoading = true;
 
   final List<String> _categories = [
     'For You',
@@ -32,17 +42,71 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: _categories.length, vsync: this);
+    _pageController = PageController();
+    _loadReels();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _pageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadReels() async {
+    setState(() => _isLoading = true);
+    try {
+      final reels = await _firestoreService.getDiscoverReels();
+      final providerIds = reels.map((r) => r.providerId).toSet().toList();
+      final providers = await Future.wait(
+        providerIds.map((id) => _firestoreService.getProvider(id)),
+      );
+      final cache = <String, FirebaseProviderModel?>{};
+      for (var i = 0; i < providerIds.length; i++) {
+        cache[providerIds[i]] = providers[i];
+      }
+      if (mounted) {
+        setState(() {
+          _reels = reels;
+          _providerCache.addAll(cache);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _viewReel(FirebaseReelModel reel) {
+    // Same as provider: use videoUrl, fallback to thumbnailUrl if it's a video (portfolio uploads)
+    final videoUrl = reel.videoUrl.trim().isNotEmpty
+        ? reel.videoUrl.trim()
+        : (reel.thumbnailUrl.trim().isNotEmpty &&
+                (reel.thumbnailUrl.contains('firebasestorage') ||
+                    reel.thumbnailUrl.contains('.mp4') ||
+                    reel.thumbnailUrl.contains('.mov')))
+            ? reel.thumbnailUrl.trim()
+            : reel.videoUrl;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ReelViewerScreen(
+          videoUrl: videoUrl,
+          title: reel.title,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final reels = MockDataService().getTrendingReels();
+    if (_isLoading && _reels.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -81,61 +145,36 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
         ],
       ),
       body: PageView.builder(
+        controller: _pageController,
         scrollDirection: Axis.vertical,
-        itemCount: reels.length,
+        onPageChanged: (index) => setState(() => _currentIndex = index),
+        itemCount: _reels.isEmpty ? 1 : _reels.length,
         itemBuilder: (context, index) {
-          final reel = reels[index];
-          return _buildReelPage(reel, index);
+          if (_reels.isEmpty) {
+            return const Center(
+              child: Text('No reels yet', style: TextStyle(color: Colors.white70)),
+            );
+          }
+          return GestureDetector(
+            onTap: () => _viewReel(_reels[index]),
+            child: _buildReelPage(_reels[index], index),
+          );
         },
       ),
     );
   }
 
-  Widget _buildReelPage(dynamic reel, int index) {
-    final provider = _mockData.getProviderById(reel.providerId);
+  Widget _buildReelPage(FirebaseReelModel reel, int index) {
+    final provider = _providerCache[reel.providerId];
     final isFollowing = _followedCreators[reel.providerId] ?? false;
-    
+    final isActive = index == _currentIndex;
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Background gradient (simulating video)
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                _getEventColor(reel.eventType).withOpacity(0.3),
-                AppColors.background,
-                _getEventColor(reel.eventType).withOpacity(0.4),
-              ],
-            ),
-          ),
-        ),
-
-        // Thumbnail - Using image from reel
+        // Video layer - plays when active (visible), autoplay by default
         Positioned.fill(
-          child: CachedNetworkImage(
-            imageUrl: reel.thumbnailUrl,
-            fit: BoxFit.cover,
-            placeholder: (context, url) => Container(
-              color: AppColors.surface,
-              child: Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                ),
-              ),
-            ),
-            errorWidget: (context, url, error) => Container(
-              color: AppColors.surface,
-              child: Icon(
-                _getEventIcon(reel.eventType),
-                size: 60,
-                color: Colors.white.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
+          child: ReelVideoLayer(reel: reel, isActive: isActive),
         ),
 
         // Gradient Overlay
@@ -186,7 +225,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                         context.push(
                           AppRoutes.providerPortfolio,
                           extra: {
-                            'provider': provider,
+                            'provider': serviceProviderFromFirebase(provider),
                             'bookingData': {},
                           },
                         );
@@ -437,7 +476,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    reel.description,
+                    reel.description ?? '',
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w400,
@@ -452,11 +491,11 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                   // Engagement Stats
                   Row(
                     children: [
-                      _buildStatChip(Icons.visibility_outlined, '${_formatCount(reel.views)}'),
+                      _buildStatChip(Icons.visibility_outlined, _formatCount(reel.views)),
                       const SizedBox(width: 10),
-                      _buildStatChip(Icons.favorite_border_rounded, '${_formatCount((reel.views * 0.12).toInt())}'),
+                      _buildStatChip(Icons.favorite_border_rounded, _formatCount(reel.likes)),
                       const SizedBox(width: 10),
-                      _buildStatChip(Icons.share_rounded, '${_formatCount((reel.views * 0.05).toInt())}'),
+                      _buildStatChip(Icons.share_rounded, _formatCount(reel.shares)),
                     ],
                   ),
                 ],

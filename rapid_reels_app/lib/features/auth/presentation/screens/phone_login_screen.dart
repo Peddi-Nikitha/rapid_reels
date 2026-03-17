@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,8 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String _selectedCountryCode = '+91';
+  int _rateLimitSeconds = 0;
+  Timer? _rateLimitTimer;
 
   // Common country codes
   final List<Map<String, String>> _countryCodes = [
@@ -34,12 +37,47 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
   @override
   void dispose() {
+    _rateLimitTimer?.cancel();
     _phoneController.dispose();
     super.dispose();
   }
 
+  void _startRateLimitTimer() {
+    // Set cooldown period to 3 minutes (180 seconds)
+    _rateLimitSeconds = 180;
+    _rateLimitTimer?.cancel();
+    _rateLimitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_rateLimitSeconds > 0) {
+        setState(() {
+          _rateLimitSeconds--;
+        });
+      } else {
+        timer.cancel();
+        setState(() {
+          _rateLimitSeconds = 0;
+        });
+      }
+    });
+  }
+
+  String _formatTime(int seconds) {
+    final minutes = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _sendOTP() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Check if rate limited
+    if (_rateLimitSeconds > 0) {
+      Helpers.showSnackBar(
+        context,
+        'Please wait ${_formatTime(_rateLimitSeconds)} before trying again.',
+        isError: true,
+      );
       return;
     }
 
@@ -81,6 +119,14 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
         // Remove "Exception: " prefix if present
         if (errorMessage.startsWith('Exception: ')) {
           errorMessage = errorMessage.substring(11);
+        }
+        
+        // Check for rate limiting error
+        if (errorMessage.contains('Too many attempts') || 
+            errorMessage.contains('too-many-requests') ||
+            errorMessage.contains('wait a few minutes')) {
+          _startRateLimitTimer();
+          errorMessage = 'Too many attempts. Please wait ${_formatTime(_rateLimitSeconds)} before trying again.';
         }
         
         // Show specific message for billing errors
@@ -275,7 +321,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _sendOTP,
+                    onPressed: (_isLoading || _rateLimitSeconds > 0) ? null : _sendOTP,
                     child: _isLoading
                         ? const SizedBox(
                             height: 20,
@@ -285,9 +331,34 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text(AppStrings.sendOTP),
+                        : _rateLimitSeconds > 0
+                            ? Text('Wait ${_formatTime(_rateLimitSeconds)}')
+                            : const Text(AppStrings.sendOTP),
                   ),
                 ),
+                // Rate limit message
+                if (_rateLimitSeconds > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.timer_outlined,
+                          size: 16,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Too many attempts. Please wait ${_formatTime(_rateLimitSeconds)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 24),
 
                 // Divider with OR

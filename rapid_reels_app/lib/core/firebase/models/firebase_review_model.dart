@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../firebase_utils.dart';
 
 /// Firebase Review/Rating Model
 /// Collection: reviews
@@ -56,9 +57,9 @@ class FirebaseReviewModel {
       comment: data['comment'],
       photos: data['photos'] != null ? List<String>.from(data['photos']) : null,
       categories: ReviewCategories.fromMap(data['categories'] ?? {}),
-      isVerified: data['isVerified'] ?? true,
-      isPublic: data['isPublic'] ?? true,
-      isHelpful: data['isHelpful'] ?? false,
+      isVerified: firebaseToBool(data['isVerified'], true),
+      isPublic: firebaseToBool(data['isPublic'], true),
+      isHelpful: firebaseToBool(data['isHelpful'], false),
       helpfulCount: data['helpfulCount'] ?? 0,
       status: data['status'] ?? 'approved',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),

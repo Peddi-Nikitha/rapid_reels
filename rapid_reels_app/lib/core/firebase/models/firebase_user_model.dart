@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../firebase_utils.dart';
 
 /// Firebase User Model - Main user collection
 /// Collection: users
@@ -73,8 +74,8 @@ class FirebaseUserModel {
       walletBalance: (data['walletBalance'] ?? 0.0).toDouble(),
       totalEventsBooked: data['totalEventsBooked'] ?? 0,
       totalReelsReceived: data['totalReelsReceived'] ?? 0,
-      isActive: data['isActive'] ?? true,
-      isVerified: data['isVerified'] ?? false,
+      isActive: firebaseToBool(data['isActive'], true),
+      isVerified: firebaseToBool(data['isVerified'], false),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       lastLoginAt: (data['lastLoginAt'] as Timestamp?)?.toDate(),

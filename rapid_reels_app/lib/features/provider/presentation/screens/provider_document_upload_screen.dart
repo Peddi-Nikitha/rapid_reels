@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
 
 class ProviderDocumentUploadScreen extends StatefulWidget {
@@ -19,6 +23,11 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
     'GST Certificate': null,
     'Bank Account Proof': null,
   };
+
+  final _auth = FirebaseAuth.instance;
+  final _firestoreService = FirestoreService();
+  final _picker = ImagePicker();
+  bool _isSaving = false;
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +95,8 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
             
             CustomButton(
               text: 'Continue',
-              onPressed: _handleContinue,
+              isLoading: _isSaving,
+              onPressed: _isSaving ? null : _handleContinue,
             ),
           ],
         ),
@@ -188,15 +198,57 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
     );
   }
 
-  void _uploadDocument(String docName) {
-    // Simulate document upload
-    setState(() {
-      _documents[docName] = 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=400';
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$docName uploaded successfully')),
-    );
+  Future<void> _uploadDocument(String docName) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in as provider')),
+      );
+      return;
+    }
+
+    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (picked == null) return;
+
+    setState(() => _isSaving = true);
+
+    try {
+      final storage = FirebaseStorage.instance;
+      final key = _slugFromDocName(docName);
+      final ref = storage
+          .ref()
+          .child('providers')
+          .child(user.uid)
+          .child('documents')
+          .child('$key.jpg');
+
+      await ref.putData(await picked.readAsBytes());
+      final url = await ref.getDownloadURL();
+
+      // Save locally for preview
+      setState(() {
+        _documents[docName] = url;
+      });
+
+      // Save in provider metadata.documents map
+      await _firestoreService.updateProvider(user.uid, {
+        'metadata': {
+          'documents': {
+            key: url,
+          },
+        },
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$docName uploaded successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to upload $docName: $e')),
+      );
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
 
   void _handleContinue() {
@@ -210,6 +262,10 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
     }
 
     context.push(AppRoutes.providerAvailabilityCalendar);
+  }
+
+  String _slugFromDocName(String name) {
+    return name.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]+'), '');
   }
 }
 

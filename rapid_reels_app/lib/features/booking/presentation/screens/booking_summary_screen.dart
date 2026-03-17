@@ -1,12 +1,15 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/mock/mock_packages.dart';
 import '../../../../core/services/mock_data_service.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
+import '../../data/adapters/booking_firebase_adapter.dart';
 
 class BookingSummaryScreen extends StatefulWidget {
   final Map<String, dynamic> bookingData;
@@ -24,6 +27,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   bool _acceptedTerms = false;
   bool _isProcessing = false;
   final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
 
   @override
   Widget build(BuildContext context) {
@@ -318,25 +322,50 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   }
 
   Future<void> _handleConfirmBooking() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in to confirm your booking.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isProcessing = true);
 
-    // Simulate payment processing
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final booking = BookingFirebaseAdapter.fromBookingData(
+        widget.bookingData,
+        user.uid,
+      );
+      await _firestoreService.createBooking(booking);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() => _isProcessing = false);
+      setState(() => _isProcessing = false);
 
-    // Show success message
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Booking confirmed! Check your email for details.'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Booking confirmed! View your booking in the My tab.'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
 
-    // Navigate to home page
-    context.go(AppRoutes.home);
+      context.go(AppRoutes.home, extra: 2);
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => _isProcessing = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to confirm booking: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 

@@ -32,6 +32,8 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   bool _canResend = false;
   bool _isLoading = false;
   String? _currentVerificationId;
+  int _rateLimitSeconds = 0;
+  Timer? _rateLimitTimer;
 
   @override
   void initState() {
@@ -43,8 +45,33 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   @override
   void dispose() {
     _timer.cancel();
+    _rateLimitTimer?.cancel();
     _otpController.dispose();
     super.dispose();
+  }
+
+  void _startRateLimitTimer() {
+    // Set cooldown period to 3 minutes (180 seconds)
+    _rateLimitSeconds = 180;
+    _rateLimitTimer?.cancel();
+    _rateLimitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_rateLimitSeconds > 0) {
+        setState(() {
+          _rateLimitSeconds--;
+        });
+      } else {
+        timer.cancel();
+        setState(() {
+          _rateLimitSeconds = 0;
+        });
+      }
+    });
+  }
+
+  String _formatTime(int seconds) {
+    final minutes = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   void _startTimer() {
@@ -160,7 +187,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   }
 
   Future<void> _resendOTP() async {
-    if (!_canResend || _isLoading) return;
+    if (!_canResend || _isLoading || _rateLimitSeconds > 0) return;
 
     setState(() {
       _isLoading = true;
@@ -192,9 +219,24 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
+        String errorMessage = e.toString();
+        
+        // Remove "Exception: " prefix if present
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.substring(11);
+        }
+        
+        // Check for rate limiting error
+        if (errorMessage.contains('Too many attempts') || 
+            errorMessage.contains('too-many-requests') ||
+            errorMessage.contains('wait a few minutes')) {
+          _startRateLimitTimer();
+          errorMessage = 'Too many attempts. Please wait ${_formatTime(_rateLimitSeconds)} before trying again.';
+        }
+        
         Helpers.showSnackBar(
           context,
-          e.toString(),
+          errorMessage,
           isError: true,
         );
       }
@@ -317,19 +359,49 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
 
               // Resend OTP
               Center(
-                child: TextButton(
-                  onPressed: _canResend && !_isLoading ? _resendOTP : null,
-                  child: Text(
-                    _canResend
-                        ? AppStrings.resendOTP
-                        : 'Resend OTP in $_timerSeconds s',
-                    style: TextStyle(
-                      color: _canResend
-                          ? AppColors.primary
-                          : AppColors.textTertiary,
-                      fontSize: 14,
+                child: Column(
+                  children: [
+                    TextButton(
+                      onPressed: (_canResend && !_isLoading && _rateLimitSeconds == 0) 
+                          ? _resendOTP 
+                          : null,
+                      child: Text(
+                        _rateLimitSeconds > 0
+                            ? 'Wait ${_formatTime(_rateLimitSeconds)}'
+                            : _canResend
+                                ? AppStrings.resendOTP
+                                : 'Resend OTP in $_timerSeconds s',
+                        style: TextStyle(
+                          color: (_canResend && _rateLimitSeconds == 0)
+                              ? AppColors.primary
+                              : AppColors.textTertiary,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
-                  ),
+                    if (_rateLimitSeconds > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.timer_outlined,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Too many attempts. Please wait.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],

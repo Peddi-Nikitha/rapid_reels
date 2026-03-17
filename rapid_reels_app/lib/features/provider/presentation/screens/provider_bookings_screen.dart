@@ -1,11 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import 'provider_booking_details_screen.dart';
 
 class ProviderBookingsScreen extends StatefulWidget {
   final String providerId;
-  
+
   const ProviderBookingsScreen({
     super.key,
     required this.providerId,
@@ -18,7 +20,7 @@ class ProviderBookingsScreen extends StatefulWidget {
 class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -34,13 +36,25 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final bookings = _mockData.getProviderEvents(widget.providerId);
-    final pending = bookings.where((b) => b.status == 'pending').toList();
-    final confirmed = bookings.where((b) => b.status == 'confirmed').toList();
-    final ongoing = bookings.where((b) => b.status == 'ongoing').toList();
-    final completed = bookings.where((b) => b.status == 'completed').toList();
+    return StreamBuilder<List<FirebaseBookingModel>>(
+      stream: _firestoreService.streamProviderBookings(widget.providerId),
+      builder: (context, snapshot) {
+        final bookings = snapshot.data ?? [];
+        final pending = bookings.where((b) => b.status == 'pending').toList();
+        final confirmed = bookings.where((b) => b.status == 'confirmed').toList();
+        final ongoing = bookings.where((b) => b.status == 'ongoing').toList();
+        final completed = bookings.where((b) => b.status == 'completed').toList();
 
-    return Scaffold(
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Bookings')),
+            body: Center(
+              child: Text('Error: ${snapshot.error}'),
+            ),
+          );
+        }
+
+        return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -73,9 +87,11 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
         ],
       ),
     );
+      },
+    );
   }
 
-  Widget _buildBookingsList(List bookings, String status) {
+  Widget _buildBookingsList(List<FirebaseBookingModel> bookings, String status) {
     if (bookings.isEmpty) {
       return Center(
         child: Column(
@@ -99,7 +115,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
     );
   }
 
-  Widget _buildBookingCard(booking, String status) {
+  Widget _buildBookingCard(FirebaseBookingModel booking, String status) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -122,7 +138,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'ID: ${booking.eventId}',
+                      'ID: ${booking.bookingId}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
@@ -152,7 +168,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
           const SizedBox(height: 6),
           _buildInfoRow(Icons.location_on, booking.venue.address),
           const SizedBox(height: 6),
-          _buildInfoRow(Icons.currency_rupee, '₹${booking.totalAmount.toStringAsFixed(0)}'),
+          _buildInfoRow(Icons.currency_rupee, '₹${booking.payment.totalAmount.toStringAsFixed(0)}'),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -162,10 +178,10 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                      builder: (context) => ProviderBookingDetailsScreen(
-                        bookingId: booking.eventId,
-                        providerId: widget.providerId,
-                      ),
+                        builder: (context) => ProviderBookingDetailsScreen(
+                          bookingId: booking.bookingId,
+                          providerId: widget.providerId,
+                        ),
                       ),
                     );
                   },
@@ -181,7 +197,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => _declineBooking(booking.eventId),
+                    onPressed: () => _declineBooking(booking),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       side: const BorderSide(color: Colors.red),
@@ -192,9 +208,19 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => _acceptBooking(booking.eventId),
+                    onPressed: () => _acceptBooking(booking),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                     child: const Text('Accept'),
+                  ),
+                ),
+              ],
+              if (status == 'confirmed' || status == 'ongoing') ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => _markAsDone(booking),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                    child: const Text('Mark Done'),
                   ),
                 ),
               ],
@@ -232,16 +258,84 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
     }
   }
 
-  void _acceptBooking(String bookingId) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Booking $bookingId accepted')),
-    );
+  Future<void> _acceptBooking(FirebaseBookingModel booking) async {
+    try {
+      await _firestoreService.updateBooking(booking.bookingId, {
+        'status': 'confirmed',
+        'eventStatus.providerAccepted': Timestamp.now(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking accepted'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to accept: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
-  void _declineBooking(String bookingId) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Booking $bookingId declined')),
+  Future<void> _declineBooking(FirebaseBookingModel booking) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('Decline Booking'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'Reason for declining (optional)',
+            ),
+            maxLines: 3,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: const Text('Decline'),
+            ),
+          ],
+        );
+      },
     );
+    if (reason == null) return; // User cancelled
+
+    try {
+      await _firestoreService.updateBooking(booking.bookingId, {
+        'status': 'cancelled',
+        'cancellationReason': reason,
+        'cancelledAt': Timestamp.now(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking declined'), backgroundColor: Colors.orange),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to decline: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _markAsDone(FirebaseBookingModel booking) async {
+    try {
+      await _firestoreService.completeBookingAndCreatePayout(booking);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking marked as done'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to mark done: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 }
 

@@ -1,3 +1,5 @@
+import '../../../../core/firebase/firebase_utils.dart';
+
 class ServiceProvider {
   final String providerId;
   final String businessName;
@@ -104,9 +106,9 @@ class ServiceProvider {
           ? BankDetails.fromMap(data['bankDetails'])
           : null,
       commissionRate: (data['commissionRate'] ?? 15.0).toDouble(),
-      isVerified: data['isVerified'] ?? false,
-      isActive: data['isActive'] ?? true,
-      isFeatured: data['isFeatured'] ?? false,
+      isVerified: firebaseToBool(data['isVerified'], false),
+      isActive: firebaseToBool(data['isActive'], true),
+      isFeatured: firebaseToBool(data['isFeatured'], false),
       createdAt: data['createdAt'] is String ? DateTime.parse(data['createdAt']) : DateTime.now(),
       updatedAt: data['updatedAt'] is String ? DateTime.parse(data['updatedAt']) : DateTime.now(),
     );
@@ -181,8 +183,8 @@ class PackageOffering {
       reelsCount: map['reelsCount'] ?? 0,
       editingStyle: map['editingStyle'] ?? '',
       deliveryTime: map['deliveryTime'] ?? 0,
-      highlightVideo: map['highlightVideo'] ?? false,
-      liveReelStation: map['liveReelStation'] ?? false,
+      highlightVideo: firebaseToBool(map['highlightVideo'], false),
+      liveReelStation: firebaseToBool(map['liveReelStation'], false),
       features: List<String>.from(map['features'] ?? []),
     );
   }
@@ -297,7 +299,7 @@ class DayAvailability {
 
   factory DayAvailability.fromMap(Map<String, dynamic> map) {
     return DayAvailability(
-      isOpen: map['isOpen'] ?? false,
+      isOpen: firebaseToBool(map['isOpen'], false),
       slots: (map['slots'] as List?)
               ?.map((s) => TimeSlot.fromMap(s))
               .toList() ??

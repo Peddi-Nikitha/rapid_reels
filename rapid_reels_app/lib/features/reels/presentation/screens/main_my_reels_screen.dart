@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 
 /// Main My Reels Screen - User's reel gallery with stats
 class MainMyReelsScreen extends ConsumerStatefulWidget {
@@ -15,6 +19,7 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isGridView = true;
+  final _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -30,9 +35,39 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final myReels = MockDataService().getUserReels('user_001');
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-    return Scaffold(
+    if (userId.isEmpty) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Please log in to view your reels'),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () => context.push(AppRoutes.login),
+                  child: const Text('Log in'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<List<FirebaseReelModel>>(
+      future: _firestoreService.getUserReels(userId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+          );
+        }
+        final myReels = snapshot.data ?? [];
+
+        return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
@@ -89,7 +124,7 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
                       Expanded(
                         child: _buildStatCard(
                           'Total Views',
-                          '${_getTotalViews(myReels)}K',
+                          '${_getTotalViews(myReels)}',
                           Icons.remove_red_eye,
                           Colors.blue,
                         ),
@@ -151,6 +186,12 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
         ),
       ),
     );
+      },
+    );
+  }
+
+  int _getTotalViews(List<FirebaseReelModel> reels) {
+    return reels.fold(0, (sum, r) => sum + r.views);
   }
 
   Widget _buildStatCard(
@@ -190,7 +231,7 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
     );
   }
 
-  Widget _buildGridView(List<dynamic> reels) {
+  Widget _buildGridView(List<FirebaseReelModel> reels) {
     return GridView.builder(
       padding: const EdgeInsets.all(20),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -202,15 +243,22 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
       itemCount: reels.length,
       itemBuilder: (context, index) {
         final reel = reels[index];
-        return _buildReelGridItem(reel);
+        return _buildReelGridItem(reel, reels, index);
       },
     );
   }
 
-  Widget _buildReelGridItem(dynamic reel) {
+  Widget _buildReelGridItem(FirebaseReelModel reel, List<FirebaseReelModel> reels, int index) {
     return GestureDetector(
       onTap: () {
-        _showReelDetails(reel);
+        context.push(
+          AppRoutes.reelPlayer,
+          extra: {
+            'reelId': reel.reelId,
+            'reels': reels,
+            'initialIndex': index,
+          },
+        );
       },
       child: Container(
         decoration: BoxDecoration(
@@ -326,18 +374,18 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
     );
   }
 
-  Widget _buildListView(List<dynamic> reels) {
+  Widget _buildListView(List<FirebaseReelModel> reels) {
     return ListView.builder(
       padding: const EdgeInsets.all(20),
       itemCount: reels.length,
       itemBuilder: (context, index) {
         final reel = reels[index];
-        return _buildReelListItem(reel);
+        return _buildReelListItem(reel, reels, index);
       },
     );
   }
 
-  Widget _buildReelListItem(dynamic reel) {
+  Widget _buildReelListItem(FirebaseReelModel reel, List<FirebaseReelModel> reels, int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -346,6 +394,16 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(12),
+        onTap: () {
+          context.push(
+            AppRoutes.reelPlayer,
+            extra: {
+              'reelId': reel.reelId,
+              'reels': reels,
+              'initialIndex': index,
+            },
+          );
+        },
         leading: Container(
           width: 60,
           height: 80,
@@ -404,7 +462,7 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
           children: [
             const SizedBox(height: 4),
             Text(
-              _formatDate(reel.uploadDate),
+              _formatDate(reel.createdAt),
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.textSecondary,
@@ -415,11 +473,9 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
               children: [
                 _buildListStatChip(Icons.remove_red_eye, '${reel.views}'),
                 const SizedBox(width: 8),
-                _buildListStatChip(
-                    Icons.favorite, '${(reel.views * 0.12).toInt()}'),
+                _buildListStatChip(Icons.favorite, '${reel.likes}'),
                 const SizedBox(width: 8),
-                _buildListStatChip(
-                    Icons.share, '${(reel.views * 0.05).toInt()}'),
+                _buildListStatChip(Icons.share, '${reel.shares}'),
               ],
             ),
           ],
@@ -430,9 +486,6 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
             _showReelOptionsMenu(reel);
           },
         ),
-        onTap: () {
-          _showReelDetails(reel);
-        },
       ),
     );
   }
@@ -539,10 +592,6 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
         ],
       ),
     );
-  }
-
-  int _getTotalViews(List<dynamic> reels) {
-    return reels.fold(0, (sum, reel) => sum + (reel.views as int)) ~/ 1000;
   }
 
   Color _getEventColor(String eventType) {
@@ -741,7 +790,7 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Uploaded ${_formatDate(reel.uploadDate)}',
+                    'Uploaded ${_formatDate(reel.createdAt)}',
                     style: TextStyle(
                       color: AppColors.textSecondary,
                     ),
@@ -769,7 +818,7 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
                       Expanded(
                         child: _buildDetailStatCard(
                           'Likes',
-                          '${(reel.views * 0.12).toInt()}',
+                          '${reel.likes}',
                           Icons.favorite,
                           AppColors.primary,
                         ),
@@ -782,7 +831,7 @@ class _MainMyReelsScreenState extends ConsumerState<MainMyReelsScreen>
                       Expanded(
                         child: _buildDetailStatCard(
                           'Shares',
-                          '${(reel.views * 0.05).toInt()}',
+                          '${reel.shares}',
                           Icons.share,
                           Colors.green,
                         ),

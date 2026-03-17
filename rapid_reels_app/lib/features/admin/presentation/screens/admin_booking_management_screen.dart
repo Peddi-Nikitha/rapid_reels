@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 
 class AdminBookingManagementScreen extends StatefulWidget {
   const AdminBookingManagementScreen({super.key});
@@ -12,6 +13,7 @@ class AdminBookingManagementScreen extends StatefulWidget {
 class _AdminBookingManagementScreenState extends State<AdminBookingManagementScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _selectedFilter = 'All';
+  final _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -27,22 +29,23 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final allBookings = <dynamic>[]; // Collect all bookings from all providers
-    
-    // Get bookings from all providers
-    final providers = mockData.getAllProviders();
-    for (var provider in providers) {
-      allBookings.addAll(mockData.getProviderEvents(provider.providerId));
-    }
+    return FutureBuilder<List<FirebaseBookingModel>>(
+      future: _firestoreService.getAllBookings(),
+      builder: (context, snapshot) {
+        final allBookings = snapshot.data ?? [];
+        final pending = allBookings.where((b) => b.status == 'pending').toList();
+        final confirmed = allBookings.where((b) => b.status == 'confirmed').toList();
+        final ongoing = allBookings.where((b) => b.status == 'ongoing').toList();
+        final completed = allBookings.where((b) => b.status == 'completed').toList();
 
-    final pending = allBookings.where((b) => b.status == 'pending').toList();
-    final confirmed = allBookings.where((b) => b.status == 'confirmed').toList();
-    final ongoing = allBookings.where((b) => b.status == 'ongoing').toList();
-    final completed = allBookings.where((b) => b.status == 'completed').toList();
-    final cancelled = allBookings.where((b) => b.status == 'cancelled').toList();
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Booking Management')),
+            body: Center(child: Text('Error: ${snapshot.error}')),
+          );
+        }
 
-    return Scaffold(
+        return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -91,9 +94,11 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
         ],
       ),
     );
+      },
+    );
   }
 
-  Widget _buildBookingsList(List bookings) {
+  Widget _buildBookingsList(List<FirebaseBookingModel> bookings) {
     if (bookings.isEmpty) {
       return Center(
         child: Column(
@@ -117,7 +122,7 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
     );
   }
 
-  Widget _buildBookingCard(booking) {
+  Widget _buildBookingCard(FirebaseBookingModel booking) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -147,7 +152,7 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'ID: ${booking.eventId}',
+                      'ID: ${booking.bookingId}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
@@ -174,10 +179,12 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
           _buildInfoRow(Icons.calendar_today, '${booking.eventDate.day}/${booking.eventDate.month}/${booking.eventDate.year}'),
           const SizedBox(height: 6),
           _buildInfoRow(Icons.access_time, booking.eventTime),
+          _buildInfoRow(Icons.person, 'Customer: ${booking.customerId}'),
+          _buildInfoRow(Icons.business, 'Provider: ${booking.providerId}'),
           const SizedBox(height: 6),
           _buildInfoRow(Icons.location_on, booking.venue.address),
           const SizedBox(height: 6),
-          _buildInfoRow(Icons.currency_rupee, '₹${booking.totalAmount.toStringAsFixed(0)}'),
+          _buildInfoRow(Icons.currency_rupee, '₹${booking.payment.totalAmount.toStringAsFixed(0)}'),
           const SizedBox(height: 12),
           Row(
             children: [

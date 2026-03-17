@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../firebase_utils.dart';
 
 /// Firebase Provider Model
 /// Collection: providers
@@ -32,6 +33,10 @@ class FirebaseProviderModel {
   final bool isVerified;
   final bool isActive;
   final bool isFeatured;
+  /// High-level verification status for admin workflow: pending / approved / rejected
+  final String verificationStatus;
+  /// Optional reason when admin rejects the provider
+  final String? rejectionReason;
   final DateTime createdAt;
   final DateTime updatedAt;
   final Map<String, dynamic>? metadata;
@@ -65,6 +70,8 @@ class FirebaseProviderModel {
     required this.isVerified,
     required this.isActive,
     required this.isFeatured,
+    required this.verificationStatus,
+    this.rejectionReason,
     required this.createdAt,
     required this.updatedAt,
     this.metadata,
@@ -112,9 +119,11 @@ class FirebaseProviderModel {
           ? BankDetails.fromMap(data['bankDetails'])
           : null,
       commissionRate: (data['commissionRate'] ?? 15.0).toDouble(),
-      isVerified: data['isVerified'] ?? false,
-      isActive: data['isActive'] ?? true,
-      isFeatured: data['isFeatured'] ?? false,
+      isVerified: firebaseToBool(data['isVerified'], false),
+      isActive: firebaseToBool(data['isActive'], true),
+      isFeatured: firebaseToBool(data['isFeatured'], false),
+      verificationStatus: data['verificationStatus'] ?? (firebaseToBool(data['isVerified'], false) ? 'approved' : 'pending'),
+      rejectionReason: data['rejectionReason'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       metadata: data['metadata'],
@@ -150,6 +159,8 @@ class FirebaseProviderModel {
       'isVerified': isVerified,
       'isActive': isActive,
       'isFeatured': isFeatured,
+      'verificationStatus': verificationStatus,
+      'rejectionReason': rejectionReason,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'metadata': metadata,
@@ -191,8 +202,8 @@ class PackageOffering {
       reelsCount: map['reelsCount'] ?? 0,
       editingStyle: map['editingStyle'] ?? '',
       deliveryTime: map['deliveryTime'] ?? 0,
-      highlightVideo: map['highlightVideo'] ?? false,
-      liveReelStation: map['liveReelStation'] ?? false,
+      highlightVideo: firebaseToBool(map['highlightVideo'], false),
+      liveReelStation: firebaseToBool(map['liveReelStation'], false),
       features: List<String>.from(map['features'] ?? []),
     );
   }
@@ -307,7 +318,7 @@ class DayAvailability {
 
   factory DayAvailability.fromMap(Map<String, dynamic> map) {
     return DayAvailability(
-      isOpen: map['isOpen'] ?? false,
+      isOpen: firebaseToBool(map['isOpen'], false),
       slots: (map['slots'] as List?)
               ?.map((s) => TimeSlot.fromMap(s))
               .toList() ??

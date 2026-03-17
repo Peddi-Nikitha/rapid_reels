@@ -3,7 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
 
 bool isSameDay(DateTime? a, DateTime? b) {
   if (a == null || b == null) return false;
@@ -26,6 +27,7 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
   late TabController _tabController;
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -41,82 +43,113 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final provider = mockData.getProviderById(widget.providerId);
-    final stats = mockData.getProviderStats(widget.providerId);
-    final todayBookings = mockData.getProviderEvents(widget.providerId)
-        .where((b) => b.eventDate.day == DateTime.now().day)
-        .toList();
+    return FutureBuilder<FirebaseProviderModel?>(
+      future: _firestoreService.getProvider(widget.providerId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          );
+        }
 
-    if (provider == null) {
-      return const Scaffold(
-        body: Center(child: Text('Provider not found')),
-      );
-    }
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Text(
+                'Error loading provider: ${snapshot.error}',
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          );
+        }
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: Text(
-          provider.businessName,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) {
-              if (value == 'logout') {
-                _showLogoutDialog(context);
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, color: Colors.red),
-                    SizedBox(width: 12),
-                    Text('Logout', style: TextStyle(color: Colors.red)),
-                  ],
-                ),
+        final provider = snapshot.data;
+        if (provider == null) {
+          return const Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(child: Text('Provider not found')),
+          );
+        }
+
+        // TODO: Replace mock stats with real Firebase-based stats later
+        final todayBookings = <dynamic>[];
+        final stats = <String, dynamic>{
+          'pendingBookings': 0,
+          'totalBookings': 0,
+          'averageRating': provider.rating,
+          'totalEarnings': 0.0,
+        };
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            title: Text(
+              provider.businessName,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {},
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (value) {
+                  if (value == 'logout') {
+                    _showLogoutDialog(context);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout, color: Colors.red),
+                        SizedBox(width: 12),
+                        Text('Logout', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
+            bottom: TabBar(
+              controller: _tabController,
+              indicatorColor: AppColors.primary,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: Colors.grey,
+              tabs: const [
+                Tab(text: 'Overview'),
+                Tab(text: 'Calendar'),
+                Tab(text: 'Activity'),
+              ],
+            ),
           ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppColors.primary,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: Colors.grey,
-          tabs: const [
-            Tab(text: 'Overview'),
-            Tab(text: 'Calendar'),
-            Tab(text: 'Activity'),
-          ],
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await Future.delayed(const Duration(seconds: 1));
-        },
-        child: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildOverviewTab(provider, stats, todayBookings),
-            _buildCalendarTab(mockData),
-            _buildActivityTab(mockData),
-          ],
-        ),
-      ),
+          body: RefreshIndicator(
+            onRefresh: () async {
+              setState(() {});
+            },
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildOverviewTab(provider, stats, todayBookings),
+                // Calendar & Activity still use mock-style UI but without data dependency for now
+                _buildCalendarTab(null),
+                _buildActivityTab(null),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -238,7 +271,24 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                     gradient: const LinearGradient(
                       colors: [Color(0xFF11998E), Color(0xFF38EF7D)],
                     ),
-                    onTap: () => context.push(AppRoutes.providerEarnings),
+                    onTap: () => context.push('${AppRoutes.providerEarnings}/${widget.providerId}'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionCard(
+                    context: context,
+                    icon: Icons.video_library,
+                    title: 'My Reels',
+                    subtitle: 'Manage reels',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8E44AD), Color(0xFF9B59B6)],
+                    ),
+                    onTap: () => context.push('${AppRoutes.providerMyReels}/${widget.providerId}'),
                   ),
                 ),
               ],
@@ -306,12 +356,10 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
     );
   }
 
-  Widget _buildCalendarTab(mockData) {
-    final bookings = mockData.getProviderEvents(widget.providerId);
-    final eventSource = {
-      for (var booking in bookings)
-        DateTime(booking.eventDate.year, booking.eventDate.month, booking.eventDate.day): booking
-    };
+  Widget _buildCalendarTab(dynamic _) {
+    // TODO: Wire this to real provider bookings from Firestore.
+    // For now, show an empty calendar without booking data.
+    final Map<DateTime, dynamic> eventSource = {};
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -364,22 +412,7 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
         ),
         const SizedBox(height: 24),
         
-        // Selected Day Bookings
-        if (eventSource.containsKey(DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day)))
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Bookings on ${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _buildBookingCard(eventSource[DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day)]!),
-            ],
-          ),
+        // Selected Day Bookings (none yet – to be implemented with real data)
       ],
     );
   }

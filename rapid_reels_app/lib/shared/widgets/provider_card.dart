@@ -37,7 +37,9 @@ class ProviderCard extends StatelessWidget {
                   child: CachedNetworkImage(
                     imageUrl: provider.coverImages.isNotEmpty
                         ? provider.coverImages[0]
-                        : 'https://via.placeholder.com/400x200',
+                        : provider.profileImage.isNotEmpty
+                            ? provider.profileImage
+                            : 'https://via.placeholder.com/400x200',
                     height: 150,
                     width: double.infinity,
                     fit: BoxFit.cover,

@@ -1,3 +1,5 @@
+import '../../core/firebase/firebase_utils.dart';
+
 /// Shared User Model
 /// Domain model for user data across the application
 class UserModel {
@@ -72,8 +74,8 @@ class UserModel {
       walletBalance: (data['walletBalance'] ?? 0.0).toDouble(),
       totalEventsBooked: data['totalEventsBooked'] ?? 0,
       totalReelsReceived: data['totalReelsReceived'] ?? 0,
-      isActive: data['isActive'] ?? true,
-      isVerified: data['isVerified'] ?? false,
+      isActive: firebaseToBool(data['isActive'], true),
+      isVerified: firebaseToBool(data['isVerified'], false),
       createdAt: data['createdAt'] is String
           ? DateTime.parse(data['createdAt'])
           : DateTime.now(),

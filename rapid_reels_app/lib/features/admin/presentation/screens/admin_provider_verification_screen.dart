@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
 
-class AdminProviderVerificationScreen extends StatefulWidget {
+class AdminProviderVerificationScreen extends ConsumerStatefulWidget {
   const AdminProviderVerificationScreen({super.key});
 
   @override
-  State<AdminProviderVerificationScreen> createState() => _AdminProviderVerificationScreenState();
+  ConsumerState<AdminProviderVerificationScreen> createState() => _AdminProviderVerificationScreenState();
 }
 
-class _AdminProviderVerificationScreenState extends State<AdminProviderVerificationScreen> {
+class _AdminProviderVerificationScreenState extends ConsumerState<AdminProviderVerificationScreen> {
   final _searchController = TextEditingController();
   String _selectedFilter = 'Pending';
 
@@ -21,9 +23,8 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final providers = mockData.getAllProviders();
-    final pendingProviders = providers.where((p) => !p.isVerified).toList();
+    final firestore = FirestoreService();
+    final pendingStream = firestore.streamPendingProviders();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -72,31 +73,36 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
             ),
           ),
           
-          // Stats Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: AppColors.surface,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem('Pending', '${pendingProviders.length}', Colors.orange),
-                ),
-                Container(width: 1, height: 30, color: Colors.grey[700]),
-                Expanded(
-                  child: _buildStatItem('Verified', '${providers.where((p) => p.isVerified).length}', Colors.green),
-                ),
-                Container(width: 1, height: 30, color: Colors.grey[700]),
-                Expanded(
-                  child: _buildStatItem('Total', '${providers.length}', Colors.blue),
-                ),
-              ],
-            ),
-          ),
-          
-          // Providers List
+          // Stats + List powered by Firestore stream
           Expanded(
-            child: pendingProviders.isEmpty
-                ? Center(
+            child: StreamBuilder<List<FirebaseProviderModel>>(
+              stream: pendingStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error loading providers: ${snapshot.error}',
+                      style: TextStyle(color: Colors.red[300]),
+                    ),
+                  );
+                }
+
+                final pendingProviders = snapshot.data ?? [];
+                final searchQuery = _searchController.text.toLowerCase();
+                final filtered = pendingProviders.where((p) {
+                  if (searchQuery.isEmpty) return true;
+                  return p.businessName.toLowerCase().contains(searchQuery) ||
+                      p.ownerName.toLowerCase().contains(searchQuery) ||
+                      p.email.toLowerCase().contains(searchQuery);
+                }).toList();
+
+                if (filtered.isEmpty) {
+                  return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -105,15 +111,38 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
                         Text('No pending verifications', style: TextStyle(color: Colors.grey[600])),
                       ],
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: pendingProviders.length,
-                    itemBuilder: (context, index) {
-                      final provider = pendingProviders[index];
-                      return _buildProviderVerificationCard(provider);
-                    },
-                  ),
+                  );
+                }
+
+                return Column(
+                  children: [
+                    // Stats Bar
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      color: AppColors.surface,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatItem('Pending', '${filtered.length}', Colors.orange),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final provider = filtered[index];
+                          return _buildProviderVerificationCard(provider);
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -140,7 +169,7 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
     );
   }
 
-  Widget _buildProviderVerificationCard(provider) {
+  Widget _buildProviderVerificationCard(FirebaseProviderModel provider) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -283,7 +312,7 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
     );
   }
 
-  void _showProviderDetails(provider) {
+  void _showProviderDetails(FirebaseProviderModel provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -318,7 +347,7 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
     );
   }
 
-  void _verifyProvider(provider) {
+  void _verifyProvider(FirebaseProviderModel provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -331,12 +360,23 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${provider.businessName} verified successfully!')),
-              );
-              setState(() {});
+              try {
+                await FirestoreService().updateProviderVerificationStatus(
+                  providerId: provider.providerId,
+                  status: 'approved',
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${provider.businessName} verified successfully!')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error verifying provider: $e')),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
@@ -349,7 +389,7 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
     );
   }
 
-  void _rejectProvider(provider) {
+  void _rejectProvider(FirebaseProviderModel provider) {
     final reasonController = TextEditingController();
     
     showDialog(
@@ -378,12 +418,25 @@ class _AdminProviderVerificationScreenState extends State<AdminProviderVerificat
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              final reason = reasonController.text.trim();
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${provider.businessName} rejected')),
-              );
-              setState(() {});
+              try {
+                await FirestoreService().updateProviderVerificationStatus(
+                  providerId: provider.providerId,
+                  status: 'rejected',
+                  rejectionReason: reason,
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${provider.businessName} rejected')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error rejecting provider: $e')),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,

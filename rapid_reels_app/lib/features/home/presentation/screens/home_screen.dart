@@ -13,7 +13,11 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/services/mock_data_service.dart';
 import '../../../../core/mock/mock_venues.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/theme/text_styles.dart';
+import '../../../../shared/widgets/reel_viewer_screen.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../providers/presentation/screens/provider_details_screen.dart';
 import 'schedule_packages_screen.dart';
@@ -35,9 +39,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   
   // Location and nearby venues state
   final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
   LatLng _currentLocation = const LatLng(18.1023, 78.8514); // Default: Siddipet
   List<Venue> _nearbyVenues = [];
   bool _isLoadingVenues = false;
+  List<FirebaseProviderModel> _featuredProviders = [];
+  bool _isLoadingProviders = false;
+  List<FirebaseReelModel> _trendingReels = [];
 
   final List<String> _cities = [
     // Indian Cities
@@ -73,6 +81,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _checkOfferPopup();
     // Get location first, then load saved city as fallback
     _getCurrentLocation();
+    _loadFeaturedProviders();
+    _loadTrendingReels();
+  }
+
+  Future<void> _loadTrendingReels() async {
+    try {
+      final reels = await _firestoreService.getDiscoverReels(limit: 10);
+      if (mounted) setState(() => _trendingReels = reels);
+    } catch (_) {}
   }
 
   Future<void> _checkOnboardingStatus() async {
@@ -201,7 +218,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             setState(() {
               _selectedCity = finalCityName;
             });
-            
+            _loadFeaturedProviders();
             // Save detected city to preferences
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('selected_city', finalCityName);
@@ -243,6 +260,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           setState(() {
             _selectedCity = savedCity;
           });
+          _loadFeaturedProviders();
         }
       } else {
         // Use default city
@@ -250,6 +268,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           setState(() {
             _selectedCity = 'Siddipet';
           });
+          _loadFeaturedProviders();
         }
       }
     } catch (e) {
@@ -266,6 +285,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     debugPrint(message);
     _loadFallbackCity();
     _loadNearbyVenues();
+  }
+
+  Future<void> _loadFeaturedProviders() async {
+    if (!mounted) return;
+    setState(() => _isLoadingProviders = true);
+    try {
+      final city = _selectedCity;
+      final list = await _firestoreService.getFeaturedProviders(city: city);
+      if (!mounted) return;
+      setState(() {
+        _featuredProviders = list;
+        _isLoadingProviders = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading featured providers: $e');
+      if (mounted) {
+        setState(() {
+          _featuredProviders = [];
+          _isLoadingProviders = false;
+        });
+      }
+    }
   }
 
   void _loadNearbyVenues() {
@@ -614,10 +655,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: MockDataService().getTrendingReels().length,
+                      itemCount: _trendingReels.length,
                       itemBuilder: (context, index) {
-                        final reel = MockDataService().getTrendingReels()[index];
-                        return _buildTrendingReelCard(reel);
+                        final reel = _trendingReels[index];
+                        return _buildTrendingReelCard(reel, index);
                       },
                     ),
                   ),
@@ -765,15 +806,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 120,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: MockDataService().getProvidersByCity(_selectedCity).length,
-                      itemBuilder: (context, index) {
-                        final provider = MockDataService().getProvidersByCity(_selectedCity)[index];
-                        return _buildProviderCard(provider);
-                      },
-                    ),
+                    child: _isLoadingProviders
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: CircularProgressIndicator(),
+                            ),
+                          )
+                        : _featuredProviders.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                child: Center(
+                                  child: Text(
+                                    'No providers in $_selectedCity yet',
+                                    style: AppTypography.bodyMedium.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                itemCount: _featuredProviders.length,
+                                itemBuilder: (context, index) {
+                                  final provider = _featuredProviders[index];
+                                  return _buildProviderCard(provider);
+                                },
+                              ),
                   ),
                 ],
               ),
@@ -1023,11 +1083,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildTrendingReelCard(dynamic reel) {
+  void _viewReel(FirebaseReelModel reel) {
+    final videoUrl = reel.videoUrl.trim().isNotEmpty
+        ? reel.videoUrl.trim()
+        : (reel.thumbnailUrl.trim().isNotEmpty &&
+                (reel.thumbnailUrl.contains('firebasestorage') ||
+                    reel.thumbnailUrl.contains('.mp4') ||
+                    reel.thumbnailUrl.contains('.mov')))
+            ? reel.thumbnailUrl.trim()
+            : reel.videoUrl;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ReelViewerScreen(videoUrl: videoUrl, title: reel.title),
+      ),
+    );
+  }
+
+  Widget _buildTrendingReelCard(FirebaseReelModel reel, int index) {
     return GestureDetector(
-      onTap: () {
-        _showSnackbar('Playing ${reel.eventType} reel...');
-      },
+      onTap: () => _viewReel(reel),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
@@ -1084,7 +1158,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Stack(
                   children: [
                     // Thumbnail image if available
-                    if (reel.thumbnailUrl != null)
+                    if (reel.thumbnailUrl.isNotEmpty)
                       CachedNetworkImage(
                         imageUrl: reel.thumbnailUrl,
                         fit: BoxFit.cover,
@@ -1149,7 +1223,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   children: [
                     Flexible(
                       child: Text(
-                        reel.title ?? '${reel.eventType} Reel',
+                        reel.title.isNotEmpty ? reel.title : '${reel.eventType} Reel',
                         style: AppTypography.captionLarge.copyWith( // Changed from titleSmall to captionLarge
                           color: AppColors.textPrimary,
                           fontSize: 11, // Explicit smaller size
@@ -1193,7 +1267,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildProviderCard(dynamic provider) {
+  Widget _buildProviderCard(FirebaseProviderModel provider) {
+    final initials = provider.businessName.length >= 2
+        ? provider.businessName.substring(0, 2).toUpperCase()
+        : (provider.businessName.isNotEmpty ? provider.businessName.toUpperCase() : 'PR');
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1262,7 +1339,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             color: AppColors.primary,
                             child: Center(
                               child: Text(
-                                provider.businessName.substring(0, 2).toUpperCase(),
+                                initials,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w700,
@@ -1275,7 +1352,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             color: AppColors.primary,
                             child: Center(
                               child: Text(
-                                provider.businessName.substring(0, 2).toUpperCase(),
+                                initials,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w700,
@@ -1288,7 +1365,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       )
                     : Center(
                         child: Text(
-                          provider.businessName.substring(0, 2).toUpperCase(),
+                          initials,
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
@@ -1598,6 +1675,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _selectedCity = city;
                       _currentReviewIndex = 0; // Reset review index when city changes
                     });
+                    _loadFeaturedProviders();
                     Navigator.pop(context);
                   },
                 );

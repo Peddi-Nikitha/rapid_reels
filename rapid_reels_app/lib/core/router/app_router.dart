@@ -63,6 +63,7 @@ import '../../features/provider/presentation/screens/live_event_mode_screen.dart
 import '../../features/provider/presentation/screens/reel_editor_screen.dart';
 import '../../features/provider/presentation/screens/provider_earnings_screen.dart';
 import '../../features/provider/presentation/screens/upload_footage_screen.dart';
+import '../../features/provider/presentation/screens/provider_my_reels_screen.dart';
 import '../../features/provider/presentation/screens/provider_registration_screen.dart';
 import '../../features/provider/presentation/screens/provider_business_profile_screen.dart';
 import '../../features/provider/presentation/screens/provider_portfolio_upload_screen.dart';
@@ -80,12 +81,14 @@ import '../../features/admin/presentation/screens/admin_content_moderation_scree
 import '../../features/admin/presentation/screens/admin_analytics_screen.dart';
 import '../../features/admin/presentation/screens/admin_payment_management_screen.dart';
 import '../../features/admin/presentation/screens/admin_support_tickets_screen.dart';
+import '../../features/admin/presentation/screens/admin_provider_earnings_screen.dart';
 
 // Main scaffold
 import '../../shared/widgets/main_scaffold.dart';
 
 // Constants
 import '../constants/app_routes.dart';
+import '../firebase/models/firebase_reel_model.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -158,7 +161,10 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.home,
         name: 'home',
-        builder: (context, state) => const MainScaffold(),
+        builder: (context, state) {
+          final initialTab = state.extra is int ? state.extra as int : 0;
+          return MainScaffold(initialTabIndex: initialTab);
+        },
       ),
 
       // ==================== Booking Flow Routes ====================
@@ -284,7 +290,7 @@ class AppRouter {
             state,
             PaymentScreen(
               booking: booking,
-              isAdvancePayment: extra?['isAdvancePayment'] ?? true,
+              isAdvancePayment: _parseBool(extra?['isAdvancePayment'], true),
             ),
           );
         },
@@ -340,13 +346,19 @@ class AppRouter {
         name: 'reelPlayer',
         pageBuilder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
+          List<FirebaseReelModel> reels = [];
+          if (extra?['reels'] != null) {
+            reels = (extra!['reels'] as List).cast<FirebaseReelModel>();
+          } else if (extra?['reel'] != null) {
+            reels = [extra!['reel'] as FirebaseReelModel];
+          }
           return _buildPageWithFadeTransition(
             context,
             state,
             ReelPlayerScreen(
-              reelId: extra?['reelId'] ?? '',
-              reels: extra?['reels'] ?? [],
-              initialIndex: extra?['initialIndex'] ?? 0,
+              reelId: extra?['reelId'] ?? reels.isNotEmpty ? reels.first.reelId : '',
+              reels: reels,
+              initialIndex: _parseInt(extra?['initialIndex'], 0).clamp(0, reels.isEmpty ? 0 : reels.length - 1),
             ),
           );
         },
@@ -541,6 +553,18 @@ class AppRouter {
           state,
           const UploadFootageScreen(),
         ),
+      ),
+      GoRoute(
+        path: '${AppRoutes.providerMyReels}/:providerId',
+        name: 'providerMyReels',
+        pageBuilder: (context, state) {
+          final providerId = state.pathParameters['providerId'] ?? '';
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            ProviderMyReelsScreen(providerId: providerId),
+          );
+        },
       ),
       GoRoute(
         path: '${AppRoutes.providerBookingCalendar}/:providerId',
@@ -782,6 +806,15 @@ class AppRouter {
           const AdminSupportTicketsScreen(),
         ),
       ),
+      GoRoute(
+        path: AppRoutes.adminProviderEarnings,
+        name: 'adminProviderEarnings',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const AdminProviderEarningsScreen(),
+        ),
+      ),
     ],
     
     // Error handler
@@ -838,6 +871,20 @@ class AppRouter {
         );
       },
     );
+  }
+
+  static int _parseInt(dynamic value, int defaultValue) {
+    if (value == null) return defaultValue;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? defaultValue;
+    return defaultValue;
+  }
+
+  static bool _parseBool(dynamic value, bool defaultValue) {
+    if (value == null) return defaultValue;
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return defaultValue;
   }
 
   static CustomTransitionPage _buildPageWithFadeTransition(

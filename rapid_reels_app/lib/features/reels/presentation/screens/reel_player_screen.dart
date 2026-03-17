@@ -3,13 +3,15 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/mock/mock_reels.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/theme/text_styles.dart';
+import '../../../../shared/widgets/reel_video_layer.dart';
 
 class ReelPlayerScreen extends StatefulWidget {
   final String reelId;
-  final List<ReelModel> reels;
+  final List<FirebaseReelModel> reels;
   final int initialIndex;
 
   const ReelPlayerScreen({
@@ -28,13 +30,25 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
   late int _currentIndex;
   final Map<String, bool> _likedReels = {};
   final Map<String, bool> _followedCreators = {};
-  final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
+  final Map<String, FirebaseProviderModel?> _providerCache = {};
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
+    _currentIndex = widget.initialIndex.clamp(0, (widget.reels.length - 1).clamp(0, 999));
     _pageController = PageController(initialPage: _currentIndex);
+    _loadProviders();
+  }
+
+  Future<void> _loadProviders() async {
+    if (widget.reels.isEmpty) return;
+    final providerIds = widget.reels.map((r) => r.providerId).toSet().toList();
+    for (final id in providerIds) {
+      final p = await _firestoreService.getProvider(id);
+      if (mounted) _providerCache[id] = p;
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -45,6 +59,14 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.reels.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: const Center(
+          child: Text('No reels', style: TextStyle(color: Colors.white)),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: PageView.builder(
@@ -57,40 +79,23 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
         },
         itemCount: widget.reels.length,
         itemBuilder: (context, index) {
-          return _buildReelPage(widget.reels[index]);
+          return _buildReelPage(widget.reels[index], index == _currentIndex);
         },
       ),
     );
   }
 
-  Widget _buildReelPage(ReelModel reel) {
+  Widget _buildReelPage(FirebaseReelModel reel, bool isActive) {
     final isLiked = _likedReels[reel.reelId] ?? false;
-    final provider = _mockData.getProviderById(reel.providerId);
+    final provider = _providerCache[reel.providerId];
     final isFollowing = _followedCreators[reel.providerId] ?? false;
 
     return Stack(
       children: [
-        // Video Thumbnail (Image thumbnail)
+        // Video player (plays when active) + thumbnail fallback
         Positioned.fill(
-          child: CachedNetworkImage(
-            imageUrl: reel.thumbnailUrl,
-            fit: BoxFit.cover,
-            placeholder: (context, url) => Container(
-              color: AppColors.surface,
-              child: const Center(
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                ),
-              ),
-            ),
-            errorWidget: (context, url, error) => Container(
-              color: AppColors.surface,
-              child: const Icon(Icons.error_outline, color: AppColors.textSecondary),
-            ),
-          ),
+          child: ReelVideoLayer(reel: reel, isActive: isActive),
         ),
-        
         // Refined Gradient Overlay
         Positioned.fill(
           child: Container(
@@ -160,7 +165,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
                 icon: Icons.share_rounded,
                 label: _formatNumber(reel.shares),
                 onTap: () {
-                  context.push(AppRoutes.reelShare, extra: {'reelId': reel.reelId});
+                  context.push('${AppRoutes.reelDetails}/${reel.reelId}/share');
                 },
               ),
               const SizedBox(height: 20),
@@ -400,7 +405,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
               
               // Description
               Text(
-                reel.description,
+                reel.description ?? '',
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w400,
@@ -427,11 +432,11 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
                     text: '${_formatNumber(reel.likes)}',
                     size: 13,
                   ),
-                  if (reel.musicTrack != null) ...[
+                  if (reel.metadata.musicTrack != null && reel.metadata.musicTrack!.isNotEmpty) ...[
                     const SizedBox(width: 12),
                     _buildStatItem(
                       icon: Icons.music_note_rounded,
-                      text: reel.musicTrack!.name,
+                      text: reel.metadata.musicTrack!,
                       size: 13,
                     ),
                   ],
@@ -618,7 +623,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
     );
   }
 
-  void _downloadReel(ReelModel reel) {
+  void _downloadReel(FirebaseReelModel reel) {
     // Simulate download
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -629,7 +634,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
     );
   }
 
-  void _showOptionsSheet(ReelModel reel) {
+  void _showOptionsSheet(FirebaseReelModel reel) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -668,4 +673,5 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
     );
   }
 }
+
 

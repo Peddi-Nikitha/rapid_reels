@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../shared/widgets/custom_button.dart';
+import 'video_controller_io.dart' if (dart.library.html) 'video_controller_web.dart' as video_helper;
+
+const _eventTypes = ['wedding', 'engagement', 'birthday', 'corporate', 'brand'];
 
 class UploadFootageScreen extends StatefulWidget {
   const UploadFootageScreen({super.key});
@@ -10,22 +20,61 @@ class UploadFootageScreen extends StatefulWidget {
 }
 
 class _UploadFootageScreenState extends State<UploadFootageScreen> {
-  final List<Map<String, dynamic>> _selectedFiles = [];
-  final List<Map<String, dynamic>> _uploadQueue = [];
+  final List<Map<String, dynamic>> _selectedReels = [];
+  final _firestoreService = FirestoreService();
+  final _picker = ImagePicker();
   bool _isUploading = false;
   double _uploadProgress = 0.0;
   bool _enableCompression = true;
 
   @override
+  void dispose() {
+    for (final item in _selectedReels) {
+      final controller = item['controller'] as VideoPlayerController?;
+      controller?.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          elevation: 0,
+          title: const Text('Upload Reels', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.login, size: 64, color: Colors.grey[600]),
+                const SizedBox(height: 24),
+                Text(
+                  'Please log in as a provider to upload reels',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
-        title: const Text('Upload Footage', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        title: const Text('Upload Reels', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         actions: [
-          if (_uploadQueue.isNotEmpty)
+          if (_selectedReels.isNotEmpty)
             IconButton(
               icon: Stack(
                 children: [
@@ -40,7 +89,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                         shape: BoxShape.circle,
                       ),
                       child: Text(
-                        '${_uploadQueue.length}',
+                        '${_selectedReels.length}',
                         style: const TextStyle(fontSize: 10, color: Colors.white),
                       ),
                     ),
@@ -53,8 +102,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
       ),
       body: Column(
         children: [
-          // Upload Area
-          if (_selectedFiles.isEmpty)
+          if (_selectedReels.isEmpty)
             Expanded(
               child: Center(
                 child: Column(
@@ -72,7 +120,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Text('Upload Event Footage', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text('Upload reels', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Text('Supports MP4, MOV files up to 5GB', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
                     const SizedBox(height: 24),
@@ -91,8 +139,8 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                     ),
                     const SizedBox(height: 16),
                     CustomButton(
-                      text: 'Select Files',
-                      onPressed: _selectFiles,
+                      text: 'Select Video',
+                      onPressed: _selectVideo,
                       isFullWidth: false,
                       width: 200,
                     ),
@@ -102,18 +150,34 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
             )
           else
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _selectedFiles.length,
-                itemBuilder: (context, index) {
-                  final file = _selectedFiles[index];
-                  return _buildFileCard(file, index);
-                },
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _selectedReels.length,
+                      itemBuilder: (context, index) {
+                        return _buildReelCard(_selectedReels[index], index);
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: _isUploading ? null : _selectVideo,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add More Videos'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          
-          // Upload Progress
-          if (_isUploading) ...[
+          if (_isUploading)
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -131,10 +195,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                 ],
               ),
             ),
-          ],
-          
-          // Action Buttons
-          if (_selectedFiles.isNotEmpty && !_isUploading)
+          if (_selectedReels.isNotEmpty && !_isUploading)
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -155,8 +216,8 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                   Expanded(
                     flex: 2,
                     child: CustomButton(
-                      text: 'Upload ${_selectedFiles.length} ${_selectedFiles.length == 1 ? 'File' : 'Files'}',
-                      onPressed: _uploadFiles,
+                      text: 'Upload ${_selectedReels.length} ${_selectedReels.length == 1 ? 'Reel' : 'Reels'}',
+                      onPressed: _uploadReels,
                     ),
                   ),
                 ],
@@ -167,13 +228,15 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
     );
   }
 
-  Widget _buildFileCard(Map<String, dynamic> file, int index) {
-    final status = file['status'] as String? ?? 'pending';
-    final progress = file['progress'] as double? ?? 0.0;
+  Widget _buildReelCard(Map<String, dynamic> item, int index) {
+    final status = item['status'] as String? ?? 'pending';
+    final progress = item['progress'] as double? ?? 0.0;
     final hasError = status == 'failed';
-    
+    final controller = item['controller'] as VideoPlayerController?;
+    final xFile = item['xFile'] as XFile?;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -181,24 +244,16 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
         border: hasError ? Border.all(color: Colors.red, width: 1) : null,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: status == 'uploading'
-                      ? CircularProgressIndicator(value: progress, strokeWidth: 2)
-                      : Icon(
-                          hasError ? Icons.error : Icons.videocam,
-                          color: hasError ? Colors.red : AppColors.primary,
-                          size: 32,
-                        ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: _buildPreview(controller, xFile, status, progress),
                 ),
               ),
               const SizedBox(width: 16),
@@ -207,15 +262,10 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      file['name'] as String,
+                      item['name'] as String? ?? 'Video',
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${file['size']} MB • ${file['duration']}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                     if (status == 'uploading')
                       Text(
@@ -237,10 +287,48 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                 ),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.red),
-                onPressed: () => _removeFile(index),
+                onPressed: () => _removeReel(index),
               ),
             ],
           ),
+          if (status != 'uploading' && status != 'completed') ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: item['captionController'] as TextEditingController?,
+              decoration: const InputDecoration(
+                labelText: 'Caption',
+                hintText: 'Add a caption for this reel',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: item['tagsController'] as TextEditingController?,
+              decoration: const InputDecoration(
+                labelText: 'Tags',
+                hintText: 'wedding, ceremony, bride (comma separated)',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: item['eventType'] as String? ?? 'wedding',
+              decoration: const InputDecoration(
+                labelText: 'Event Type',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              items: _eventTypes.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => item['eventType'] = v);
+                }
+              },
+            ),
+          ],
           if (status == 'uploading')
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -255,85 +343,245 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
     );
   }
 
-  void _selectFiles() {
+  Widget _buildPreview(VideoPlayerController? controller, XFile? xFile, String status, double progress) {
+    if (status == 'uploading') {
+      return Container(
+        color: AppColors.primary.withValues(alpha: 0.1),
+        child: Center(
+          child: CircularProgressIndicator(value: progress, strokeWidth: 2, color: AppColors.primary),
+        ),
+      );
+    }
+    if (controller != null && controller.value.isInitialized) {
+      return FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: controller.value.size.width,
+          height: controller.value.size.height,
+          child: VideoPlayer(controller),
+        ),
+      );
+    }
+    return Container(
+      color: AppColors.primary.withValues(alpha: 0.1),
+      child: Center(
+        child: Icon(
+          status == 'failed' ? Icons.error : Icons.videocam,
+          color: status == 'failed' ? Colors.red : AppColors.primary,
+          size: 32,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectVideo() async {
+    final picked = await _picker.pickVideo(source: ImageSource.gallery);
+    if (picked == null) return;
+
+    final name = picked.name;
+    VideoPlayerController? controller;
+    try {
+      controller = video_helper.createVideoController(picked);
+      await controller.initialize();
+    } catch (e) {
+      debugPrint('Video preview init failed (e.g. on web): $e');
+      controller?.dispose();
+      controller = null;
+    }
+
+    final captionController = TextEditingController();
+    final tagsController = TextEditingController();
+
     setState(() {
-      final newFiles = [
-        {'name': 'wedding_ceremony.mp4', 'size': 235.5, 'duration': '05:32', 'status': 'pending'},
-        {'name': 'bride_entry.mp4', 'size': 98.3, 'duration': '02:15', 'status': 'pending'},
-        {'name': 'varmala_ceremony.mp4', 'size': 156.7, 'duration': '03:48', 'status': 'pending'},
-      ];
-      _selectedFiles.addAll(newFiles);
-      _uploadQueue.addAll(newFiles);
+      _selectedReels.add({
+        'xFile': picked,
+        'name': name,
+        'caption': '',
+        'tags': '',
+        'captionController': captionController,
+        'tagsController': tagsController,
+        'eventType': 'wedding',
+        'status': 'pending',
+        'progress': 0.0,
+        'controller': controller,
+      });
     });
   }
 
-  void _removeFile(int index) {
-    setState(() => _selectedFiles.removeAt(index));
+  void _removeReel(int index) {
+    final item = _selectedReels[index];
+    (item['controller'] as VideoPlayerController?)?.dispose();
+    (item['captionController'] as TextEditingController?)?.dispose();
+    (item['tagsController'] as TextEditingController?)?.dispose();
+    setState(() => _selectedReels.removeAt(index));
   }
 
   void _clearAll() {
-    setState(() => _selectedFiles.clear());
+    for (final item in _selectedReels) {
+      (item['controller'] as VideoPlayerController?)?.dispose();
+      (item['captionController'] as TextEditingController?)?.dispose();
+      (item['tagsController'] as TextEditingController?)?.dispose();
+    }
+    setState(() => _selectedReels.clear());
   }
 
-  void _uploadFiles() {
-    if (_enableCompression) {
-      // Simulate compression
+  Future<void> _uploadReels() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Compressing videos...')),
+        const SnackBar(content: Text('Please log in to upload')),
+      );
+      return;
+    }
+
+    final providerId = user.uid;
+    setState(() => _isUploading = true);
+
+    if (_enableCompression) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Uploading videos...')),
       );
     }
 
-    setState(() {
-      _isUploading = true;
-      _uploadProgress = 0.0;
-      for (var file in _selectedFiles) {
-        if (file['status'] == 'pending') {
-          file['status'] = 'uploading';
-          file['progress'] = 0.0;
-        }
-      }
-    });
+    final storage = FirebaseStorage.instance;
+    final total = _selectedReels.length;
+    var completed = 0;
 
-    // Simulate upload progress
-    Future.delayed(const Duration(milliseconds: 100), _simulateUpload);
-  }
+    try {
+      for (var i = 0; i < _selectedReels.length; i++) {
+        final item = _selectedReels[i];
+        if (item['status'] == 'completed') continue;
 
-  void _simulateUpload() {
-    if (_uploadProgress < 1.0) {
-      setState(() {
-        _uploadProgress += 0.02;
-        for (var file in _selectedFiles) {
-          if (file['status'] == 'uploading') {
-            file['progress'] = _uploadProgress;
+        setState(() {
+          item['status'] = 'uploading';
+          item['progress'] = 0.0;
+        });
+
+        try {
+          final xFile = item['xFile'] as XFile;
+          final bytes = await xFile.readAsBytes();
+          final ext = xFile.name.split('.').last;
+          final fileName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
+          final ref = storage.ref().child('providers').child(providerId).child('reels').child(fileName);
+
+          // Set contentType so video_player can recognize the format (critical for playback)
+          final contentType = ext.toLowerCase() == 'mov' ? 'video/quicktime' : 'video/mp4';
+          final metadata = SettableMetadata(contentType: contentType);
+          final uploadTask = ref.putData(bytes, metadata);
+          uploadTask.snapshotEvents.listen((taskSnapshot) {
+            if (mounted) {
+              final p = taskSnapshot.bytesTransferred / taskSnapshot.totalBytes;
+              setState(() {
+                item['progress'] = p;
+                _uploadProgress = (completed + p) / total;
+              });
+            }
+          });
+
+          await uploadTask;
+          final videoUrl = await ref.getDownloadURL();
+          final caption = (item['captionController'] as TextEditingController?)?.text.trim() ??
+              item['caption'] as String? ??
+              '';
+          final tagsStr = (item['tagsController'] as TextEditingController?)?.text.trim() ??
+              item['tags'] as String? ??
+              '';
+          final tags = tagsStr.isNotEmpty
+              ? tagsStr.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList()
+              : <String>[];
+          final eventType = item['eventType'] as String? ?? 'wedding';
+
+          final reel = FirebaseReelModel(
+            reelId: '',
+            bookingId: '',
+            customerId: '',
+            providerId: providerId,
+            eventType: eventType,
+            eventName: caption.isNotEmpty ? caption : eventType,
+            title: caption.isNotEmpty ? caption : 'Portfolio reel',
+            description: null,
+            videoUrl: videoUrl,
+            thumbnailUrl: videoUrl,
+            duration: 0,
+            status: 'published',
+            metadata: ReelMetadata(
+              editingStyle: 'standard',
+              quality: '1080p',
+              fileSize: bytes.length,
+            ),
+            analytics: ReelAnalytics(),
+            tags: tags.isNotEmpty ? tags : null,
+            hashtags: null,
+            isPublic: true,
+            isFeatured: false,
+            createdAt: DateTime.now(),
+            deliveredAt: null,
+            publishedAt: DateTime.now(),
+            editingDetails: null,
+          );
+
+          final reelId = await _firestoreService.createReel(reel);
+
+          await _firestoreService.addPortfolioItemToProvider(
+            providerId,
+            PortfolioItem(
+              reelId: reelId,
+              eventType: eventType,
+              thumbnailUrl: videoUrl,
+              videoUrl: videoUrl,
+              duration: 0,
+              views: 0,
+              likes: 0,
+            ),
+          );
+
+          setState(() {
+            item['status'] = 'completed';
+            item['progress'] = 1.0;
+            completed++;
+            _uploadProgress = completed / total;
+          });
+        } catch (e) {
+          setState(() {
+            item['status'] = 'failed';
+            item['progress'] = 0.0;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Upload failed: $e')),
+            );
           }
         }
-      });
-      Future.delayed(const Duration(milliseconds: 100), _simulateUpload);
-    } else {
-      setState(() {
-        _isUploading = false;
-        for (var file in _selectedFiles) {
-          file['status'] = 'completed';
-          file['progress'] = 1.0;
+      }
+
+      if (mounted) {
+        setState(() => _isUploading = false);
+        final allDone = _selectedReels.every((i) => i['status'] == 'completed');
+        if (allDone) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Reels uploaded successfully!')),
+          );
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) Navigator.pop(context);
+          });
         }
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Footage uploaded successfully!')),
-      );
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) {
-          Navigator.pop(context);
-        }
-      });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload error: $e')),
+        );
+      }
     }
   }
 
   void _retryUpload(int index) {
     setState(() {
-      _selectedFiles[index]['status'] = 'uploading';
-      _selectedFiles[index]['progress'] = 0.0;
+      _selectedReels[index]['status'] = 'pending';
+      _selectedReels[index]['progress'] = 0.0;
     });
-    _uploadFiles();
+    _uploadReels();
   }
 
   void _showUploadQueue() {
@@ -354,17 +602,17 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            ..._uploadQueue.map((item) => ListTile(
+            ..._selectedReels.map((item) => ListTile(
               leading: Icon(
                 item['status'] == 'completed' ? Icons.check_circle : Icons.pending,
                 color: item['status'] == 'completed' ? AppColors.success : Colors.grey,
               ),
-              title: Text(item['name'] as String),
-              subtitle: Text('${item['size']} MB'),
+              title: Text(item['name'] as String? ?? 'Video'),
+              subtitle: Text(item['status'] as String? ?? 'pending'),
               trailing: item['status'] == 'failed'
                   ? IconButton(
                       icon: const Icon(Icons.refresh, color: AppColors.primary),
-                      onPressed: () {},
+                      onPressed: () => Navigator.pop(context),
                     )
                   : null,
             )).toList(),
@@ -374,4 +622,3 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
     );
   }
 }
-

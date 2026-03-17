@@ -1,0 +1,80 @@
+import '../firebase/models/firebase_provider_model.dart';
+import '../../features/booking/data/models/service_provider_model.dart' as sp;
+
+/// Converts FirebaseProviderModel to ServiceProvider for screens that expect it.
+sp.ServiceProvider serviceProviderFromFirebase(FirebaseProviderModel p) {
+  return sp.ServiceProvider(
+    providerId: p.providerId,
+    businessName: p.businessName,
+    ownerName: p.ownerName,
+    email: p.email,
+    phoneNumber: p.phoneNumber,
+    profileImage: p.profileImage,
+    coverImages: List.from(p.coverImages),
+    bio: p.bio,
+    eventTypes: List.from(p.eventTypes),
+    packages: p.packages.map((x) => sp.PackageOffering(
+      packageId: x.packageId,
+      name: x.name,
+      price: x.price,
+      duration: x.duration,
+      reelsCount: x.reelsCount,
+      editingStyle: x.editingStyle,
+      deliveryTime: x.deliveryTime,
+      highlightVideo: x.highlightVideo,
+      liveReelStation: x.liveReelStation,
+      features: List.from(x.features),
+    )).toList(),
+    portfolio: p.portfolio.map((x) => sp.PortfolioItem(
+      reelId: x.reelId,
+      eventType: x.eventType,
+      thumbnailUrl: x.thumbnailUrl,
+      videoUrl: x.videoUrl,
+      duration: x.duration,
+      views: x.views,
+      likes: x.likes,
+    )).toList(),
+    location: sp.ProviderLocation(
+      address: p.location.address,
+      city: p.location.city,
+      state: p.location.state,
+      pincode: p.location.pincode,
+      latitude: p.location.latitude,
+      longitude: p.location.longitude,
+    ),
+    serviceAreas: List.from(p.serviceAreas),
+    serviceRadius: p.serviceRadius,
+    teamSize: p.teamSize,
+    equipment: List.from(p.equipment),
+    rating: p.rating,
+    totalReviews: p.totalReviews,
+    totalEventsCompleted: p.totalEventsCompleted,
+    totalReelsDelivered: p.totalReelsDelivered,
+    averageDeliveryTime: p.averageDeliveryTime,
+    availability: p.availability.map((k, v) => MapEntry(k, sp.DayAvailability(
+      isOpen: v.isOpen,
+      slots: v.slots.map((s) => sp.TimeSlot(
+        startTime: s.startTime,
+        endTime: s.endTime,
+        slotDuration: s.slotDuration,
+      )).toList(),
+    ))),
+    blockedDates: p.blockedDates.map((d) => sp.BlockedDate(
+      date: d.date,
+      reason: d.reason,
+      bookingId: d.bookingId,
+    )).toList(),
+    bankDetails: p.bankDetails != null ? sp.BankDetails(
+      accountNumber: p.bankDetails!.accountNumber,
+      ifscCode: p.bankDetails!.ifscCode,
+      accountHolderName: p.bankDetails!.accountHolderName,
+      upiId: p.bankDetails!.upiId,
+    ) : null,
+    commissionRate: p.commissionRate,
+    isVerified: p.isVerified,
+    isActive: p.isActive,
+    isFeatured: p.isFeatured,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  );
+}

@@ -4,25 +4,33 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_routes.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/discover/presentation/screens/main_discover_screen.dart';
-import '../../features/reels/presentation/screens/main_my_reels_screen.dart';
+import '../../features/my_events/presentation/screens/dynamic_my_events_screen.dart';
 import '../../features/profile/presentation/screens/main_profile_screen.dart';
 
 class MainScaffold extends StatefulWidget {
-  const MainScaffold({super.key});
+  final int initialTabIndex;
+
+  const MainScaffold({super.key, this.initialTabIndex = 0});
 
   @override
   State<MainScaffold> createState() => _MainScaffoldState();
 }
 
 class _MainScaffoldState extends State<MainScaffold> {
-  int _currentIndex = 0;
+  late int _currentIndex;
 
   final List<Widget> _screens = [
     const HomeScreen(),
     const MainDiscoverScreen(),
-    const MainMyReelsScreen(),
+    const DynamicMyEventsScreen(),
     const MainProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialTabIndex;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,9 +59,9 @@ class _MainScaffoldState extends State<MainScaffold> {
             label: 'Discover',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.video_library_outlined),
-            activeIcon: Icon(Icons.video_library),
-            label: 'My Reels',
+            icon: Icon(Icons.event_outlined),
+            activeIcon: Icon(Icons.event),
+            label: 'My',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),

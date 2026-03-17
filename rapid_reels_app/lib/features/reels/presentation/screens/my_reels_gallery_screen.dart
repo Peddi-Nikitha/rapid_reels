@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/reel_card.dart';
 import '../../../../shared/widgets/empty_state.dart';
@@ -15,36 +17,55 @@ class MyReelsGalleryScreen extends StatefulWidget {
 }
 
 class _MyReelsGalleryScreenState extends State<MyReelsGalleryScreen> {
-  final _mockData = MockDataService();
-  String _selectedFilter = 'all'; // all, wedding, birthday, engagement, etc.
-  String _sortBy = 'newest'; // newest, oldest, mostViewed
+  final _firestoreService = FirestoreService();
+  String _selectedFilter = 'all';
+  String _sortBy = 'newest';
 
   @override
   Widget build(BuildContext context) {
-    final userId = _mockData.currentUser.userId;
-    var reels = _mockData.getUserReels(userId);
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-    // Apply filter
-    if (_selectedFilter != 'all') {
-      reels = reels.where((r) => r.eventType == _selectedFilter).toList();
+    if (userId.isEmpty) {
+      return Scaffold(
+        appBar: const CustomAppBar(title: 'My Reels', showBackButton: false),
+        body: const Center(child: Text('Please log in to view your reels')),
+      );
     }
 
-    // Apply sorting
-    if (_sortBy == 'newest') {
-      reels.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    } else if (_sortBy == 'oldest') {
-      reels.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    } else if (_sortBy == 'mostViewed') {
-      reels.sort((a, b) => b.views.compareTo(a.views));
-    }
+    return FutureBuilder<List<FirebaseReelModel>>(
+      future: _firestoreService.getUserReels(userId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            appBar: const CustomAppBar(title: 'My Reels', showBackButton: false),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        var reels = snapshot.data ?? [];
 
-    // Group by event
-    final groupedReels = <String, List<dynamic>>{};
-    for (var reel in reels) {
-      groupedReels.putIfAbsent(reel.eventId, () => []).add(reel);
-    }
+        // Apply filter
+        if (_selectedFilter != 'all') {
+          reels = reels.where((r) => r.eventType == _selectedFilter).toList();
+        }
 
-    return Scaffold(
+        // Apply sorting
+        final reelsList = reels.toList();
+        if (_sortBy == 'newest') {
+          reelsList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        } else if (_sortBy == 'oldest') {
+          reelsList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        } else if (_sortBy == 'mostViewed') {
+          reelsList.sort((a, b) => b.views.compareTo(a.views));
+        }
+        reels = reelsList;
+
+        // Group by eventType
+        final groupedReels = <String, List<FirebaseReelModel>>{};
+        for (var reel in reels) {
+          groupedReels.putIfAbsent(reel.eventType, () => []).add(reel);
+        }
+
+        return Scaffold(
       backgroundColor: AppColors.background,
       appBar: CustomAppBar(
         title: 'My Reels',
@@ -120,9 +141,11 @@ class _MyReelsGalleryScreenState extends State<MyReelsGalleryScreen> {
                     padding: const EdgeInsets.all(20),
                     itemCount: groupedReels.length,
                     itemBuilder: (context, index) {
-                      final eventId = groupedReels.keys.elementAt(index);
-                      final eventReels = groupedReels[eventId]!;
-                      final event = _mockData.getEventById(eventId);
+                      final eventType = groupedReels.keys.elementAt(index);
+                      final eventReels = groupedReels[eventType]!;
+                      final eventName = eventType.isEmpty
+                          ? 'Other'
+                          : '${eventType[0].toUpperCase()}${eventType.substring(1)}';
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,7 +160,7 @@ class _MyReelsGalleryScreenState extends State<MyReelsGalleryScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        event?.eventName ?? 'Unknown Event',
+                                        '$eventName Reels',
                                         style: const TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold,
@@ -175,13 +198,14 @@ class _MyReelsGalleryScreenState extends State<MyReelsGalleryScreen> {
                             ),
                             itemCount: eventReels.length,
                             itemBuilder: (context, reelIndex) {
+                              final reel = eventReels[reelIndex];
                               return ReelCard(
-                                reel: eventReels[reelIndex],
+                                reel: reel,
                                 onTap: () {
                                   context.push(
                                     AppRoutes.reelPlayer,
                                     extra: {
-                                      'reelId': eventReels[reelIndex].reelId,
+                                      'reelId': reel.reelId,
                                       'reels': eventReels,
                                       'initialIndex': reelIndex,
                                     },
@@ -198,6 +222,8 @@ class _MyReelsGalleryScreenState extends State<MyReelsGalleryScreen> {
           ),
         ],
       ),
+    );
+      },
     );
   }
 

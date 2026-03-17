@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/mock/mock_reels.dart';
+import '../../core/firebase/models/firebase_reel_model.dart';
 
+/// Accepts FirebaseReelModel or any object with: thumbnailUrl, eventType, duration,
+/// resolution, title, views, likes, reelId.
 class ReelCard extends StatelessWidget {
-  final ReelModel reel;
+  final dynamic reel;
   final VoidCallback? onTap;
   final bool showStats;
 

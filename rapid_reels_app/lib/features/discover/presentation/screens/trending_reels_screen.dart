@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../shared/widgets/reel_viewer_screen.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 
 class TrendingReelsScreen extends StatefulWidget {
@@ -15,14 +16,18 @@ class TrendingReelsScreen extends StatefulWidget {
 
 class _TrendingReelsScreenState extends State<TrendingReelsScreen>
     with SingleTickerProviderStateMixin {
-  final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
   late TabController _tabController;
   String _selectedPeriod = 'today';
+  List<FirebaseReelModel> _reels = [];
+  final Map<String, FirebaseProviderModel?> _providerCache = {};
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadReels();
   }
 
   @override
@@ -31,10 +36,57 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
     super.dispose();
   }
 
+  Future<void> _loadReels() async {
+    setState(() => _isLoading = true);
+    try {
+      final reels = await _firestoreService.getDiscoverReels(limit: 50);
+      reels.sort((a, b) => b.views.compareTo(a.views));
+      final providerIds = reels.map((r) => r.providerId).toSet().toList();
+      final providers = await Future.wait(
+        providerIds.map((id) => _firestoreService.getProvider(id)),
+      );
+      final cache = <String, FirebaseProviderModel?>{};
+      for (var i = 0; i < providerIds.length; i++) {
+        cache[providerIds[i]] = providers[i];
+      }
+      if (mounted) {
+        setState(() {
+          _reels = reels;
+          _providerCache.addAll(cache);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _viewReel(FirebaseReelModel reel) {
+    final videoUrl = reel.videoUrl.trim().isNotEmpty
+        ? reel.videoUrl.trim()
+        : (reel.thumbnailUrl.trim().isNotEmpty &&
+                (reel.thumbnailUrl.contains('firebasestorage') ||
+                    reel.thumbnailUrl.contains('.mp4') ||
+                    reel.thumbnailUrl.contains('.mov')))
+            ? reel.thumbnailUrl.trim()
+            : reel.videoUrl;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ReelViewerScreen(videoUrl: videoUrl, title: reel.title),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final reels = _mockData.getPublicReels()
-      ..sort((a, b) => b.views.compareTo(a.views));
+    if (_isLoading && _reels.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -87,9 +139,9 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildReelsGrid(reels),
-                _buildReelsGrid(reels),
-                _buildReelsGrid(reels),
+                _buildReelsGrid(_reels),
+                _buildReelsGrid(_reels),
+                _buildReelsGrid(_reels),
               ],
             ),
           ),
@@ -98,7 +150,7 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
     );
   }
 
-  Widget _buildReelsGrid(List reels) {
+  Widget _buildReelsGrid(List<FirebaseReelModel> reels) {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -110,16 +162,11 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
       itemCount: reels.length,
       itemBuilder: (context, index) {
         final reel = reels[index];
-        final provider = _mockData.getProviderById(reel.providerId);
+        final provider = _providerCache[reel.providerId];
         final rank = index + 1;
 
         return GestureDetector(
-          onTap: () {
-            context.push(
-              AppRoutes.reelPlayer,
-              extra: {'reel': reel},
-            );
-          },
+          onTap: () => _viewReel(reel),
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),

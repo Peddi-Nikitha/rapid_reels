@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
-import '../../../booking/data/models/service_provider_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../booking/data/models/service_provider_model.dart' as sp;
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/provider_card.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
@@ -22,10 +24,11 @@ class ProviderSelectionScreen extends StatefulWidget {
 }
 
 class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
-  final _mockData = MockDataService();
+  final _firestoreService = FirestoreService();
   bool _isLoading = true;
   String _sortBy = 'rating'; // rating, price, distance
   double _minRating = 0;
+  List<FirebaseProviderModel>? _cachedProviders;
 
   @override
   void initState() {
@@ -33,31 +36,136 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
     _loadProviders();
   }
 
+  sp.ServiceProvider _mapFirebaseToServiceProvider(FirebaseProviderModel p) {
+    return sp.ServiceProvider(
+      providerId: p.providerId,
+      businessName: p.businessName,
+      ownerName: p.ownerName,
+      email: p.email,
+      phoneNumber: p.phoneNumber,
+      profileImage: p.profileImage,
+      coverImages: p.coverImages,
+      bio: p.bio,
+      eventTypes: p.eventTypes,
+      packages: p.packages
+          .map((x) => sp.PackageOffering(
+                packageId: x.packageId,
+                name: x.name,
+                price: x.price,
+                duration: x.duration,
+                reelsCount: x.reelsCount,
+                editingStyle: x.editingStyle,
+                deliveryTime: x.deliveryTime,
+                highlightVideo: x.highlightVideo,
+                liveReelStation: x.liveReelStation,
+                features: x.features,
+              ))
+          .toList(),
+      portfolio: p.portfolio
+          .map((x) => sp.PortfolioItem(
+                reelId: x.reelId,
+                eventType: x.eventType,
+                thumbnailUrl: x.thumbnailUrl,
+                videoUrl: x.videoUrl,
+                duration: x.duration,
+                views: x.views,
+                likes: x.likes,
+              ))
+          .toList(),
+      location: sp.ProviderLocation.fromMap({
+        'address': p.location.address,
+        'city': p.location.city,
+        'state': p.location.state,
+        'pincode': p.location.pincode,
+        'coordinates': {
+          'latitude': p.location.latitude,
+          'longitude': p.location.longitude,
+        },
+      }),
+      serviceAreas: p.serviceAreas,
+      serviceRadius: p.serviceRadius,
+      teamSize: p.teamSize,
+      equipment: p.equipment,
+      rating: p.rating,
+      totalReviews: p.totalReviews,
+      totalEventsCompleted: p.totalEventsCompleted,
+      totalReelsDelivered: p.totalReelsDelivered,
+      averageDeliveryTime: p.averageDeliveryTime,
+      availability: p.availability.map(
+        (k, v) => MapEntry(
+          k,
+          sp.DayAvailability(
+            isOpen: v.isOpen,
+            slots: v.slots
+                .map((s) => sp.TimeSlot(
+                      startTime: s.startTime,
+                      endTime: s.endTime,
+                      slotDuration: s.slotDuration,
+                    ))
+                .toList(),
+          ),
+        ),
+      ),
+      blockedDates: p.blockedDates
+          .map((d) => sp.BlockedDate(
+                date: d.date,
+                reason: d.reason,
+                bookingId: d.bookingId,
+              ))
+          .toList(),
+      bankDetails: p.bankDetails != null
+          ? sp.BankDetails(
+              accountNumber: p.bankDetails!.accountNumber,
+              ifscCode: p.bankDetails!.ifscCode,
+              accountHolderName: p.bankDetails!.accountHolderName,
+              upiId: p.bankDetails!.upiId,
+            )
+          : null,
+      commissionRate: p.commissionRate,
+      isVerified: p.isVerified,
+      isActive: p.isActive,
+      isFeatured: p.isFeatured,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+    );
+  }
   Future<void> _loadProviders() async {
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 1));
-    if (mounted) {
+    try {
+      // Prefer city from booking data; fall back to last detected/saved city from home screen.
+      String? city = widget.bookingData['venueCity'] as String?;
+      if (city == null || city.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        city = prefs.getString('selected_city');
+      }
+      final providers = await _firestoreService.getProviders(
+        city: city,
+        isActive: true,
+        isVerified: true,
+        verificationStatus: 'approved',
+      );
+      if (!mounted) return;
       setState(() {
+        _cachedProviders = providers;
         _isLoading = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load providers: $e')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Build provider list from Firebase providers cached in state (loaded in _loadProviders)
     final city = widget.bookingData['venueCity'] as String?;
-    
-    // Get providers - use city if available, otherwise show all providers
-    // This handles cases like "home" or custom venue entries
-    List<ServiceProvider> providers;
-    if (city != null && city.isNotEmpty) {
-      providers = _mockData.getProvidersByCity(city);
-    } else {
-      // If no city (e.g., "home" or custom venue), show all available providers
-      providers = _mockData.getAllProviders()
-          .where((p) => p.isActive && p.isVerified)
-          .toList();
-    }
+
+    List<sp.ServiceProvider> providers = (_cachedProviders ?? [])
+        .map(_mapFirebaseToServiceProvider)
+        .where((p) => p.isActive && p.isVerified)
+        .toList();
 
     // Apply filters
     if (_minRating > 0) {

@@ -23,15 +23,19 @@ class ProviderPortfolioScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mockData = MockDataService();
-    final providerReels = mockData.getAllReels()
+    final mockReels = mockData.getAllReels()
         .where((r) => r.providerId == provider.providerId)
         .toList();
+    final useProviderPortfolio = provider.portfolio.isNotEmpty;
+    final portfolioCount = useProviderPortfolio
+        ? provider.portfolio.length
+        : mockReels.length;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // App Bar with Cover Images
+          // App Bar with Cover Images or profile image
           SliverAppBar(
             expandedHeight: 300,
             pinned: true,
@@ -44,6 +48,16 @@ class ProviderPortfolioScreen extends StatelessWidget {
                           imageUrl: url,
                           fit: BoxFit.cover,
                           width: double.infinity,
+                          placeholder: (context, url) => Container(
+                            color: AppColors.surface,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            color: AppColors.surface,
+                            child: const Icon(Icons.image, size: 48),
+                          ),
                         );
                       }).toList(),
                       options: CarouselOptions(
@@ -53,7 +67,23 @@ class ProviderPortfolioScreen extends StatelessWidget {
                         autoPlayInterval: const Duration(seconds: 3),
                       ),
                     )
-                  : Container(color: AppColors.surface),
+                  : provider.profileImage.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: provider.profileImage,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          placeholder: (context, url) => Container(
+                            color: AppColors.surface,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            color: AppColors.surface,
+                            child: const Icon(Icons.person, size: 48),
+                          ),
+                        )
+                      : Container(color: AppColors.surface),
             ),
           ),
           
@@ -227,8 +257,8 @@ class ProviderPortfolioScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 24),
                       
-                      // Portfolio
-                      if (providerReels.isNotEmpty) ...[
+                      // Portfolio - dynamic from provider.portfolio or mock
+                      if (portfolioCount > 0) ...[
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -249,20 +279,40 @@ class ProviderPortfolioScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         SizedBox(
                           height: 200,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: providerReels.length,
-                            itemBuilder: (context, index) {
-                              return Container(
-                                width: 150,
-                                margin: const EdgeInsets.only(right: 12),
-                                child: ReelCard(
-                                  reel: providerReels[index],
-                                  showStats: true,
+                          child: useProviderPortfolio
+                              ? ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: provider.portfolio.length,
+                                  itemBuilder: (context, index) {
+                                    final item = provider.portfolio[index];
+                                    final thumbUrl = item.thumbnailUrl.isNotEmpty
+                                        ? item.thumbnailUrl
+                                        : item.videoUrl;
+                                    return Container(
+                                      width: 150,
+                                      margin: const EdgeInsets.only(right: 12),
+                                      child: _PortfolioThumbCard(
+                                        imageUrl: thumbUrl,
+                                        eventType: item.eventType,
+                                        views: item.views,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : ListView.builder(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: mockReels.length,
+                                  itemBuilder: (context, index) {
+                                    return Container(
+                                      width: 150,
+                                      margin: const EdgeInsets.only(right: 12),
+                                      child: ReelCard(
+                                        reel: mockReels[index],
+                                        showStats: true,
+                                      ),
+                                    );
+                                  },
                                 ),
-                              );
-                            },
-                          ),
                         ),
                       ],
                     ],
@@ -325,6 +375,97 @@ class ProviderPortfolioScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PortfolioThumbCard extends StatelessWidget {
+  final String imageUrl;
+  final String eventType;
+  final int views;
+
+  const _PortfolioThumbCard({
+    required this.imageUrl,
+    required this.eventType,
+    required this.views,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: AppColors.cardBackground,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                  child: imageUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: AppColors.surface,
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            color: AppColors.surface,
+                            child: const Icon(Icons.video_library, size: 40),
+                          ),
+                        )
+                      : Container(
+                          color: AppColors.surface,
+                          child: const Icon(Icons.video_library, size: 40),
+                        ),
+                ),
+                const Center(
+                  child: Icon(
+                    Icons.play_circle_filled,
+                    size: 48,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  eventType,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${views >= 1000 ? '${(views / 1000).toStringAsFixed(1)}K' : views} views',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/custom_text_field.dart';
 
@@ -25,6 +27,8 @@ class _ProviderRegistrationScreenState extends State<ProviderRegistrationScreen>
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   void dispose() {
@@ -278,14 +282,57 @@ class _ProviderRegistrationScreenState extends State<ProviderRegistrationScreen>
 
     setState(() => _isLoading = true);
 
-    // Simulate registration
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // 1) Create Firebase Auth user for provider
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      final user = credential.user;
 
-    setState(() => _isLoading = false);
+      if (user == null) {
+        throw Exception('Failed to create provider account');
+      }
 
-    // Navigate to business profile setup
-    if (mounted) {
+      // 2) Create provider document in Firestore as pending
+      await _firestoreService.createProviderFromRegistration(
+        providerId: user.uid,
+        businessName: _businessNameController.text.trim(),
+        ownerName: _ownerNameController.text.trim(),
+        email: _emailController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      // 3) Inform provider and navigate to next step
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Registration submitted. Admin will review and approve your provider account.',
+          ),
+        ),
+      );
+
       context.push(AppRoutes.providerBusinessProfile);
+    } on FirebaseAuthException catch (e) {
+      setState(() => _isLoading = false);
+      String message = 'Registration failed. Please try again.';
+      if (e.code == 'email-already-in-use') {
+        message = 'This email is already in use. Please sign in instead.';
+      } else if (e.code == 'weak-password') {
+        message = 'Password is too weak. Please choose a stronger password.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 }

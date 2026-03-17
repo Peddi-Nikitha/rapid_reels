@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../firebase_utils.dart';
 
 /// Firebase Notification Model
 /// Collection: notifications
@@ -48,8 +49,8 @@ class FirebaseNotificationModel {
       body: data['body'] ?? '',
       imageUrl: data['imageUrl'],
       data: data['data'] != null ? NotificationData.fromMap(data['data']) : null,
-      isRead: data['isRead'] ?? false,
-      isDelivered: data['isDelivered'] ?? false,
+      isRead: firebaseToBool(data['isRead'], false),
+      isDelivered: firebaseToBool(data['isDelivered'], false),
       priority: data['priority'] ?? 'normal',
       actionUrl: data['actionUrl'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
