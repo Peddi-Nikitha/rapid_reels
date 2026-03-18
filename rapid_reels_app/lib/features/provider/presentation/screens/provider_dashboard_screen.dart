@@ -5,6 +5,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart';
 
 bool isSameDay(DateTime? a, DateTime? b) {
   if (a == null || b == null) return false;
@@ -75,79 +76,94 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
           );
         }
 
-        // TODO: Replace mock stats with real Firebase-based stats later
-        final todayBookings = <dynamic>[];
-        final stats = <String, dynamic>{
-          'pendingBookings': 0,
-          'totalBookings': 0,
-          'averageRating': provider.rating,
-          'totalEarnings': 0.0,
-        };
+        // Stream provider bookings to drive dashboard stats and today's schedule
+        return StreamBuilder<List<FirebaseBookingModel>>(
+          stream: _firestoreService.streamProviderBookings(widget.providerId),
+          builder: (context, bookingSnapshot) {
+            final bookings = bookingSnapshot.data ?? <FirebaseBookingModel>[];
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
-            backgroundColor: AppColors.surface,
-            elevation: 0,
-            title: Text(
-              provider.businessName,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                onPressed: () {},
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert),
-                onSelected: (value) {
-                  if (value == 'logout') {
-                    _showLogoutDialog(context);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout, color: Colors.red),
-                        SizedBox(width: 12),
-                        Text('Logout', style: TextStyle(color: Colors.red)),
-                      ],
-                    ),
+            final today = DateTime.now();
+            final todayBookings = bookings
+                .where((b) => isSameDay(b.eventDate, today))
+                .toList();
+            final pendingCount =
+                bookings.where((b) => b.status == 'pending').length;
+            final totalBookings = bookings.length;
+
+            final stats = <String, dynamic>{
+              'pendingBookings': pendingCount,
+              'totalBookings': totalBookings,
+              'averageRating': provider.rating,
+              // Earnings card still uses placeholder until wired to wallet payouts.
+              'totalEarnings': 0.0,
+            };
+
+            return Scaffold(
+              backgroundColor: AppColors.background,
+              appBar: AppBar(
+                backgroundColor: AppColors.surface,
+                elevation: 0,
+                title: Text(
+                  provider.businessName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    onPressed: () {},
+                  ),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) {
+                      if (value == 'logout') {
+                        _showLogoutDialog(context);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'logout',
+                        child: Row(
+                          children: [
+                            Icon(Icons.logout, color: Colors.red),
+                            SizedBox(width: 12),
+                            Text('Logout', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
+                bottom: TabBar(
+                  controller: _tabController,
+                  indicatorColor: AppColors.primary,
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: const [
+                    Tab(text: 'Overview'),
+                    Tab(text: 'Calendar'),
+                    Tab(text: 'Activity'),
+                  ],
+                ),
               ),
-            ],
-            bottom: TabBar(
-              controller: _tabController,
-              indicatorColor: AppColors.primary,
-              labelColor: AppColors.primary,
-              unselectedLabelColor: Colors.grey,
-              tabs: const [
-                Tab(text: 'Overview'),
-                Tab(text: 'Calendar'),
-                Tab(text: 'Activity'),
-              ],
-            ),
-          ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              setState(() {});
-            },
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOverviewTab(provider, stats, todayBookings),
-                // Calendar & Activity still use mock-style UI but without data dependency for now
-                _buildCalendarTab(null),
-                _buildActivityTab(null),
-              ],
-            ),
-          ),
+              body: RefreshIndicator(
+                onRefresh: () async {
+                  setState(() {});
+                },
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildOverviewTab(provider, stats, todayBookings),
+                    // Calendar & Activity still use mock-style UI but without data dependency for now
+                    _buildCalendarTab(null),
+                    _buildActivityTab(null),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -167,6 +183,9 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                     subtitle: 'Bookings',
                     icon: Icons.today,
                     color: Colors.blue,
+                    onTap: () => context.push(
+                      '${AppRoutes.providerBookings}/${widget.providerId}',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -177,6 +196,9 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                     subtitle: 'To Confirm',
                     icon: Icons.pending_actions,
                     color: Colors.orange,
+                    onTap: () => context.push(
+                      '${AppRoutes.providerBookings}/${widget.providerId}',
+                    ),
                   ),
                 ),
               ],
@@ -308,7 +330,8 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                   ),
                 ),
                 TextButton(
-                  onPressed: () => context.push(AppRoutes.providerBookings),
+                  onPressed: () =>
+                      context.push('${AppRoutes.providerBookings}/${widget.providerId}'),
                   child: const Text('View All'),
                 ),
               ],
@@ -561,8 +584,9 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
     required String subtitle,
     required IconData icon,
     required Color color,
+    VoidCallback? onTap,
   }) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -603,6 +627,14 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
           ),
         ],
       ),
+    );
+
+    if (onTap == null) return card;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: card,
     );
   }
 

@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../providers/my_events_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../../profile/presentation/providers/profile_provider.dart';
 
 /// Dynamic My Events Screen - Fully integrated with Firebase
 /// Real-time bookings list with filtering and search
@@ -334,7 +332,7 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
                         child: CustomButton(
                           text: 'Track Live',
                           onPressed: () {
-                            context.push('${AppRoutes.liveEventTracking}/${booking.bookingId}');
+                            context.push('${AppRoutes.eventTracking}/${booking.bookingId}');
                           },
                           type: ButtonType.outline,
                           height: 40,

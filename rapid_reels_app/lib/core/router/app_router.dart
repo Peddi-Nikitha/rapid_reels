@@ -21,7 +21,7 @@ import '../../features/booking/presentation/screens/booking_summary_screen.dart'
 import '../../features/booking/presentation/screens/payment_screen.dart';
 
 // My Events screens
-import '../../features/my_events/presentation/screens/my_events_screen.dart';
+import '../../features/my_events/presentation/screens/dynamic_my_events_screen.dart';
 import '../../features/my_events/presentation/screens/event_details_screen.dart';
 import '../../features/my_events/presentation/screens/live_event_tracking_screen.dart';
 
@@ -52,7 +52,6 @@ import '../../features/profile/presentation/screens/support_screen.dart';
 import '../../features/provider/presentation/screens/provider_login_screen.dart';
 import '../../features/provider/presentation/screens/provider_dashboard_screen.dart';
 import '../../features/provider/presentation/screens/provider_bookings_screen.dart';
-import '../../features/provider/presentation/screens/provider_booking_details_screen.dart';
 import '../../features/provider/presentation/screens/provider_booking_calendar_screen.dart';
 import '../../features/provider/presentation/screens/provider_booking_timeline_screen.dart';
 import '../../features/provider/presentation/screens/provider_customer_contact_screen.dart';
@@ -303,7 +302,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const MyEventsScreen(),
+          const DynamicMyEventsScreen(),
         ),
       ),
       GoRoute(
