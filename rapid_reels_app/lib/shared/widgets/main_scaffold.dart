@@ -5,7 +5,7 @@ import '../../core/constants/app_routes.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/discover/presentation/screens/main_discover_screen.dart';
 import '../../features/my_events/presentation/screens/dynamic_my_events_screen.dart';
-import '../../features/profile/presentation/screens/main_profile_screen.dart';
+import '../../features/profile/presentation/screens/profile_screen.dart';
 
 class MainScaffold extends StatefulWidget {
   final int initialTabIndex;
@@ -23,7 +23,7 @@ class _MainScaffoldState extends State<MainScaffold> {
     const HomeScreen(),
     const MainDiscoverScreen(),
     const DynamicMyEventsScreen(),
-    const MainProfileScreen(),
+    const ProfileScreen(),
   ];
 
   @override

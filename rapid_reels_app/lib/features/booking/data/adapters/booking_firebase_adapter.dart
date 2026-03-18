@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
-import '../../../../core/mock/mock_packages.dart';
-import '../models/service_provider_model.dart';
 
 /// Adapter to convert bookingData map (from package customization/summary flow)
 /// to FirebaseBookingModel for Firestore persistence.
@@ -14,7 +12,6 @@ class BookingFirebaseAdapter {
     String customerId,
   ) {
     final packageId = data['packageId'] as String? ?? '';
-    final package = MockPackages.getPackageById(packageId);
     final totalAmount = (data['totalAmount'] ?? 0.0) as num;
     final totalAmountDouble = totalAmount.toDouble();
     final advanceAmount = totalAmountDouble * 0.5;
@@ -32,16 +29,19 @@ class BookingFirebaseAdapter {
       longitude: _toDouble(data['venueLongitude']),
     );
 
-    // Package - from MockPackages
-    final pkg = package ?? PackageOffering(
-      packageId: packageId,
-      name: 'Custom',
-      price: totalAmountDouble,
-      duration: durationMinutes,
-      reelsCount: 0,
-      editingStyle: 'standard',
-      deliveryTime: 60,
-      features: [],
+    // Package - from bookingData (preferred)
+    final pkgMap = data['package'] as Map<String, dynamic>?;
+    final pkg = PackageData(
+      packageId: pkgMap?['packageId']?.toString() ?? packageId,
+      name: pkgMap?['name']?.toString() ?? 'Custom',
+      price: _toDouble(pkgMap?['price']) == 0.0 ? totalAmountDouble : _toDouble(pkgMap?['price']),
+      duration: (pkgMap?['duration'] as num?)?.toInt() ?? durationMinutes,
+      reelsCount: (pkgMap?['reelsCount'] as num?)?.toInt() ?? 0,
+      editingStyle: pkgMap?['editingStyle']?.toString() ?? 'standard',
+      deliveryTime: (pkgMap?['deliveryTime'] as num?)?.toInt() ?? 60,
+      features: pkgMap?['features'] != null
+          ? List<String>.from(pkgMap!['features'] as List)
+          : const <String>[],
     );
     final packageData = PackageData(
       packageId: pkg.packageId,

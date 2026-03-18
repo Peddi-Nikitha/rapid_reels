@@ -1,33 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../profile/presentation/providers/profile_provider.dart';
 
-class ReferralDashboardScreen extends StatefulWidget {
+class ReferralDashboardScreen extends ConsumerStatefulWidget {
   const ReferralDashboardScreen({super.key});
 
   @override
-  State<ReferralDashboardScreen> createState() => _ReferralDashboardScreenState();
+  ConsumerState<ReferralDashboardScreen> createState() => _ReferralDashboardScreenState();
 }
 
-class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
-  final _mockData = MockDataService();
-
+class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScreen> {
   @override
   Widget build(BuildContext context) {
-    final user = _mockData.currentUser;
-    final referrals = _mockData.getUserReferrals(user.uid);
-    final totalEarned = referrals
-        .where((r) => r['status'] == 'completed')
-        .fold<double>(0, (sum, r) => sum + r['reward']);
-    final pendingEarnings = referrals
-        .where((r) => r['status'] == 'pending')
-        .fold<double>(0, (sum, r) => sum + r['reward']);
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
+    final userProfileAsync = ref.watch(userProfileProvider(userId));
 
-    return Scaffold(
+    if (userId.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: const Center(child: Text('Please login to view referrals')),
+      );
+    }
+
+    return userProfileAsync.when(
+      data: (userProfile) {
+        final referralCode = userProfile?.referralCode ?? 'N/A';
+        return FutureBuilder(
+          future: FirestoreService().getUserReferrals(userId),
+          builder: (context, snapshot) {
+            final referrals = snapshot.data ?? [];
+            final totalEarned = referrals
+                .where((r) => r.status == 'completed')
+                .fold<double>(0, (sum, r) => sum + r.reward.referrerReward);
+            final pendingEarnings = referrals
+                .where((r) => r.status == 'pending')
+                .fold<double>(0, (sum, r) => sum + r.reward.referrerReward);
+
+            return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -121,7 +138,7 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              user.referralCode ?? 'N/A',
+                              referralCode,
                               style: const TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
@@ -133,7 +150,7 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
                             IconButton(
                               icon: const Icon(Icons.copy, color: AppColors.primary),
                               onPressed: () {
-                                Clipboard.setData(ClipboardData(text: user.referralCode ?? ''));
+                                Clipboard.setData(ClipboardData(text: referralCode));
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Referral code copied!'),
@@ -150,7 +167,7 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
                   const SizedBox(height: 16),
                   CustomButton(
                     text: 'Share & Invite',
-                    onPressed: _shareReferralCode,
+                    onPressed: () => _shareReferralCode(referralCode),
                     color: Colors.white,
                     textColor: AppColors.primary,
                   ),
@@ -213,7 +230,7 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
                         child: _buildActionCard(
                           icon: Icons.wallet,
                           title: 'Wallet',
-                          subtitle: '₹${user.walletBalance.toStringAsFixed(0)}',
+                          subtitle: '₹${(userProfile?.walletBalance ?? 0).toStringAsFixed(0)}',
                           onTap: () => context.push(AppRoutes.wallet),
                         ),
                       ),
@@ -343,6 +360,19 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
         ),
       ),
     );
+          },
+        );
+      },
+      loading: () => const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('Refer & Earn')),
+        body: const Center(child: Text('Error loading profile')),
+      ),
+    );
   }
 
   Widget _buildStatCard({
@@ -422,8 +452,8 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
     );
   }
 
-  Widget _buildReferralCard(Map<String, dynamic> referral) {
-    final isCompleted = referral['status'] == 'completed';
+  Widget _buildReferralCard(dynamic referral) {
+    final isCompleted = referral.status == 'completed';
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -454,7 +484,7 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  referral['referredUser'],
+                  referral.referredId,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -475,7 +505,7 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₹${referral['reward'].toStringAsFixed(0)}',
+                '₹${referral.reward.referrerReward.toStringAsFixed(0)}',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -484,7 +514,7 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _formatDate(referral['date']),
+                _formatDate(referral.createdAt),
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.grey[500],
@@ -559,11 +589,8 @@ class _ReferralDashboardScreenState extends State<ReferralDashboardScreen> {
     return '${(diff / 30).floor()} months ago';
   }
 
-  void _shareReferralCode() {
-    final user = _mockData.currentUser;
-    final message = 'Join Rapid Reels using my code ${user.referralCode} and get ₹200 off on your first booking! Download now: https://rapidreels.app';
-    
-    // In a real app, this would open share sheet
+  void _shareReferralCode(String referralCode) {
+    final message = 'Join Rapid Reels using my code $referralCode and get ₹200 off on your first booking! Download now: https://rapidreels.app';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Sharing: $message'),

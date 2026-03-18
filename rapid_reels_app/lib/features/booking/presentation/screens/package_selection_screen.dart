@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/mock/mock_packages.dart';
+import '../../../../features/booking/data/models/service_provider_model.dart' as sp;
 import '../../../../shared/widgets/package_card.dart';
 import '../../../../shared/widgets/custom_button.dart';
 
@@ -20,20 +20,74 @@ class PackageSelectionScreen extends StatefulWidget {
 }
 
 class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
-  int _currentIndex = 2; // Default to Gold (most popular)
+  int _currentIndex = 2; // Default to Gold
   final CarouselSliderController _carouselController = CarouselSliderController();
+
+  // Static packages (no backend)
+  late final List<sp.PackageOffering> _packages = [
+    sp.PackageOffering(
+      packageId: 'pkg_bronze',
+      name: 'Bronze',
+      price: 100.0,
+      duration: 120, // minutes
+      reelsCount: 2,
+      editingStyle: 'standard',
+      deliveryTime: 120,
+      highlightVideo: false,
+      liveReelStation: false,
+      features: const [
+        '2 hours on‑site coverage',
+        'Up to 2 reels',
+        'Basic color correction',
+      ],
+    ),
+    sp.PackageOffering(
+      packageId: 'pkg_silver',
+      name: 'Silver',
+      price: 300.0,
+      duration: 180,
+      reelsCount: 4,
+      editingStyle: 'modern',
+      deliveryTime: 90,
+      highlightVideo: false,
+      liveReelStation: true,
+      features: const [
+        '3 hours on‑site coverage',
+        'Up to 4 reels',
+        'Modern transitions & music sync',
+      ],
+    ),
+    sp.PackageOffering(
+      packageId: 'pkg_gold',
+      name: 'Gold',
+      price: 500.0,
+      duration: 240,
+      reelsCount: 6,
+      editingStyle: 'cinematic',
+      deliveryTime: 60,
+      highlightVideo: true,
+      liveReelStation: true,
+      features: const [
+        '4 hours on‑site coverage',
+        'Up to 6 reels',
+        'Cinematic color grading',
+        'Highlight montage',
+      ],
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
     debugPrint('PackageSelectionScreen initialized with eventType: ${widget.eventType}');
-    debugPrint('Total packages available: ${MockPackages.allPackages.length}');
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedPackage = MockPackages.allPackages[_currentIndex];
-    
+    final packages = _packages;
+    final safeIndex = _currentIndex.clamp(0, packages.length - 1);
+    final selectedPackage = packages[safeIndex];
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -54,201 +108,188 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
         centerTitle: false,
       ),
       body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header Section
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Select Your Perfect Package',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Swipe to explore different packages',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Package Carousel
-                  SizedBox(
-                    height: 500, // Fixed height to prevent overflow
-                    child: MockPackages.allPackages.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'No packages available',
-                              style: TextStyle(color: AppColors.textSecondary),
-                            ),
-                          )
-                        : CarouselSlider.builder(
-                            carouselController: _carouselController,
-                            itemCount: MockPackages.allPackages.length,
-                            itemBuilder: (context, index, realIndex) {
-                              final package = MockPackages.allPackages[index];
-                              final isPopular = package.packageId == 'pkg_gold';
-                              final isSelected = index == _currentIndex;
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                child: PackageCard(
-                                  package: package,
-                                  isSelected: isSelected,
-                                  isPopular: isPopular,
-                                  onTap: () {
-                                    _carouselController.animateToPage(index);
-                                    setState(() {
-                                      _currentIndex = index;
-                                    });
-                                  },
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Select Your Perfect Package',
+                                  style: TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                    letterSpacing: -0.5,
+                                  ),
                                 ),
-                              );
-                            },
-                            options: CarouselOptions(
-                              height: 500, // Fixed height
-                              viewportFraction: 0.88,
-                              initialPage: 2, // Start with Gold
-                              enableInfiniteScroll: false,
-                              enlargeCenterPage: true,
-                              enlargeFactor: 0.15,
-                              onPageChanged: (index, reason) {
-                                setState(() {
-                                  _currentIndex = index;
-                                });
-                              },
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Swipe to explore different packages',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                  ),
 
-                  const SizedBox(height: 16),
+                          SizedBox(
+                            height: 500,
+                    child: CarouselSlider.builder(
+                      carouselController: _carouselController,
+                      itemCount: packages.length,
+                      itemBuilder: (context, index, realIndex) {
+                        final package = packages[index];
+                        final isPopular = package.packageId == 'pkg_gold';
+                        final isSelected = index == safeIndex;
 
-                  // Dots Indicator
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: MockPackages.allPackages.asMap().entries.map((entry) {
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: _currentIndex == entry.key ? 24 : 8,
-                        height: 8,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          color: _currentIndex == entry.key
-                              ? AppColors.primary
-                              : AppColors.textTertiary,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Benefits Section
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 20),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.1),
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: PackageCard(
+                            package: package,
+                            isSelected: isSelected,
+                            isPopular: isPopular,
+                            onTap: () {
+                              _carouselController.animateToPage(index);
+                              setState(() {
+                                _currentIndex = index;
+                              });
+                            },
+                          ),
+                        );
+                      },
+                      options: CarouselOptions(
+                        height: 500,
+                        viewportFraction: 0.88,
+                        initialPage: safeIndex,
+                        enableInfiniteScroll: false,
+                        enlargeCenterPage: true,
+                        enlargeFactor: 0.15,
+                        onPageChanged: (index, reason) {
+                          setState(() {
+                            _currentIndex = index;
+                          });
+                        },
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.star_rounded,
-                                color: Colors.white,
-                                size: 20,
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: packages.asMap().entries.map((entry) {
+                              return AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: safeIndex == entry.key ? 24 : 8,
+                                height: 8,
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(4),
+                                  color: safeIndex == entry.key
+                                      ? AppColors.primary
+                                      : AppColors.textTertiary,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 20),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppColors.primary.withValues(alpha: 0.1),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Why Choose Rapid Reels?',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        gradient: AppColors.primaryGradient,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.star_rounded,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Why Choose Rapid Reels?',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+                                _buildBenefitItem(
+                                  Icons.flash_on_rounded,
+                                  'Instant Delivery',
+                                  'Get your reels while the event is still happening',
+                                ),
+                                _buildBenefitItem(
+                                  Icons.hd_rounded,
+                                  'Premium Quality',
+                                  'Professional editing with 4K quality',
+                                ),
+                                _buildBenefitItem(
+                                  Icons.share_rounded,
+                                  'Easy Sharing',
+                                  'Share directly to Instagram, WhatsApp, and more',
+                                ),
+                                _buildBenefitItem(
+                                  Icons.verified_user_rounded,
+                                  'Verified Professionals',
+                                  'Experienced videographers and editors',
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildBenefitItem(
-                          Icons.flash_on_rounded,
-                          'Instant Delivery',
-                          'Get your reels while the event is still happening',
-                        ),
-                        _buildBenefitItem(
-                          Icons.hd_rounded,
-                          'Premium Quality',
-                          'Professional editing with 4K quality',
-                        ),
-                        _buildBenefitItem(
-                          Icons.share_rounded,
-                          'Easy Sharing',
-                          'Share directly to Instagram, WhatsApp, and more',
-                        ),
-                        _buildBenefitItem(
-                          Icons.verified_user_rounded,
-                          'Verified Professionals',
-                          'Experienced videographers and editors',
-                        ),
-                      ],
+                          ),
+
+                          const SizedBox(height: 20),
+                        ],
+                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
-          ),
-
-          // Bottom Button Section
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Selected Package Info
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, -5),
+                        ),
+                      ],
+                    ),
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                   Container(
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(bottom: 12),
@@ -305,40 +346,34 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                       ],
                     ),
                   ),
-                  // Continue Button
-                  CustomButton(
+                          CustomButton(
                     text: 'Continue with ${selectedPackage.name}',
                     onPressed: () {
-                      debugPrint('Continue button pressed');
-                      debugPrint('Event Type: ${widget.eventType}');
-                      debugPrint('Package ID: ${selectedPackage.packageId}');
-                      try {
-                        context.push(
-                          AppRoutes.eventDetails,
-                          extra: {
-                            'eventType': widget.eventType,
+                      context.push(
+                        AppRoutes.eventDetails,
+                        extra: {
+                          'eventType': widget.eventType,
+                          'packageId': selectedPackage.packageId,
+                          'package': {
                             'packageId': selectedPackage.packageId,
+                            'name': selectedPackage.name,
+                            'price': selectedPackage.price,
+                            'duration': selectedPackage.duration,
+                            'reelsCount': selectedPackage.reelsCount,
+                            'editingStyle': selectedPackage.editingStyle,
+                            'deliveryTime': selectedPackage.deliveryTime,
+                            'features': selectedPackage.features,
                           },
-                        );
-                      } catch (e) {
-                        debugPrint('Navigation error: $e');
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $e'),
-                              backgroundColor: AppColors.error,
-                            ),
-                          );
-                        }
-                      }
+                        },
+                      );
                     },
-                    icon: Icons.arrow_forward_rounded,
+                            icon: Icons.arrow_forward_rounded,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

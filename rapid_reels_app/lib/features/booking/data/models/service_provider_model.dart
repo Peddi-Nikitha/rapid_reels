@@ -1,4 +1,5 @@
 import '../../../../core/firebase/firebase_utils.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart' as fb;
 
 class ServiceProvider {
   final String providerId;
@@ -111,6 +112,49 @@ class ServiceProvider {
       isFeatured: firebaseToBool(data['isFeatured'], false),
       createdAt: data['createdAt'] is String ? DateTime.parse(data['createdAt']) : DateTime.now(),
       updatedAt: data['updatedAt'] is String ? DateTime.parse(data['updatedAt']) : DateTime.now(),
+    );
+  }
+
+  /// Create from Firestore FirebaseProviderModel (dynamic data).
+  factory ServiceProvider.fromFirebase(fb.FirebaseProviderModel p) {
+    return ServiceProvider(
+      providerId: p.providerId,
+      businessName: p.businessName,
+      ownerName: p.ownerName,
+      email: p.email,
+      phoneNumber: p.phoneNumber,
+      profileImage: p.profileImage,
+      coverImages: List<String>.from(p.coverImages),
+      bio: p.bio,
+      eventTypes: List<String>.from(p.eventTypes),
+      packages: p.packages.map((pkg) => PackageOffering.fromMap(pkg.toMap())).toList(),
+      portfolio: p.portfolio.map((item) => PortfolioItem.fromMap(item.toMap())).toList(),
+      location: ProviderLocation(
+        address: p.location.address,
+        city: p.location.city,
+        state: p.location.state,
+        pincode: p.location.pincode,
+        latitude: p.location.latitude,
+        longitude: p.location.longitude,
+      ),
+      serviceAreas: List<String>.from(p.serviceAreas),
+      serviceRadius: p.serviceRadius,
+      teamSize: p.teamSize,
+      equipment: List<String>.from(p.equipment),
+      rating: p.rating,
+      totalReviews: p.totalReviews,
+      totalEventsCompleted: p.totalEventsCompleted,
+      totalReelsDelivered: p.totalReelsDelivered,
+      averageDeliveryTime: p.averageDeliveryTime,
+      availability: p.availability.map((k, v) => MapEntry(k, DayAvailability.fromMap(v.toMap()))),
+      blockedDates: p.blockedDates.map((d) => BlockedDate(date: d.date, reason: d.reason, bookingId: d.bookingId)).toList(),
+      bankDetails: p.bankDetails != null ? BankDetails.fromMap(p.bankDetails!.toMap()) : null,
+      commissionRate: p.commissionRate,
+      isVerified: p.isVerified,
+      isActive: p.isActive,
+      isFeatured: p.isFeatured,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
     );
   }
 

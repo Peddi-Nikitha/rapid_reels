@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/services/mock_data_service.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../booking/data/models/service_provider_model.dart';
@@ -12,11 +11,11 @@ final trendingReelsProvider = FutureProvider<List<FirebaseReelModel>>((ref) asyn
   return FirestoreService().getDiscoverReels();
 });
 
-// Featured Providers Provider
-final featuredProvidersProvider = FutureProvider<List<ServiceProvider>>((ref) async {
-  await Future.delayed(const Duration(milliseconds: 500));
-  final mockData = MockDataService();
-  return mockData.getAllProviders().take(5).toList();
+// Featured Providers Provider - dynamic from Firestore by selected city
+final featuredProvidersProvider = FutureProvider.family<List<ServiceProvider>, String?>((ref, city) async {
+  final service = FirestoreService();
+  final list = await service.getFeaturedProviders(city: city);
+  return list.map((p) => ServiceProvider.fromFirebase(p)).toList();
 });
 
 // Event Categories

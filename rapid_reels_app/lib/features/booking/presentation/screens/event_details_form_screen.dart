@@ -10,11 +10,13 @@ import '../../../../shared/widgets/custom_button.dart';
 class EventDetailsFormScreen extends StatefulWidget {
   final String eventType;
   final String packageId;
+  final Map<String, dynamic>? package;
 
   const EventDetailsFormScreen({
     super.key,
     required this.eventType,
     required this.packageId,
+    this.package,
   });
 
   @override
@@ -545,6 +547,7 @@ class _EventDetailsFormScreenState extends State<EventDetailsFormScreen> {
         extra: {
           'eventType': widget.eventType,
           'packageId': widget.packageId,
+          if (widget.package != null) 'package': widget.package,
           'eventName': _eventNameController.text,
           'eventDate': _selectedDate,
           'eventTime': _selectedTime,

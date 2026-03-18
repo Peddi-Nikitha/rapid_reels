@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/seed/seed_sample_providers.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    
     // Mock admin statistics
     final stats = {
       'totalUsers': 1250,
@@ -33,6 +31,29 @@ class AdminDashboardScreen extends StatelessWidget {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.cloud_download),
+            tooltip: 'Seed demo providers',
+            onPressed: () async {
+              try {
+                await seedSampleProviders();
+                // ignore: use_build_context_synchronously
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Seed data inserted (demo providers & packages).'),
+                  ),
+                );
+              } catch (e) {
+                // ignore: use_build_context_synchronously
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to insert seed data: $e'),
+                    backgroundColor: AppColors.error,
+                  ),
+                );
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () {},

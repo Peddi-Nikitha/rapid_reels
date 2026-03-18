@@ -5,8 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
-import '../../../../core/mock/mock_packages.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../data/adapters/booking_firebase_adapter.dart';
@@ -26,14 +25,16 @@ class BookingSummaryScreen extends StatefulWidget {
 class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   bool _acceptedTerms = false;
   bool _isProcessing = false;
-  final _mockData = MockDataService();
   final _firestoreService = FirestoreService();
 
   @override
   Widget build(BuildContext context) {
-    final packageId = widget.bookingData['packageId'];
-    final package = MockPackages.getPackageById(packageId);
-    final provider = _mockData.getProviderById(widget.bookingData['providerId']);
+    final pkg = widget.bookingData['package'] as Map<String, dynamic>?;
+    final packageName = pkg?['name']?.toString() ?? '';
+    final packagePrice = (pkg?['price'] as num?)?.toDouble() ?? 0.0;
+    final packageDurationMinutes = (pkg?['duration'] as num?)?.toInt() ?? 0;
+    final packageReelsCount = (pkg?['reelsCount'] as num?)?.toInt() ?? 0;
+    final providerId = widget.bookingData['providerId']?.toString() ?? '';
     final totalAmount = widget.bookingData['totalAmount'];
     final advanceAmount = totalAmount * 0.5;
 
@@ -114,27 +115,40 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                   ),
                   
                   // Provider Details
-                  if (provider != null)
-                    _buildSection(
-                      'Service Provider',
-                      [
-                        _buildDetailRow('Provider', provider.businessName),
-                        _buildDetailRow('Rating', '${provider.rating} ⭐'),
-                        _buildDetailRow('Contact', provider.phoneNumber),
-                      ],
+                  if (providerId.isNotEmpty)
+                    FutureBuilder<FirebaseProviderModel?>(
+                      future: _firestoreService.getProvider(providerId),
+                      builder: (context, snapshot) {
+                        final provider = snapshot.data;
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return _buildSection(
+                            'Service Provider',
+                            const [
+                              Text('Loading provider...'),
+                            ],
+                          );
+                        }
+                        if (provider == null) return const SizedBox.shrink();
+                        return _buildSection(
+                          'Service Provider',
+                          [
+                            _buildDetailRow('Provider', provider.businessName),
+                            _buildDetailRow('Rating', '${provider.rating} ⭐'),
+                            _buildDetailRow('Contact', provider.phoneNumber),
+                          ],
+                        );
+                      },
                     ),
                   
                   // Package Details
                   _buildSection(
                     'Package',
                     [
-                      _buildDetailRow('Package', package?.name ?? ''),
-                      _buildDetailRow('Coverage', '${(package?.duration ?? 0) ~/ 60} hours'),
+                      _buildDetailRow('Package', packageName),
+                      _buildDetailRow('Coverage', '${packageDurationMinutes ~/ 60} hours'),
                       _buildDetailRow(
                         'Reels',
-                        package?.reelsCount == -1
-                            ? 'Unlimited'
-                            : '${package?.reelsCount}',
+                        packageReelsCount == -1 ? 'Unlimited' : '$packageReelsCount',
                       ),
                       _buildDetailRow('Editing', widget.bookingData['editingStyle']),
                       if (widget.bookingData['additionalReels'] > 0)
@@ -151,7 +165,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                   _buildSection(
                     'Payment',
                     [
-                      _buildDetailRow('Base Price', '₹${package?.price.toStringAsFixed(0)}'),
+                      _buildDetailRow('Base Price', '₹${packagePrice.toStringAsFixed(0)}'),
                       if (widget.bookingData['additionalCost'] > 0)
                         _buildDetailRow(
                           'Add-ons',

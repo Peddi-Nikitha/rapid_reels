@@ -7,12 +7,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
-import '../../../../core/mock/mock_venues.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
@@ -37,11 +34,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _showOnboarding = false;
   bool _showOfferPopup = false;
   
-  // Location and nearby venues state
-  final _mockData = MockDataService();
+  // Location and nearby providers state
   final _firestoreService = FirestoreService();
-  LatLng _currentLocation = const LatLng(18.1023, 78.8514); // Default: Siddipet
-  List<Venue> _nearbyVenues = [];
+  List<FirebaseProviderModel> _nearbyProviders = [];
   bool _isLoadingVenues = false;
   List<FirebaseProviderModel> _featuredProviders = [];
   bool _isLoadingProviders = false;
@@ -169,16 +164,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
 
       if (mounted) {
-        setState(() {
-          _currentLocation = LatLng(position.latitude, position.longitude);
-        });
-        
         debugPrint('Location obtained: ${position.latitude}, ${position.longitude}');
         
         // Reverse geocode to get city name
         await _getCityFromLocation(position.latitude, position.longitude);
         
-        // Load nearby venues with detected location
+        // Load nearby providers with detected city
         _loadNearbyVenues();
       }
     } catch (e) {
@@ -284,7 +275,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _handleLocationError(String message) {
     debugPrint(message);
     _loadFallbackCity();
-    _loadNearbyVenues();
   }
 
   Future<void> _loadFeaturedProviders() async {
@@ -309,35 +299,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  void _loadNearbyVenues() {
+  Future<void> _loadNearbyVenues() async {
     if (!mounted) return;
     
     setState(() => _isLoadingVenues = true);
     
     try {
-      // Increase radius to 25km to find more venues
-      final allVenues = _mockData.getNearbyVenues(
-        _currentLocation.latitude,
-        _currentLocation.longitude,
-        radiusKm: 25.0,
+      final city = _selectedCity;
+      // Avoid querying with placeholder text
+      final effectiveCity = (city == 'Detecting...' || city.startsWith('Detecting'))
+          ? null
+          : city;
+
+      debugPrint('Loading nearby photography providers for city: $effectiveCity');
+
+      final providers = await _firestoreService.getProviders(
+        city: effectiveCity,
+        eventTypes: const ['photography', 'photo', 'studio'],
+        minRating: 3.5,
+        isActive: true,
+        verificationStatus: 'approved',
       );
 
-      // Only keep photography studios for homepage nearby section
-      final photographyVenues = allVenues.where((venue) {
-        return venue.venueType == 'photography';
-      }).toList();
-
-      debugPrint('Loading nearby photography venues for location: ${_currentLocation.latitude}, ${_currentLocation.longitude}');
-      debugPrint('Found ${photographyVenues.length} nearby photography venues');
-
-      if (mounted) {
-        setState(() {
-          _nearbyVenues = photographyVenues;
-          _isLoadingVenues = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _nearbyProviders = providers;
+        _isLoadingVenues = false;
+      });
     } catch (e) {
-      debugPrint('Error loading nearby venues: $e');
+      debugPrint('Error loading nearby providers: $e');
       if (mounted) {
         setState(() {
           _isLoadingVenues = false;
@@ -687,7 +677,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               letterSpacing: -0.5,
                             ),
                           ),
-                          if (_nearbyVenues.isNotEmpty)
+                          if (_nearbyProviders.isNotEmpty)
                             TextButton(
                               onPressed: () {
                                 _showSnackbar('View all nearby photography studios');
@@ -716,7 +706,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                       )
-                    else if (_nearbyVenues.isEmpty)
+                    else if (_nearbyProviders.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Container(
@@ -755,10 +745,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: _nearbyVenues.length,
+                          itemCount: _nearbyProviders.length,
                           itemBuilder: (context, index) {
-                            final venue = _nearbyVenues[index];
-                            return _buildVenueCard(venue);
+                            final provider = _nearbyProviders[index];
+                            return _buildProviderCard(provider);
                           },
                         ),
                       ),
@@ -1453,163 +1443,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVenueCard(Venue venue) {
-    return GestureDetector(
-      onTap: () {
-        _showSnackbar('Viewing ${venue.name}');
-      },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 280,
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.surface.withValues(alpha: 0.7),
-                  AppColors.surface.withValues(alpha: 0.5),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.cardBackground.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Venue Image
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: venue.imageUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: venue.imageUrl!,
-                          width: double.infinity,
-                          height: 120,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            height: 120,
-                            decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient,
-                            ),
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            height: 120,
-                            decoration: BoxDecoration(
-                              gradient: AppColors.primaryGradient,
-                            ),
-                            child: const Icon(
-                              Icons.business_rounded,
-                              size: 40,
-                              color: Colors.white,
-                            ),
-                          ),
-                        )
-                      : Container(
-                          height: 120,
-                          decoration: BoxDecoration(
-                            gradient: AppColors.primaryGradient,
-                          ),
-                          child: const Icon(
-                            Icons.business_rounded,
-                            size: 40,
-                            color: Colors.white,
-                          ),
-                        ),
-                ),
-                // Venue Details
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        venue.name,
-                        style: AppTypography.titleMedium.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.location_on_rounded,
-                            size: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              venue.address,
-                              style: AppTypography.captionMedium.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (venue.rating != null) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.star_rounded,
-                              size: 14,
-                              color: Color(0xFFFFB800),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              venue.rating!.toStringAsFixed(1),
-                              style: AppTypography.labelSmall.copyWith(
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            if (venue.reviewCount != null) ...[
-                              const SizedBox(width: 4),
-                              Text(
-                                '(${venue.reviewCount})',
-                                style: AppTypography.captionSmall.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
             ),
           ),
         ),

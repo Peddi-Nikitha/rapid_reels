@@ -1,31 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/event_card.dart';
-import '../../../../shared/widgets/shimmer_loading.dart';
 import '../../../../shared/widgets/empty_state.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../booking/data/models/event_booking_model.dart';
+import '../../../booking/presentation/providers/booking_provider.dart';
 
-class MyEventsScreen extends StatefulWidget {
+class MyEventsScreen extends ConsumerStatefulWidget {
   const MyEventsScreen({super.key});
 
   @override
-  State<MyEventsScreen> createState() => _MyEventsScreenState();
+  ConsumerState<MyEventsScreen> createState() => _MyEventsScreenState();
 }
 
-class _MyEventsScreenState extends State<MyEventsScreen>
+class _MyEventsScreenState extends ConsumerState<MyEventsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _mockData = MockDataService();
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadEvents();
   }
 
   @override
@@ -34,19 +33,10 @@ class _MyEventsScreenState extends State<MyEventsScreen>
     super.dispose();
   }
 
-  Future<void> _loadEvents() async {
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 1));
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final userId = _mockData.currentUser.userId;
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -56,7 +46,6 @@ class _MyEventsScreenState extends State<MyEventsScreen>
       ),
       body: Column(
         children: [
-          // Tabs
           Container(
             color: AppColors.surface,
             child: TabBar(
@@ -75,34 +64,30 @@ class _MyEventsScreenState extends State<MyEventsScreen>
               ],
             ),
           ),
-          
-          // Tab Views
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                // Upcoming Tab
-                _buildEventsList(
-                  _mockData.getUpcomingEvents(userId),
-                  'No upcoming events',
-                  'Book your first event to get started',
-                ),
-                
-                // Live Tab
-                _buildEventsList(
-                  _mockData.getLiveEvents(userId),
-                  'No live events',
-                  'Your ongoing events will appear here',
-                ),
-                
-                // Completed Tab
-                _buildEventsList(
-                  _mockData.getPastEvents(userId),
-                  'No past events',
-                  'Your completed events will appear here',
-                ),
-              ],
-            ),
+            child: userId.isEmpty
+                ? const Center(child: Text('Please login to view events'))
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _eventsListFromProvider(
+                        ref.watch(userUpcomingBookingsProvider(userId)),
+                        emptyTitle: 'No upcoming events',
+                        emptyMessage: 'Book your first event to get started',
+                      ),
+                      _eventsListFromProvider(
+                        ref.watch(userBookingsProvider(userId)),
+                        filter: (e) => e.status == 'ongoing',
+                        emptyTitle: 'No live events',
+                        emptyMessage: 'Your ongoing events will appear here',
+                      ),
+                      _eventsListFromProvider(
+                        ref.watch(userPastBookingsProvider(userId)),
+                        emptyTitle: 'No past events',
+                        emptyMessage: 'Your completed events will appear here',
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -123,56 +108,47 @@ class _MyEventsScreenState extends State<MyEventsScreen>
     );
   }
 
-  Widget _buildEventsList(
-    List<dynamic> events,
-    String emptyTitle,
-    String emptyMessage,
-  ) {
-    if (_isLoading) {
-      return ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: 3,
-        itemBuilder: (context, index) => const ShimmerEventCard(),
-      );
-    }
-
-    if (events.isEmpty) {
-      return EmptyState(
-        icon: Icons.event_busy,
-        title: emptyTitle,
-        message: emptyMessage,
-        buttonText: 'Book Event',
-        onButtonPressed: () {
-          context.push(AppRoutes.eventTypeSelection);
-        },
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadEvents,
-      color: AppColors.primary,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: events.length,
-        itemBuilder: (context, index) {
-          final event = events[index];
-          return EventCard(
-            event: event,
-            onTap: () {
-              if (event.status == 'ongoing') {
-                context.push(
-                  AppRoutes.liveEventTracking,
-                  extra: {'eventId': event.eventId},
-                );
-              } else {
-                context.push(
-                  AppRoutes.eventDetails,
-                  extra: {'eventId': event.eventId},
-                );
-              }
+  Widget _eventsListFromProvider(
+    AsyncValue<List<EventBooking>> eventsAsync, {
+    bool Function(EventBooking e)? filter,
+    required String emptyTitle,
+    required String emptyMessage,
+  }) {
+    return eventsAsync.when(
+      data: (events) {
+        final list = filter == null ? events : events.where(filter).toList();
+        if (list.isEmpty) {
+          return EmptyState(
+            icon: Icons.event_busy,
+            title: emptyTitle,
+            message: emptyMessage,
+            buttonText: 'Book Event',
+            onButtonPressed: () {
+              // ignore: use_build_context_synchronously
+              context.push(AppRoutes.eventTypeSelection);
             },
           );
-        },
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(20),
+          itemCount: list.length,
+          itemBuilder: (context, index) {
+            final event = list[index];
+            return EventCard(
+              event: event,
+              onTap: () {
+                context.push('${AppRoutes.eventDetails2}/${event.eventId}');
+              },
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, __) => EmptyState(
+        icon: Icons.error_outline,
+        title: 'Error',
+        message: 'Could not load events',
       ),
     );
   }

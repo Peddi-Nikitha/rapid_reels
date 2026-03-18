@@ -1,69 +1,85 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_user_model.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/empty_state.dart';
+import '../providers/profile_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
-class SavedVenuesScreen extends StatefulWidget {
+class SavedVenuesScreen extends ConsumerWidget {
   const SavedVenuesScreen({super.key});
 
   @override
-  State<SavedVenuesScreen> createState() => _SavedVenuesScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
+    final userProfileAsync = ref.watch(userProfileProvider(userId));
 
-class _SavedVenuesScreenState extends State<SavedVenuesScreen> {
-  final _mockData = MockDataService();
+    return userProfileAsync.when(
+      data: (userProfile) {
+        final addresses = userProfile?.savedAddresses ?? [];
 
-  @override
-  Widget build(BuildContext context) {
-    final user = _mockData.currentUser;
-    final addresses = user.savedAddresses ?? [];
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: const Text(
-          'My Venues',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      body: addresses.isEmpty
-          ? const EmptyState(
-              title: 'No Saved Venues',
-              message: 'No saved venues yet',
-              icon: Icons.location_on_outlined,
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: addresses.length,
-              itemBuilder: (context, index) {
-                final address = addresses[index];
-                return _buildAddressCard(address, index);
-              },
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            title: const Text(
+              'My Venues',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: CustomButton(
-            text: 'Add New Venue',
-            onPressed: _addNewVenue,
           ),
-        ),
+          body: addresses.isEmpty
+              ? const EmptyState(
+                  title: 'No Saved Venues',
+                  message: 'No saved venues yet',
+                  icon: Icons.location_on_outlined,
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: addresses.length,
+                  itemBuilder: (context, index) {
+                    final address = addresses[index];
+                    return _buildAddressCard(context, address, index, ref);
+                  },
+                ),
+          bottomNavigationBar: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: CustomButton(
+                text: 'Add New Venue',
+                onPressed: () => _addNewVenue(context),
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('My Venues')),
+        body: const Center(child: Text('Error loading addresses')),
       ),
     );
   }
 
-  Widget _buildAddressCard(address, int index) {
-    final label = address.label ?? 'Unknown';
-    final fullAddress = '${address.street}, ${address.area}, ${address.city}';
-    final contact = address.contactNumber ?? 'N/A';
+  Widget _buildAddressCard(
+    BuildContext context,
+    SavedAddress address,
+    int index,
+    WidgetRef ref,
+  ) {
+    final label = address.label.isNotEmpty ? address.label : 'Address';
+    final fullAddress = '${address.address}, ${address.city}';
     final city = address.city;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -113,7 +129,7 @@ class _SavedVenuesScreenState extends State<SavedVenuesScreen> {
                   ],
                 ),
               ),
-              PopupMenuButton(
+              PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert),
                 itemBuilder: (context) => [
                   const PopupMenuItem(
@@ -139,9 +155,11 @@ class _SavedVenuesScreenState extends State<SavedVenuesScreen> {
                 ],
                 onSelected: (value) {
                   if (value == 'edit') {
-                    _editVenue(label);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Edit $label')),
+                    );
                   } else if (value == 'delete') {
-                    _deleteVenue(index);
+                    _showDeleteConfirm(context, ref, address.addressId);
                   }
                 },
               ),
@@ -150,16 +168,6 @@ class _SavedVenuesScreenState extends State<SavedVenuesScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.phone, size: 14, color: Colors.grey[600]),
-              const SizedBox(width: 6),
-              Text(
-                contact,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(width: 16),
               Icon(Icons.location_city, size: 14, color: Colors.grey[600]),
               const SizedBox(width: 6),
               Text(
@@ -169,6 +177,16 @@ class _SavedVenuesScreenState extends State<SavedVenuesScreen> {
                   color: Colors.grey[600],
                 ),
               ),
+              if (address.pincode.isNotEmpty) ...[
+                const SizedBox(width: 16),
+                Text(
+                  address.pincode,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -176,39 +194,7 @@ class _SavedVenuesScreenState extends State<SavedVenuesScreen> {
     );
   }
 
-  void _addNewVenue() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Add New Venue'),
-        content: const Text('Venue addition form would appear here.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Venue added successfully!')),
-              );
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _editVenue(String label) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Edit $label')),
-    );
-  }
-
-  void _deleteVenue(int index) {
+  void _showDeleteConfirm(BuildContext context, WidgetRef ref, String addressId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -233,5 +219,30 @@ class _SavedVenuesScreenState extends State<SavedVenuesScreen> {
       ),
     );
   }
-}
 
+  void _addNewVenue(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Add New Venue'),
+        content: const Text('Venue addition form would appear here.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Venue added successfully!')),
+              );
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+}

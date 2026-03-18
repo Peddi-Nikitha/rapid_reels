@@ -4,11 +4,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../features/booking/data/models/service_provider_model.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/rating_stars.dart';
 import '../../../../shared/widgets/reel_card.dart';
-import '../../../../core/services/mock_data_service.dart';
 
 class ProviderPortfolioScreen extends StatelessWidget {
   final ServiceProvider provider;
@@ -22,14 +23,47 @@ class ProviderPortfolioScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final mockReels = mockData.getAllReels()
-        .where((r) => r.providerId == provider.providerId)
-        .toList();
     final useProviderPortfolio = provider.portfolio.isNotEmpty;
-    final portfolioCount = useProviderPortfolio
-        ? provider.portfolio.length
-        : mockReels.length;
+    return useProviderPortfolio
+        ? _PortfolioContent(
+            provider: provider,
+            bookingData: bookingData,
+            reelsFromProvider: true,
+            portfolioCount: provider.portfolio.length,
+          )
+        : FutureBuilder<List<FirebaseReelModel>>(
+            future: FirestoreService().getProviderReels(provider.providerId),
+            builder: (context, snapshot) {
+              final reels = snapshot.data ?? [];
+              return _PortfolioContent(
+                provider: provider,
+                bookingData: bookingData,
+                reelsFromProvider: false,
+                portfolioCount: reels.length,
+                firebaseReels: reels,
+              );
+            },
+          );
+  }
+}
+
+class _PortfolioContent extends StatelessWidget {
+  final ServiceProvider provider;
+  final Map<String, dynamic> bookingData;
+  final bool reelsFromProvider;
+  final int portfolioCount;
+  final List<FirebaseReelModel>? firebaseReels;
+
+  const _PortfolioContent({
+    required this.provider,
+    required this.bookingData,
+    required this.reelsFromProvider,
+    required this.portfolioCount,
+    this.firebaseReels,
+  });
+
+  @override
+  Widget build(BuildContext context) {
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -279,7 +313,7 @@ class ProviderPortfolioScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         SizedBox(
                           height: 200,
-                          child: useProviderPortfolio
+                          child: reelsFromProvider
                               ? ListView.builder(
                                   scrollDirection: Axis.horizontal,
                                   itemCount: provider.portfolio.length,
@@ -301,13 +335,14 @@ class ProviderPortfolioScreen extends StatelessWidget {
                                 )
                               : ListView.builder(
                                   scrollDirection: Axis.horizontal,
-                                  itemCount: mockReels.length,
+                                  itemCount: firebaseReels?.length ?? 0,
                                   itemBuilder: (context, index) {
+                                    final reel = firebaseReels![index];
                                     return Container(
                                       width: 150,
                                       margin: const EdgeInsets.only(right: 12),
                                       child: ReelCard(
-                                        reel: mockReels[index],
+                                        reel: reel,
                                         showStats: true,
                                       ),
                                     );

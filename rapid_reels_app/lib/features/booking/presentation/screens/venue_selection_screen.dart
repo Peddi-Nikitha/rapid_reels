@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
 import '../../../../core/mock/mock_venues.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart';
+import '../../../../features/profile/presentation/providers/profile_provider.dart';
+import '../../../../core/firebase/models/firebase_user_model.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
 
-class VenueSelectionScreen extends StatefulWidget {
+class VenueSelectionScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> bookingData;
 
   const VenueSelectionScreen({
@@ -18,11 +21,10 @@ class VenueSelectionScreen extends StatefulWidget {
   });
 
   @override
-  State<VenueSelectionScreen> createState() => _VenueSelectionScreenState();
+  ConsumerState<VenueSelectionScreen> createState() => _VenueSelectionScreenState();
 }
 
-class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
-  final _mockData = MockDataService();
+class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
   GoogleMapController? _mapController;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _manualVenueNameController = TextEditingController();
@@ -42,11 +44,12 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
   bool _isMapLoading = true;
   bool _showManualEntry = false; // Toggle for manual entry section
   double _searchRadiusKm = 15.0; // Search radius in kilometers (increased to show all photography studios)
+  String? _lastSyncedUserId;
+  int _lastSyncedSavedAddressesCount = -1;
 
   @override
   void initState() {
     super.initState();
-    _loadNearbyVenues();
     // Get location in background, don't block UI
     _getCurrentLocation();
     
@@ -116,7 +119,6 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
           _isLoadingLocation = false;
         });
 
-        _loadNearbyVenues();
         if (_mapController != null && _mapInitialized) {
           _moveCameraToLocation(_currentLocation);
           _updateCircles();
@@ -131,26 +133,39 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
     }
   }
 
-  void _loadNearbyVenues() {
-    // Get all nearby venues
-    final allVenues = _mockData.getNearbyVenues(
-      _currentLocation.latitude,
-      _currentLocation.longitude,
-      radiusKm: _searchRadiusKm,
-    );
+  void _syncVenuesFromProfile({
+    required String userId,
+    required List<SavedAddress> savedAddresses,
+  }) {
+    // Avoid setState loops: only sync when userId or address count changes.
+    if (_lastSyncedUserId == userId &&
+        _lastSyncedSavedAddressesCount == savedAddresses.length) {
+      return;
+    }
 
-    // Filter to show only photography studios
-    final photographyVenues = allVenues.where((venue) {
-      return venue.venueType == 'photography';
+    _lastSyncedUserId = userId;
+    _lastSyncedSavedAddressesCount = savedAddresses.length;
+
+    final venues = savedAddresses.map((a) {
+      return Venue(
+        venueId: a.addressId,
+        name: a.label.isNotEmpty ? a.label : 'Saved Address',
+        address: a.address,
+        city: a.city,
+        pincode: a.pincode,
+        latitude: a.coordinates.latitude,
+        longitude: a.coordinates.longitude,
+        imageUrl: null,
+        rating: null,
+        reviewCount: null,
+        venueType: 'saved_address',
+        capacity: null,
+      );
     }).toList();
 
     setState(() {
-      // Only show photography studios in Select Venue screen
-      _nearbyVenues = photographyVenues;
-      // Show manual entry if no venues found
-      if (_nearbyVenues.isEmpty) {
-        _showManualEntry = true;
-      }
+      _nearbyVenues = venues;
+      if (_nearbyVenues.isEmpty) _showManualEntry = true;
     });
 
     _updateMarkers();
@@ -697,6 +712,19 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
+    final userProfileAsync = ref.watch(userProfileProvider(userId));
+    userProfileAsync.whenData((profile) {
+      final saved = profile?.savedAddresses ?? const <SavedAddress>[];
+      if (userId.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _syncVenuesFromProfile(userId: userId, savedAddresses: saved);
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomAppBar(title: 'Select Venue'),
@@ -731,21 +759,16 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
 
                       setState(() {
                         if (query.isEmpty) {
-                          // Reset to nearby venues around current location
-                          _loadNearbyVenues();
+                          // Reset to saved addresses (dynamic)
+                          final currentUser = ref.read(currentUserProvider);
+                          final userId = currentUser?.uid ?? '';
+                          final profile = ref.read(userProfileProvider(userId)).valueOrNull;
+                          final saved = profile?.savedAddresses ?? const <SavedAddress>[];
+                          if (userId.isNotEmpty) {
+                            _syncVenuesFromProfile(userId: userId, savedAddresses: saved);
+                          }
                         } else {
-                          // Start from a wide-radius nearby list (effectively all mock venues),
-                          // then filter by search text.
-                          final allNearby = _mockData.getNearbyVenues(
-                            _currentLocation.latitude,
-                            _currentLocation.longitude,
-                            radiusKm: 20000.0, // large radius to cover global mock venues
-                          );
-
-                          _nearbyVenues = allNearby.where((venue) {
-                            // Only photography venues should be shown in this screen
-                            if (venue.venueType != 'photography') return false;
-
+                          _nearbyVenues = _nearbyVenues.where((venue) {
                             final name = venue.name.toLowerCase();
                             final address = venue.address.toLowerCase();
                             final city = venue.city.toLowerCase();
@@ -756,10 +779,9 @@ class _VenueSelectionScreenState extends State<VenueSelectionScreen> {
                                 city.contains(query) ||
                                 pincode.contains(query);
                           }).toList();
-
-                          _updateMarkers();
                         }
                       });
+                      _updateMarkers();
                     },
                   ),
                 ),

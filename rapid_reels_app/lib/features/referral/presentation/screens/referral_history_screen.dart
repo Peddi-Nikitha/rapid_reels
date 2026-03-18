@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_referral_model.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../shared/widgets/empty_state.dart';
 
-class ReferralHistoryScreen extends StatefulWidget {
+class ReferralHistoryScreen extends ConsumerStatefulWidget {
   const ReferralHistoryScreen({super.key});
 
   @override
-  State<ReferralHistoryScreen> createState() => _ReferralHistoryScreenState();
+  ConsumerState<ReferralHistoryScreen> createState() => _ReferralHistoryScreenState();
 }
 
-class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
+class _ReferralHistoryScreenState extends ConsumerState<ReferralHistoryScreen>
     with SingleTickerProviderStateMixin {
-  final _mockData = MockDataService();
   late TabController _tabController;
 
   @override
@@ -29,11 +31,8 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    final user = _mockData.currentUser;
-    final referrals = _mockData.getUserReferrals(user.uid);
-    
-    final completed = referrals.where((r) => r['status'] == 'completed').toList();
-    final pending = referrals.where((r) => r['status'] == 'pending').toList();
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -59,18 +58,33 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildReferralList(referrals),
-          _buildReferralList(completed),
-          _buildReferralList(pending),
-        ],
-      ),
+      body: userId.isEmpty
+          ? const Center(child: Text('Please login to view referrals'))
+          : FutureBuilder<List<FirebaseReferralModel>>(
+              future: FirestoreService().getUserReferrals(userId),
+              builder: (context, snapshot) {
+                final referrals = snapshot.data ?? const <FirebaseReferralModel>[];
+                final completed = referrals.where((r) => r.status == 'completed').toList();
+                final pending = referrals.where((r) => r.status == 'pending').toList();
+
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                return TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildReferralList(referrals),
+                    _buildReferralList(completed),
+                    _buildReferralList(pending),
+                  ],
+                );
+              },
+            ),
     );
   }
 
-  Widget _buildReferralList(List<Map<String, dynamic>> referrals) {
+  Widget _buildReferralList(List<FirebaseReferralModel> referrals) {
     if (referrals.isEmpty) {
       return const EmptyState(
         title: 'No Referrals',
@@ -89,8 +103,8 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
     );
   }
 
-  Widget _buildReferralCard(Map<String, dynamic> referral) {
-    final isCompleted = referral['status'] == 'completed';
+  Widget _buildReferralCard(FirebaseReferralModel referral) {
+    final isCompleted = referral.status == 'completed';
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -126,7 +140,7 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      referral['referredUser'],
+                      referral.referredId,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -134,7 +148,7 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _formatDate(referral['date']),
+                      _formatDate(referral.createdAt),
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey[600],
@@ -147,7 +161,7 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₹${referral['reward'].toStringAsFixed(0)}',
+                    '₹${referral.reward.referrerReward.toStringAsFixed(0)}',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -200,7 +214,7 @@ class _ReferralHistoryScreenState extends State<ReferralHistoryScreen>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Waiting for ${referral['referredUser'].split(' ')[0]} to complete first booking',
+                      'Waiting for the referred user to complete first booking',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.orange,

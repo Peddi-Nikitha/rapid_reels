@@ -201,6 +201,7 @@ class AppRouter {
             EventDetailsFormScreen(
               eventType: extra?['eventType'] ?? 'wedding',
               packageId: extra?['packageId'] ?? 'pkg_gold',
+              package: extra?['package'] as Map<String, dynamic>?,
             ),
           );
         },

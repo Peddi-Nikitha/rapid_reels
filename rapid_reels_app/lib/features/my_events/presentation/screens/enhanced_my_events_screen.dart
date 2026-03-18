@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../providers/my_events_provider.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart';
 
 /// Enhanced My Events Screen with Live Tracking
 class EnhancedMyEventsScreen extends ConsumerStatefulWidget {
@@ -29,17 +31,30 @@ class _EnhancedMyEventsScreenState extends ConsumerState<EnhancedMyEventsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final events = MockDataService().getUserEvents('user_001');
-    final upcomingEvents = events.where((e) => 
-        e.status == 'confirmed' && e.eventDate.isAfter(DateTime.now())).toList();
-    final ongoingEvents = events.where((e) => e.status == 'ongoing').toList();
-    final pastEvents = events.where((e) => e.status == 'completed').toList();
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
+    final eventsAsync = userId.isEmpty ? null : ref.watch(myEventsProvider(userId));
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Column(
-          children: [
+        child: userId.isEmpty
+            ? const Center(child: Text('Please login to view events'))
+            : eventsAsync!.when(
+                data: (events) {
+                  final upcomingEvents = events
+                      .where((e) =>
+                          e.eventDate.isAfter(DateTime.now()) &&
+                          e.status != 'cancelled' &&
+                          e.status != 'completed')
+                      .toList();
+                  final ongoingEvents = events.where((e) => e.status == 'ongoing').toList();
+                  final pastEvents = events
+                      .where((e) => e.status == 'completed' || e.status == 'cancelled')
+                      .toList();
+
+                  return Column(
+                    children: [
             // Header
             Padding(
               padding: const EdgeInsets.all(20),
@@ -142,7 +157,11 @@ class _EnhancedMyEventsScreenState extends ConsumerState<EnhancedMyEventsScreen>
               ),
             ),
           ],
-        ),
+        );
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, __) => const Center(child: Text('Error loading events')),
+              ),
       ),
     );
   }
@@ -180,7 +199,7 @@ class _EnhancedMyEventsScreenState extends ConsumerState<EnhancedMyEventsScreen>
     );
   }
 
-  Widget _buildEventList(List<dynamic> events, String type) {
+  Widget _buildEventList(List<FirebaseBookingModel> events, String type) {
     if (events.isEmpty) {
       return _buildEmptyState(type);
     }

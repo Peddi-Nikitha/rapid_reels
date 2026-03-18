@@ -1,184 +1,238 @@
 import '../models/event_booking_model.dart';
 import '../models/service_provider_model.dart';
-import '../../../../core/mock/mock_providers.dart';
-import '../../../../core/mock/mock_events.dart';
+import '../adapters/booking_firebase_mappers.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart' as fb;
 
-/// Mock Booking Repository
-/// No Firebase - Pure static mock implementation
+/// Booking repository - uses Firestore for providers and bookings (dynamic data).
 class BookingRepository {
-  // Get service providers by event type and location (Mock)
+  final FirestoreService _firestore = FirestoreService();
+
   Future<List<ServiceProvider>> getProvidersByEventType({
     required String eventType,
     required String city,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    return MockProviders.allProviders
-        .where((provider) => 
-            provider.eventTypes.contains(eventType) &&
-            provider.serviceAreas.contains(city) &&
-            provider.isActive &&
-            provider.isVerified)
-        .toList();
+    final list = await _firestore.getProviders(
+      city: city,
+      eventTypes: [eventType],
+      isActive: true,
+      verificationStatus: 'approved',
+    );
+    return list.map((p) => ServiceProvider.fromFirebase(p)).toList();
   }
 
-  // Get all providers (Mock)
   Future<List<ServiceProvider>> getAllProviders({String? city}) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    if (city != null) {
-      return MockProviders.getProvidersByCity(city);
-    }
-    return MockProviders.allProviders;
+    final list = await _firestore.getProviders(
+      city: city,
+      isActive: true,
+      verificationStatus: 'approved',
+    );
+    return list.map((p) => ServiceProvider.fromFirebase(p)).toList();
   }
 
-  // Get featured providers (Mock)
   Future<List<ServiceProvider>> getFeaturedProviders({String? city}) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    return MockProviders.allProviders
-        .where((provider) => 
-            provider.isFeatured &&
-            provider.isActive &&
-            provider.isVerified &&
-            (city == null || provider.serviceAreas.contains(city)))
-        .toList();
+    final list = await _firestore.getFeaturedProviders(city: city);
+    return list.map((p) => ServiceProvider.fromFirebase(p)).toList();
   }
 
-  // Get provider details by ID (Mock)
   Future<ServiceProvider?> getProviderDetails(String providerId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    return MockProviders.getProviderById(providerId);
+    final p = await _firestore.getProvider(providerId);
+    return p != null ? ServiceProvider.fromFirebase(p) : null;
   }
 
-  // Create a new booking (Mock)
   Future<String> createBooking(EventBooking booking) async {
-    await Future.delayed(const Duration(seconds: 1));
-    
-    // Simulate successful booking creation
-    return 'booking_${DateTime.now().millisecondsSinceEpoch}';
+    final firebaseBooking = _eventBookingToFirebase(booking);
+    return _firestore.createBooking(firebaseBooking);
   }
 
-  // Get all user bookings (Mock)
   Stream<List<EventBooking>> getUserBookings(String userId) {
-    return Stream.value(
-      MockEvents.allEvents
-          .where((event) => event.customerId == userId)
-          .toList(),
-    );
+    return _firestore.streamUserBookings(userId).map(
+          (list) => list.map((b) => BookingFirebaseMappers.toEventBooking(b)).toList(),
+        );
   }
 
-  // Get user's upcoming bookings (Mock)
   Stream<List<EventBooking>> getUserUpcomingBookings(String userId) {
-    return Stream.value(
-      MockEvents.allEvents
-          .where((event) => 
-              event.customerId == userId &&
-              event.status == 'confirmed' &&
-              event.eventDate.isAfter(DateTime.now()))
-          .toList(),
-    );
+    return _firestore.streamUserBookings(userId).map(
+          (list) => list
+              .where((b) =>
+                  b.status == 'confirmed' &&
+                  b.eventDate.isAfter(DateTime.now()) &&
+                  b.status != 'cancelled')
+              .map((b) => BookingFirebaseMappers.toEventBooking(b))
+              .toList(),
+        );
   }
 
-  // Get user's ongoing bookings (Mock)
   Stream<List<EventBooking>> getUserOngoingBookings(String userId) {
-    return Stream.value(
-      MockEvents.allEvents
-          .where((event) => 
-              event.customerId == userId &&
-              event.status == 'ongoing')
-          .toList(),
-    );
+    return _firestore.streamUserBookings(userId).map(
+          (list) => list
+              .where((b) => b.status == 'ongoing')
+              .map((b) => BookingFirebaseMappers.toEventBooking(b))
+              .toList(),
+        );
   }
 
-  // Get user's past bookings (Mock)
   Stream<List<EventBooking>> getUserPastBookings(String userId) {
-    return Stream.value(
-      MockEvents.allEvents
-          .where((event) => 
-              event.customerId == userId &&
-              event.status == 'completed')
-          .toList(),
-    );
+    return _firestore.streamUserBookings(userId, status: 'completed').map(
+          (list) => list.map((b) => BookingFirebaseMappers.toEventBooking(b)).toList(),
+        );
   }
 
-  // Get booking by ID (Mock)
   Future<EventBooking?> getBookingById(String bookingId) async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    return MockEvents.getEventById(bookingId);
+    final b = await _firestore.getBooking(bookingId);
+    return b != null ? BookingFirebaseMappers.toEventBooking(b) : null;
   }
 
-  // Get provider's bookings (Mock)
   Stream<List<EventBooking>> getProviderBookings(String providerId) {
-    return Stream.value(
-      MockEvents.allEvents
-          .where((event) => event.providerId == providerId)
-          .toList(),
-    );
+    return _firestore.streamProviderBookings(providerId).map(
+          (list) => list.map((b) => BookingFirebaseMappers.toEventBooking(b)).toList(),
+        );
   }
 
-  // Update booking status (Mock)
   Future<void> updateBookingStatus({
     required String bookingId,
     required String status,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // Mock update - no actual change
+    await _firestore.updateBooking(bookingId, {'status': status});
   }
 
-  // Cancel booking (Mock)
   Future<void> cancelBooking({
     required String bookingId,
     required String reason,
   }) async {
-    await Future.delayed(const Duration(seconds: 1));
-    // Mock cancellation
+    await _firestore.updateBooking(bookingId, {
+      'status': 'cancelled',
+      'cancellationReason': reason,
+      'cancelledAt': DateTime.now(),
+    });
   }
 
-  // Reschedule booking (Mock)
   Future<void> rescheduleBooking({
     required String bookingId,
     required DateTime newDate,
     required String newTime,
   }) async {
-    await Future.delayed(const Duration(seconds: 1));
-    // Mock reschedule
+    await _firestore.updateBooking(bookingId, {
+      'eventDate': newDate,
+      'eventTime': newTime,
+    });
   }
 
-  // Update payment status (Mock)
   Future<void> updatePaymentStatus({
     required String bookingId,
     required String paymentStatus,
     required PaymentRecord payment,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // Mock payment update
+    await _firestore.updateBooking(bookingId, {
+      'payment.paymentStatus': paymentStatus,
+    });
   }
 
-  // Provider accept booking (Mock)
   Future<void> acceptBooking(String bookingId) async {
-    await Future.delayed(const Duration(seconds: 1));
-    // Mock accept
+    await _firestore.updateBooking(bookingId, {'status': 'confirmed'});
   }
 
-  // Provider decline booking (Mock)
   Future<void> declineBooking({
     required String bookingId,
     required String reason,
   }) async {
-    await Future.delayed(const Duration(seconds: 1));
-    // Mock decline
+    await _firestore.updateBooking(bookingId, {
+      'status': 'cancelled',
+      'cancellationReason': reason,
+    });
   }
 
-  // Start event (Mock)
   Future<void> startEvent(String bookingId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    // Mock start
+    await _firestore.updateBooking(bookingId, {'status': 'ongoing'});
   }
 
-  // Complete event (Mock)
   Future<void> completeEvent(String bookingId) async {
-    await Future.delayed(const Duration(seconds: 1));
-    // Mock complete
+    await _firestore.updateBooking(bookingId, {
+      'status': 'completed',
+      'completedAt': DateTime.now(),
+    });
+  }
+
+  /// Convert EventBooking to FirebaseBookingModel for create (bookingId will be assigned by Firestore).
+  static fb.FirebaseBookingModel _eventBookingToFirebase(EventBooking e) {
+    return fb.FirebaseBookingModel(
+      bookingId: '',
+      customerId: e.customerId,
+      providerId: e.providerId,
+      eventType: e.eventType,
+      eventName: e.eventName,
+      eventDate: e.eventDate,
+      eventTime: e.eventTime,
+      duration: e.duration,
+      guestCount: e.guestCount,
+      venue: fb.VenueData(
+        name: e.venue.name,
+        address: e.venue.address,
+        city: e.venue.city,
+        pincode: e.venue.pincode,
+        latitude: e.venue.latitude,
+        longitude: e.venue.longitude,
+      ),
+      package: fb.PackageData(
+        packageId: e.packageId,
+        name: e.packageName,
+        price: e.packagePrice,
+        duration: e.duration,
+        reelsCount: 0,
+        editingStyle: 'standard',
+        deliveryTime: 60,
+        features: [],
+      ),
+      customizations: e.customizations != null
+          ? fb.CustomizationsData(
+              editingStyle: e.customizations!.editingStyle,
+              musicPreference: e.customizations!.musicPreference,
+              colorGrading: e.customizations!.colorGrading,
+              includeDrone: e.customizations!.includeDrone,
+              additionalReels: e.customizations!.additionalReels,
+              additionalCost: e.customizations!.additionalCost,
+            )
+          : null,
+      specialRequirements: e.specialRequirements,
+      keyMoments: e.keyMoments,
+      status: e.status,
+      eventStatus: fb.EventStatusTimestamps(
+        bookingConfirmed: e.eventStatus.bookingConfirmed,
+        providerAccepted: e.eventStatus.providerAccepted,
+        eventStarted: e.eventStatus.eventStarted,
+        firstReelDelivered: e.eventStatus.firstReelDelivered,
+        eventCompleted: e.eventStatus.eventCompleted,
+        allReelsDelivered: e.eventStatus.allReelsDelivered,
+      ),
+      payment: fb.PaymentData(
+        totalAmount: e.totalAmount,
+        advanceAmount: e.advanceAmount,
+        remainingAmount: e.remainingAmount,
+        paymentStatus: e.paymentStatus,
+        transactions: e.payments.isEmpty
+            ? null
+            : e.payments
+                .map((p) => fb.PaymentTransaction(
+                      paymentId: p.paymentId,
+                      amount: p.amount,
+                      method: p.method,
+                      transactionId: p.transactionId,
+                      status: p.status,
+                      paidAt: p.paidAt,
+                    ))
+                .toList(),
+      ),
+      contactPerson: e.contactPerson,
+      contactNumber: e.contactNumber,
+      alternateContact: e.alternateContact,
+      expectedReelsCount: e.expectedReelsCount,
+      deliveryTimeline: e.deliveryTimeline,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+      cancelledAt: e.cancelledAt,
+      cancellationReason: e.cancellationReason,
+      completedAt: e.completedAt,
+      metadata: null,
+    );
   }
 }

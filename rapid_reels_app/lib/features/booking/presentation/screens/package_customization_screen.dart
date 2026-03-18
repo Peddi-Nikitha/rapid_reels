@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/mock/mock_packages.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
 
@@ -33,17 +32,21 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
   }
 
   double get _basePrice {
-    final packageId = widget.bookingData['packageId'];
-    final package = MockPackages.getPackageById(packageId);
-    return package?.price.toDouble() ?? 0;
+    final pkg = widget.bookingData['package'] as Map<String, dynamic>?;
+    final price = pkg?['price'];
+    if (price is num) return price.toDouble();
+    if (price is String) return double.tryParse(price) ?? 0;
+    return 0;
   }
 
   double get _totalPrice => _basePrice + _additionalCost;
 
   @override
   Widget build(BuildContext context) {
-    final packageId = widget.bookingData['packageId'];
-    final package = MockPackages.getPackageById(packageId);
+    final pkg = widget.bookingData['package'] as Map<String, dynamic>?;
+    final pkgName = pkg?['name']?.toString() ?? '';
+    final durationMinutes = (pkg?['duration'] as num?)?.toInt() ?? 0;
+    final reelsCount = (pkg?['reelsCount'] as num?)?.toInt() ?? 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -78,7 +81,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                package?.name ?? '',
+                                pkgName,
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -99,7 +102,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '${(package?.duration ?? 0) ~/ 60} hours • ${package?.reelsCount == -1 ? "Unlimited" : package?.reelsCount} reels',
+                          '${durationMinutes ~/ 60} hours • ${reelsCount == -1 ? "Unlimited" : reelsCount} reels',
                           style: const TextStyle(
                             fontSize: 14,
                             color: AppColors.textSecondary,

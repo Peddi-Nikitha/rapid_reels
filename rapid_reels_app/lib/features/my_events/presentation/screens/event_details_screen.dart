@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_reel_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/reel_card.dart';
+import '../../../booking/presentation/providers/booking_provider.dart';
 
-class EventDetailsScreen extends StatelessWidget {
+class EventDetailsScreen extends ConsumerWidget {
+  /// bookingId (kept as `eventId` to match existing routes)
   final String eventId;
 
   const EventDetailsScreen({
@@ -16,294 +21,197 @@ class EventDetailsScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final event = mockData.getEventById(eventId);
-    final provider = event != null ? mockData.getProviderById(event.providerId) : null;
-    final reels = mockData.getEventReels(eventId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bookingAsync = ref.watch(bookingByIdProvider(eventId));
+    final firestore = FirestoreService();
 
-    if (event == null) {
-      return Scaffold(
-        appBar: const CustomAppBar(title: 'Event Details'),
-        body: const Center(child: Text('Event not found')),
-      );
-    }
+    return bookingAsync.when(
+      loading: () => const Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: CustomAppBar(title: 'Event Details'),
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (_, __) => const Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: CustomAppBar(title: 'Event Details'),
+        body: Center(child: Text('Error loading event')),
+      ),
+      data: (event) {
+        if (event == null) {
+          return const Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: CustomAppBar(title: 'Event Details'),
+            body: Center(child: Text('Event not found')),
+          );
+        }
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const CustomAppBar(title: 'Event Details'),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Event Header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.3),
-                    AppColors.background,
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.celebration,
-                      size: 40,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    event.eventName,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(event.status).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      _getStatusText(event.status),
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _getStatusColor(event.status),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Event Info Cards
-                  _buildInfoCard(
-                    Icons.calendar_today,
-                    'Date & Time',
-                    '${DateFormat('dd MMM yyyy').format(event.eventDate)} at ${event.eventTime}',
-                  ),
-                  _buildInfoCard(
-                    Icons.location_on,
-                    'Venue',
-                    '${event.venue.name}\n${event.venue.address}',
-                  ),
-                  _buildInfoCard(
-                    Icons.people,
-                    'Guest Count',
-                    '${event.guestCount} guests',
-                  ),
-                  _buildInfoCard(
-                    Icons.access_time,
-                    'Duration',
-                    '${event.duration ~/ 60} hours',
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Provider Section
-                  if (provider != null) ...[
-                    const Text(
-                      'Service Provider',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.business,
-                              color: AppColors.primary,
-                              size: 32,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  provider.businessName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '⭐ ${provider.rating} • ${provider.totalEventsCompleted}+ events',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => _callProvider(provider.phoneNumber),
-                            icon: const Icon(Icons.call, color: AppColors.primary),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                  
-                  // Package Details
-                  const Text(
-                    'Package Details',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildDetailRow('Package', event.packageName),
-                        _buildDetailRow('Reels', '${event.expectedReelsCount}'),
-                        _buildDetailRow('Editing Style', event.customizations?.editingStyle ?? 'Standard'),
-                        const Divider(height: 24),
-                        _buildDetailRow(
-                          'Total Amount',
-                          '₹${event.totalAmount.toStringAsFixed(0)}',
-                          isTotal: true,
-                        ),
-                        _buildDetailRow(
-                          'Payment Status',
-                          _getPaymentStatusText(event.paymentStatus),
-                        ),
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: const CustomAppBar(title: 'Event Details'),
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.primary.withValues(alpha: 0.3),
+                        AppColors.background,
                       ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                     ),
                   ),
-                  
-                  // Reels Section
-                  if (reels.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Delivered Reels',
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.celebration,
+                          size: 40,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        event.eventName,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(event.status).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _getStatusText(event.status),
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: _getStatusColor(event.status),
                           ),
                         ),
-                        TextButton(
-                          onPressed: () {},
-                          child: const Text('View All'),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoCard(
+                        icon: Icons.calendar_today,
+                        title: 'Date & Time',
+                        value:
+                            '${DateFormat('dd MMM yyyy').format(event.eventDate)} at ${event.eventTime}',
+                      ),
+                      _buildInfoCard(
+                        icon: Icons.location_on,
+                        title: 'Venue',
+                        value: '${event.venue.name}\n${event.venue.address}',
+                      ),
+                      _buildInfoCard(
+                        icon: Icons.people,
+                        title: 'Guest Count',
+                        value: '${event.guestCount} guests',
+                      ),
+                      _buildInfoCard(
+                        icon: Icons.access_time,
+                        title: 'Duration',
+                        value: '${event.duration ~/ 60} hours',
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Service Provider',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 200,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: reels.length,
-                        itemBuilder: (context, index) {
-                          return Container(
-                            width: 150,
-                            margin: const EdgeInsets.only(right: 12),
-                            child: ReelCard(reel: reels[index]),
+                      ),
+                      const SizedBox(height: 12),
+                      FutureBuilder<FirebaseProviderModel?>(
+                        future: firestore.getProvider(event.providerId),
+                        builder: (context, snap) {
+                          final provider = snap.data;
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          if (provider == null) return const SizedBox.shrink();
+                          return _buildProviderCard(context, provider);
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Delivered Reels',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      FutureBuilder<List<FirebaseReelModel>>(
+                        future: firestore.getBookingReels(event.eventId),
+                        builder: (context, snap) {
+                          final reels = snap.data ?? const <FirebaseReelModel>[];
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          if (reels.isEmpty) {
+                            return const Text(
+                              'No reels delivered yet.',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            );
+                          }
+                          return SizedBox(
+                            height: 220,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: reels.length,
+                              itemBuilder: (context, index) {
+                                final reel = reels[index];
+                                return Container(
+                                  width: 160,
+                                  margin: const EdgeInsets.only(right: 12),
+                                  child: ReelCard(
+                                    reel: reel,
+                                    showStats: false,
+                                  ),
+                                );
+                              },
+                            ),
                           );
                         },
                       ),
-                    ),
-                  ],
-                  
-                  const SizedBox(height: 32),
-                  
-                  // Action Buttons
-                  if (event.status == 'confirmed') ...[
-                    CustomButton(
-                      text: 'Reschedule Event',
-                      onPressed: () {},
-                      type: ButtonType.secondary,
-                      icon: Icons.edit_calendar,
-                    ),
-                    const SizedBox(height: 12),
-                    CustomButton(
-                      text: 'Cancel Booking',
-                      onPressed: () => _showCancelDialog(context),
-                      type: ButtonType.outline,
-                      icon: Icons.cancel,
-                    ),
-                  ],
-                  
-                  if (event.status == 'completed') ...[
-                    CustomButton(
-                      text: 'Write Review',
-                      onPressed: () {},
-                      icon: Icons.rate_review,
-                    ),
-                    const SizedBox(height: 12),
-                    CustomButton(
-                      text: 'Book Similar Event',
-                      onPressed: () {},
-                      type: ButtonType.outline,
-                      icon: Icons.refresh,
-                    ),
-                  ],
-                ],
-              ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildInfoCard(IconData icon, String title, String value) {
+  Widget _buildInfoCard({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -313,15 +221,8 @@ class EventDetailsScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: AppColors.primary, size: 20),
-          ),
-          const SizedBox(width: 16),
+          Icon(icon, color: AppColors.primary),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,7 +230,7 @@ class EventDetailsScreen extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -337,7 +238,7 @@ class EventDetailsScreen extends StatelessWidget {
                 Text(
                   value,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
                   ),
@@ -350,51 +251,43 @@ class EventDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, {bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildProviderCard(BuildContext context, FirebaseProviderModel provider) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
-            style: TextStyle(
-              fontSize: isTotal ? 16 : 14,
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              color: AppColors.textSecondary,
+            provider.businessName,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 8),
           Text(
-            value,
-            style: TextStyle(
-              fontSize: isTotal ? 18 : 14,
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
-              color: isTotal ? AppColors.primary : AppColors.textPrimary,
-            ),
+            provider.phoneNumber,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          CustomButton(
+            text: 'Call',
+            onPressed: () async {
+              final uri = Uri.parse('tel:${provider.phoneNumber}');
+              await launchUrl(uri);
+            },
+            icon: Icons.call,
           ),
         ],
       ),
     );
   }
 
-  String _getStatusText(String status) {
-    switch (status) {
-      case 'pending':
-        return 'Pending Confirmation';
-      case 'confirmed':
-        return 'Confirmed';
-      case 'ongoing':
-        return 'Live Now';
-      case 'completed':
-        return 'Completed';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return status;
-    }
-  }
-
-  Color _getStatusColor(String status) {
+  static Color _getStatusColor(String status) {
     switch (status) {
       case 'pending':
         return AppColors.warning;
@@ -411,54 +304,21 @@ class EventDetailsScreen extends StatelessWidget {
     }
   }
 
-  String _getPaymentStatusText(String status) {
+  static String _getStatusText(String status) {
     switch (status) {
       case 'pending':
-        return 'Payment Pending';
-      case 'advance_paid':
-        return 'Advance Paid';
-      case 'fully_paid':
-        return 'Fully Paid';
-      case 'refunded':
-        return 'Refunded';
+        return 'Pending';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'ongoing':
+        return 'Live';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
       default:
         return status;
     }
-  }
-
-  void _callProvider(String phoneNumber) async {
-    final Uri url = Uri(scheme: 'tel', path: phoneNumber);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    }
-  }
-
-  void _showCancelDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Cancel Booking?', style: TextStyle(color: AppColors.textPrimary)),
-        content: const Text(
-          'Are you sure you want to cancel this booking? Cancellation charges may apply.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('No, Keep It'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Handle cancellation
-            },
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Yes, Cancel'),
-          ),
-        ],
-      ),
-    );
   }
 }
 

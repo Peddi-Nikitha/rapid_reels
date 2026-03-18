@@ -1,23 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../profile/presentation/providers/profile_provider.dart';
 
-class RedemptionScreen extends StatefulWidget {
+class RedemptionScreen extends ConsumerStatefulWidget {
   const RedemptionScreen({super.key});
 
   @override
-  State<RedemptionScreen> createState() => _RedemptionScreenState();
+  ConsumerState<RedemptionScreen> createState() => _RedemptionScreenState();
 }
 
-class _RedemptionScreenState extends State<RedemptionScreen> {
-  final _mockData = MockDataService();
+class _RedemptionScreenState extends ConsumerState<RedemptionScreen> {
   String _selectedOption = 'booking';
 
   @override
   Widget build(BuildContext context) {
-    final user = _mockData.currentUser;
-    final balance = user.walletBalance;
+    final currentUser = ref.watch(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
+    final userProfileAsync = ref.watch(userProfileProvider(userId));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -32,135 +34,153 @@ class _RedemptionScreenState extends State<RedemptionScreen> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Balance Display
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary,
-                    AppColors.primary.withValues(alpha: 0.7),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    'Available Balance',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '₹${balance.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Redemption Options
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Redeem As',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildRedemptionOption(
-                    value: 'booking',
-                    title: 'Apply to Booking',
-                    description: 'Use wallet balance on your next event booking',
-                    icon: Icons.event_available,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRedemptionOption(
-                    value: 'bank',
-                    title: 'Transfer to Bank',
-                    description: 'Transfer to your bank account (₹500 minimum)',
-                    icon: Icons.account_balance,
-                    isDisabled: balance < 500,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRedemptionOption(
-                    value: 'upi',
-                    title: 'UPI Transfer',
-                    description: 'Instant transfer to UPI ID (₹100 minimum)',
-                    icon: Icons.qr_code_scanner,
-                    isDisabled: balance < 100,
-                  ),
-                ],
-              ),
-            ),
-            
-            // Terms and Conditions
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Terms & Conditions',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+      body: userId.isEmpty
+          ? const Center(child: Text('Please login to redeem balance'))
+          : userProfileAsync.when(
+              data: (profile) {
+                final balance = profile?.walletBalance ?? 0.0;
+                return SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Balance Display
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              AppColors.primary,
+                              AppColors.primary.withValues(alpha: 0.7),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Available Balance',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white70,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '₹${balance.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTerm('Wallet balance can be used for event bookings'),
-                    _buildTerm('Minimum ₹500 required for bank transfer'),
-                    _buildTerm('Minimum ₹100 required for UPI transfer'),
-                    _buildTerm('Bank transfer takes 2-3 business days'),
-                    _buildTerm('UPI transfer is instant'),
-                    _buildTerm('Balance expires after 1 year of inactivity'),
-                  ],
-                ),
-              ),
+            
+                      // Redemption Options
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Redeem As',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildRedemptionOption(
+                              value: 'booking',
+                              title: 'Apply to Booking',
+                              description: 'Use wallet balance on your next event booking',
+                              icon: Icons.event_available,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildRedemptionOption(
+                              value: 'bank',
+                              title: 'Transfer to Bank',
+                              description: 'Transfer to your bank account (₹500 minimum)',
+                              icon: Icons.account_balance,
+                              isDisabled: balance < 500,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildRedemptionOption(
+                              value: 'upi',
+                              title: 'UPI Transfer',
+                              description: 'Instant transfer to UPI ID (₹100 minimum)',
+                              icon: Icons.qr_code_scanner,
+                              isDisabled: balance < 100,
+                            ),
+                          ],
+                        ),
+                      ),
+            
+                      // Terms and Conditions
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Terms & Conditions',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildTerm('Wallet balance can be used for event bookings'),
+                              _buildTerm('Minimum ₹500 required for bank transfer'),
+                              _buildTerm('Minimum ₹100 required for UPI transfer'),
+                              _buildTerm('Bank transfer takes 2-3 business days'),
+                              _buildTerm('UPI transfer is instant'),
+                              _buildTerm('Balance expires after 1 year of inactivity'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => const Center(child: Text('Error loading balance')),
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: CustomButton(
-            text: 'Continue',
-            onPressed: _selectedOption == 'booking'
-                ? _redeemForBooking
-                : (_selectedOption == 'bank' && balance >= 500) ||
-                        (_selectedOption == 'upi' && balance >= 100)
-                    ? _redeemToBank
-                    : null,
-          ),
-        ),
-      ),
+      bottomNavigationBar: userId.isEmpty
+          ? null
+          : userProfileAsync.when(
+              data: (profile) {
+                final balance = profile?.walletBalance ?? 0.0;
+                return SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: CustomButton(
+                      text: 'Continue',
+                      onPressed: _selectedOption == 'booking'
+                          ? _redeemForBooking
+                          : (_selectedOption == 'bank' && balance >= 500) ||
+                                  (_selectedOption == 'upi' && balance >= 100)
+                              ? _redeemToBank
+                              : null,
+                    ),
+                  ),
+                );
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
     );
   }
 
