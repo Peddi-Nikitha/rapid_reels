@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/empty_state.dart';
 import '../providers/profile_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import 'package:uuid/uuid.dart';
 
 class SavedVenuesScreen extends ConsumerWidget {
-  const SavedVenuesScreen({super.key});
+  SavedVenuesScreen({super.key});
+
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,7 +48,14 @@ class SavedVenuesScreen extends ConsumerWidget {
                   itemCount: addresses.length,
                   itemBuilder: (context, index) {
                     final address = addresses[index];
-                    return _buildAddressCard(context, address, index, ref);
+                    return _buildAddressCard(
+                      context,
+                      address,
+                      index,
+                      ref,
+                      userId,
+                      addresses,
+                    );
                   },
                 ),
           bottomNavigationBar: SafeArea(
@@ -52,7 +63,7 @@ class SavedVenuesScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               child: CustomButton(
                 text: 'Add New Venue',
-                onPressed: () => _addNewVenue(context),
+                onPressed: () => _addNewVenue(context, userId, addresses),
               ),
             ),
           ),
@@ -75,6 +86,8 @@ class SavedVenuesScreen extends ConsumerWidget {
     SavedAddress address,
     int index,
     WidgetRef ref,
+    String userId,
+    List<SavedAddress> addresses,
   ) {
     final label = address.label.isNotEmpty ? address.label : 'Address';
     final fullAddress = '${address.address}, ${address.city}';
@@ -155,11 +168,14 @@ class SavedVenuesScreen extends ConsumerWidget {
                 ],
                 onSelected: (value) {
                   if (value == 'edit') {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Edit $label')),
-                    );
+                    _showEditVenueDialog(context, userId, addresses, address);
                   } else if (value == 'delete') {
-                    _showDeleteConfirm(context, ref, address.addressId);
+                    _showDeleteConfirm(
+                      context,
+                      userId,
+                      addresses,
+                      address.addressId,
+                    );
                   }
                 },
               ),
@@ -194,7 +210,12 @@ class SavedVenuesScreen extends ConsumerWidget {
     );
   }
 
-  void _showDeleteConfirm(BuildContext context, WidgetRef ref, String addressId) {
+  void _showDeleteConfirm(
+    BuildContext context,
+    String userId,
+    List<SavedAddress> addresses,
+    String addressId,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -207,11 +228,31 @@ class SavedVenuesScreen extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Venue deleted')),
-              );
+            onPressed: () async {
+              try {
+                final updated = addresses
+                    .where((a) => a.addressId != addressId)
+                    .toList(growable: false);
+
+                await _firestoreService.updateUser(
+                  userId,
+                  {
+                    'savedAddresses': updated.map((a) => a.toMap()).toList(),
+                  },
+                );
+
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Venue deleted')),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Delete failed: $e')),
+                );
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
@@ -220,24 +261,176 @@ class SavedVenuesScreen extends ConsumerWidget {
     );
   }
 
-  void _addNewVenue(BuildContext context) {
+  void _showEditVenueDialog(
+    BuildContext context,
+    String userId,
+    List<SavedAddress> addresses,
+    SavedAddress address,
+  ) {
+    final labelController = TextEditingController(text: address.label);
+    final addressController = TextEditingController(text: address.address);
+    final cityController = TextEditingController(text: address.city);
+    final pincodeController = TextEditingController(text: address.pincode);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Add New Venue'),
-        content: const Text('Venue addition form would appear here.'),
+        title: const Text('Edit Venue'),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(
+                controller: labelController,
+                decoration: const InputDecoration(labelText: 'Label'),
+              ),
+              TextField(
+                controller: addressController,
+                decoration: const InputDecoration(labelText: 'Address'),
+              ),
+              TextField(
+                controller: cityController,
+                decoration: const InputDecoration(labelText: 'City'),
+              ),
+              TextField(
+                controller: pincodeController,
+                decoration: const InputDecoration(labelText: 'Pincode'),
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Venue added successfully!')),
-              );
+            onPressed: () async {
+              try {
+                final uuid = const Uuid().v4();
+                final updatedAddress = SavedAddress(
+                  addressId: address.addressId.isNotEmpty
+                      ? address.addressId
+                      : uuid,
+                  label: labelController.text.trim(),
+                  address: addressController.text.trim(),
+                  city: cityController.text.trim(),
+                  pincode: pincodeController.text.trim(),
+                  // Saved venue coordinates are not currently used in UX; keep safe default.
+                  coordinates: Coordinates(latitude: 0.0, longitude: 0.0),
+                );
+
+                final updated = addresses.map((a) {
+                  if (a.addressId == address.addressId) return updatedAddress;
+                  return a;
+                }).toList(growable: false);
+
+                await _firestoreService.updateUser(
+                  userId,
+                  {
+                    'savedAddresses':
+                        updated.map((a) => a.toMap()).toList(),
+                  },
+                );
+
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Venue updated')),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Update failed: $e')),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addNewVenue(
+    BuildContext context,
+    String userId,
+    List<SavedAddress> addresses,
+  ) {
+    final labelController = TextEditingController();
+    final addressController = TextEditingController();
+    final cityController = TextEditingController();
+    final pincodeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Add New Venue'),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(
+                controller: labelController,
+                decoration: const InputDecoration(labelText: 'Label'),
+              ),
+              TextField(
+                controller: addressController,
+                decoration: const InputDecoration(labelText: 'Address'),
+              ),
+              TextField(
+                controller: cityController,
+                decoration: const InputDecoration(labelText: 'City'),
+              ),
+              TextField(
+                controller: pincodeController,
+                decoration: const InputDecoration(labelText: 'Pincode'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                final uuid = const Uuid().v4();
+                final newAddress = SavedAddress(
+                  addressId: uuid,
+                  label: labelController.text.trim(),
+                  address: addressController.text.trim(),
+                  city: cityController.text.trim(),
+                  pincode: pincodeController.text.trim(),
+                  // Coordinates are optional in current UX; keep safe defaults.
+                  coordinates: Coordinates(latitude: 0.0, longitude: 0.0),
+                );
+
+                final updated = [...addresses, newAddress];
+
+                await _firestoreService.updateUser(
+                  userId,
+                  {
+                    'savedAddresses':
+                        updated.map((a) => a.toMap()).toList(),
+                  },
+                );
+
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Venue added successfully!')),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to add venue: $e')),
+                );
+              }
             },
             child: const Text('Add'),
           ),

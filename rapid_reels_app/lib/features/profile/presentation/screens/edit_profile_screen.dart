@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:uuid/uuid.dart';
+import 'dart:io';
+import 'dart:typed_data';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart';
 import '../../../../shared/widgets/custom_button.dart';
@@ -21,6 +27,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _cityController;
+
+  String? _pendingProfileImageUrl;
+  bool _isUploadingProfileImage = false;
 
   @override
   void initState() {
@@ -70,6 +79,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
         final user = userProfile;
         final profileImage = user?.profileImage ?? currentUser?.photoURL;
+        final effectiveProfileImage = _pendingProfileImageUrl ?? profileImage;
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -99,17 +109,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             height: 120,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              image: profileImage != null && profileImage.isNotEmpty
+                              image: effectiveProfileImage != null && effectiveProfileImage.isNotEmpty
                                   ? DecorationImage(
-                                      image: NetworkImage(profileImage),
+                                      image: NetworkImage(effectiveProfileImage),
                                       fit: BoxFit.cover,
                                     )
                                   : null,
-                              color: profileImage == null || profileImage.isEmpty
+                              color: effectiveProfileImage == null || effectiveProfileImage.isEmpty
                                   ? AppColors.primary.withValues(alpha: 0.2)
                                   : null,
                             ),
-                            child: profileImage == null || profileImage.isEmpty
+                            child: effectiveProfileImage == null || effectiveProfileImage.isEmpty
                                 ? const Center(
                                     child: Icon(
                                       Icons.person,
@@ -262,7 +272,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               title: const Text('Take Photo'),
               onTap: () {
                 Navigator.pop(context);
-                _showSnackBar('Camera feature coming soon!');
+                _pickAndUploadProfilePicture(ImageSource.camera);
               },
             ),
             ListTile(
@@ -270,13 +280,77 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               title: const Text('Choose from Gallery'),
               onTap: () {
                 Navigator.pop(context);
-                _showSnackBar('Gallery feature coming soon!');
+                _pickAndUploadProfilePicture(ImageSource.gallery);
               },
             ),
+            if (_isUploadingProfileImage) ...[
+              const SizedBox(height: 16),
+              const Center(child: CircularProgressIndicator()),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _pickAndUploadProfilePicture(ImageSource source) async {
+    if (_isUploadingProfileImage) return;
+
+    final currentUser = ref.read(currentUserProvider);
+    final userId = currentUser?.uid ?? '';
+    if (userId.isEmpty) return;
+
+    setState(() => _isUploadingProfileImage = true);
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+
+      if (picked == null) {
+        setState(() => _isUploadingProfileImage = false);
+        return;
+      }
+
+      final uuid = const Uuid().v4();
+      final ext = _extractFileExtension(picked);
+
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('user_profile_pics/$userId/$uuid.$ext');
+
+      if (kIsWeb) {
+        final Uint8List bytes = await picked.readAsBytes();
+        await storageRef.putData(
+          bytes,
+          SettableMetadata(contentType: 'image/$ext'),
+        );
+      } else {
+        final file = File(picked.path);
+        await storageRef.putFile(file);
+      }
+      final downloadUrl = await storageRef.getDownloadURL();
+
+      if (!mounted) return;
+      setState(() {
+        _pendingProfileImageUrl = downloadUrl;
+        _isUploadingProfileImage = false;
+      });
+
+      _showSnackBar('Profile picture selected. Tap "Save Changes" to apply.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploadingProfileImage = false);
+      _showSnackBar('Failed to upload profile picture: $e');
+    }
+  }
+
+  String _extractFileExtension(XFile picked) {
+    final source = picked.name.isNotEmpty ? picked.name : picked.path;
+    final dot = source.lastIndexOf('.');
+    if (dot == -1 || dot == source.length - 1) return 'jpg';
+    return source.substring(dot + 1).toLowerCase();
   }
 
   Future<void> _saveChanges(String userId) async {
@@ -286,6 +360,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           {
             'fullName': _nameController.text.trim(),
             'email': _emailController.text.trim(),
+            if (_pendingProfileImageUrl != null)
+              'profileImage': _pendingProfileImageUrl,
             if (_cityController.text.trim().isNotEmpty)
               'currentLocation': {
                 'city': _cityController.text.trim(),
@@ -297,7 +373,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         );
     if (mounted) {
       _showSnackBar(success ? 'Profile updated successfully!' : 'Failed to update profile');
-      if (success) Navigator.pop(context);
+      if (success) {
+        _pendingProfileImageUrl = null;
+        Navigator.pop(context);
+      }
     }
   }
 

@@ -50,6 +50,7 @@ class AppRoutes {
   static const String paymentMethods = '/payment-methods';
   static const String settings = '/settings';
   static const String support = '/support';
+  static const String myTickets = '/my-tickets';
   static const String termsAndPrivacy = '/terms-privacy';
   
   // Provider Routes
@@ -87,5 +88,7 @@ class AppRoutes {
   static const String adminPaymentManagement = '/admin-payment-management';
   static const String adminSupportTickets = '/admin-support-tickets';
   static const String adminProviderEarnings = '/admin-provider-earnings';
+  static const String adminOffersManagement = '/admin-offers-management';
+  static const String adminReviewsModeration = '/admin-reviews-moderation';
 }
 

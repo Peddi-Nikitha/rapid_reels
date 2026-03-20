@@ -35,6 +35,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   
   // Location and nearby providers state
   final _firestoreService = FirestoreService();
+
+  // Firebase-driven promotional banner content.
+  List<Map<String, String>> _bannerItems = [];
+
+  // Firebase-driven customer reviews (formatted for existing review UI).
+  List<Map<String, dynamic>> _cityReviews = [];
+
   List<FirebaseProviderModel> _nearbyProviders = [];
   bool _isLoadingVenues = false;
   List<FirebaseProviderModel> _featuredProviders = [];
@@ -77,6 +84,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _getCurrentLocation();
     _loadFeaturedProviders();
     _loadTrendingReels();
+    _loadHomeBanners();
   }
 
   Future<void> _loadTrendingReels() async {
@@ -84,6 +92,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final reels = await _firestoreService.getDiscoverReels(limit: 10);
       if (mounted) setState(() => _trendingReels = reels);
     } catch (_) {}
+  }
+
+  Future<void> _loadHomeBanners() async {
+    if (!mounted) return;
+    setState(() {
+      _bannerItems = [];
+      _currentBannerIndex = 0;
+    });
+    try {
+      final fallbackImages = [
+        'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80',
+        'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
+      ];
+
+      final offers = await _firestoreService.getActiveOffers();
+      final top = offers.take(2).toList();
+
+      final mapped = <Map<String, String>>[];
+      for (var i = 0; i < top.length; i++) {
+        final offer = top[i];
+        final desc = (offer.description ?? '').trim();
+        final text =
+            desc.isNotEmpty ? '${offer.title}\n$desc' : offer.title;
+        mapped.add({
+          'text': text,
+          'imageUrl': (offer.imageUrl ?? '').trim().isNotEmpty
+              ? (offer.imageUrl ?? '')
+              : fallbackImages[i % fallbackImages.length],
+        });
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _bannerItems = mapped;
+        _currentBannerIndex = 0;
+      });
+    } catch (e) {
+      debugPrint('Error loading home banners: $e');
+      if (!mounted) return;
+      setState(() {
+        _bannerItems = [];
+        _currentBannerIndex = 0;
+      });
+    }
   }
 
   Future<void> _checkOnboardingStatus() async {
@@ -287,6 +339,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _featuredProviders = list;
         _isLoadingProviders = false;
       });
+      _loadCityReviews();
     } catch (e) {
       debugPrint('Error loading featured providers: $e');
       if (mounted) {
@@ -295,6 +348,86 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _isLoadingProviders = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadCityReviews() async {
+    if (!mounted) return;
+    final city = _selectedCity.trim();
+    if (city.isEmpty || city == 'Detecting...' || city.startsWith('Detecting')) {
+      return;
+    }
+
+    setState(() {
+      _cityReviews = [];
+      _currentReviewIndex = 0;
+    });
+
+    try {
+      final approved = await _firestoreService.getApprovedPublicReviews(limit: 80);
+      if (!mounted) return;
+
+      final providerIds = approved.map((r) => r.providerId).toSet().toList();
+      final providers = await Future.wait(
+        providerIds.map((id) => _firestoreService.getProvider(id)),
+      );
+
+      final providerById = <String, FirebaseProviderModel?>{};
+      for (var i = 0; i < providerIds.length; i++) {
+        providerById[providerIds[i]] = providers[i];
+      }
+
+      final cityLower = city.toLowerCase();
+
+      final formatted = <Map<String, dynamic>>[];
+      for (final review in approved) {
+        final provider = providerById[review.providerId];
+        final providerCity =
+            (provider?.location.city ?? '').toLowerCase().trim();
+        if (providerCity != cityLower) continue;
+
+        final rating = review.rating > 0 ? review.rating : review.categories.averageRating;
+        final reviewText = (review.comment ??
+                review.title ??
+                review.response ??
+                '')
+            .toString()
+            .trim();
+
+        final reviewerName = (provider?.businessName ??
+                provider?.ownerName ??
+                'Customer')
+            .toString()
+            .trim();
+
+        final reviewerImage = provider?.profileImage ?? '';
+        final reviewerRole = (provider?.eventTypes.isNotEmpty ?? false)
+            ? provider!.eventTypes.first
+            : 'Customer';
+
+        if (reviewText.isEmpty) continue;
+
+        formatted.add({
+          'rating': rating,
+          'review': reviewText,
+          'reviewerName': reviewerName.isNotEmpty ? reviewerName : 'Customer',
+          'reviewerRole': reviewerRole,
+          'reviewerImage': reviewerImage,
+        });
+
+        if (formatted.length >= 10) break;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _cityReviews = formatted;
+      });
+    } catch (e) {
+      debugPrint('Error loading city reviews: $e');
+      if (!mounted) return;
+      setState(() {
+        _cityReviews = [];
+      });
     }
   }
 
@@ -529,16 +662,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: CarouselSlider(
-                      items: [
-                        _buildPromoBanner(
-                          'Your reel\'s ready\nbefore the vibe fades.',
-                          'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80',
-                        ),
-                        _buildPromoBanner(
-                          'Capture memories\nthat last forever.',
-                          'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
-                        ),
-                      ],
+                      items: (_bannerItems.isNotEmpty
+                          ? _bannerItems
+                              .map(
+                                (b) => _buildPromoBanner(
+                                  b['text'] ?? '',
+                                  b['imageUrl'] ?? '',
+                                ),
+                              )
+                              .toList()
+                          : [
+                              _buildPromoBanner(
+                                'Your reel\'s ready\nbefore the vibe fades.',
+                                'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80',
+                              ),
+                              _buildPromoBanner(
+                                'Capture memories\nthat last forever.',
+                                'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
+                              ),
+                            ]),
                       options: CarouselOptions(
                         height: 160,
                         viewportFraction: 0.92,
@@ -557,7 +699,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      2,
+                      _bannerItems.isNotEmpty ? _bannerItems.length : 2,
                       (index) => AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         width: _currentBannerIndex == index ? 24 : 8,
@@ -1618,6 +1760,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // Get city-based review data
   Map<String, dynamic> _getCityReview(String city, int index) {
+    if (_cityReviews.isNotEmpty) {
+      return _cityReviews[index % _cityReviews.length];
+    }
     final allCityReviews = {
       'Siddipet': [
         {

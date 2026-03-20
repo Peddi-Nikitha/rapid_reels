@@ -162,6 +162,22 @@ class AdminDashboardScreen extends StatelessWidget {
                 ),
                 _buildActionCard(
                   context: context,
+                  icon: Icons.local_offer,
+                  title: 'Offers Management',
+                  subtitle: 'Edit homepage banners',
+                  color: Colors.teal,
+                  onTap: () => context.push(AppRoutes.adminOffersManagement),
+                ),
+                _buildActionCard(
+                  context: context,
+                  icon: Icons.rate_review,
+                  title: 'Review Moderation',
+                  subtitle: 'Approve customer reviews',
+                  color: Colors.deepPurple,
+                  onTap: () => context.push(AppRoutes.adminReviewsModeration),
+                ),
+                _buildActionCard(
+                  context: context,
                   icon: Icons.analytics,
                   title: 'Analytics',
                   subtitle: 'View insights',

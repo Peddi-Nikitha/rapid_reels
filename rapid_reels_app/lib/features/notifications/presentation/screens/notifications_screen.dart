@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/firebase/models/firebase_notification_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 /// Notifications Screen - Shows all user notifications
 class NotificationsScreen extends ConsumerStatefulWidget {
@@ -13,6 +16,7 @@ class NotificationsScreen extends ConsumerStatefulWidget {
 class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -26,6 +30,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
     super.dispose();
   }
 
+  // Kept for legacy demo UI; the screen now renders from Firestore.
+  // ignore: unused_field
   final List<Map<String, dynamic>> _allNotifications = [
     {
       'id': 'notif_001',
@@ -119,70 +125,172 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final unreadNotifications = _allNotifications.where((n) => !n['isRead']).toList();
-    final bookingNotifications = _allNotifications
-        .where((n) => ['booking_confirmed', 'event_reminder', 'payment_success'].contains(n['type']))
-        .toList();
-    final otherNotifications = _allNotifications
-        .where((n) => !['booking_confirmed', 'event_reminder', 'payment_success'].contains(n['type']))
-        .toList();
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
+    final currentUser = ref.watch(currentUserProvider);
+    if (currentUser == null) {
+      return const Scaffold(
         backgroundColor: AppColors.background,
-        title: const Text(
-          'Notifications',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final userId = currentUser.uid;
+
+    return StreamBuilder<List<FirebaseNotificationModel>>(
+      stream: _firestoreService.streamUserNotifications(userId),
+      builder: (context, snapshot) {
+        final notifications = snapshot.data ?? const <FirebaseNotificationModel>[];
+
+        final unreadNotifications =
+            notifications.where((n) => !n.isRead).toList();
+        final bookingTypes = <String>{
+          'booking_confirmed',
+          'event_reminder',
+          'payment_success',
+          'booking_request',
+        };
+
+        final bookingNotifications = notifications
+            .where((n) => bookingTypes.contains(n.type))
+            .toList();
+        final otherNotifications = notifications
+            .where((n) => !bookingTypes.contains(n.type))
+            .toList();
+
+        // Convert Firestore model -> UI map to reuse existing card UI.
+        final allUi = notifications.map(_toUiNotification).toList();
+        final bookingUi =
+            bookingNotifications.map(_toUiNotification).toList();
+        final otherUi = otherNotifications.map(_toUiNotification).toList();
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: AppColors.background,
+            title: const Text(
+              'Notifications',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            actions: [
+              if (unreadNotifications.isNotEmpty)
+                TextButton(
+                  onPressed: () async {
+                    // Mark all unread notifications as read.
+                    for (final n in unreadNotifications) {
+                      await _firestoreService
+                          .markNotificationAsRead(n.notificationId);
+                    }
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('All notifications marked as read'),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Mark all read'),
+                ),
+            ],
+            bottom: TabBar(
+              controller: _tabController,
+              indicatorColor: AppColors.primary,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              tabs: [
+                Tab(
+                  text: 'All',
+                  icon: unreadNotifications.isNotEmpty
+                      ? Badge(
+                          label: Text('${unreadNotifications.length}'),
+                          child: const Icon(Icons.notifications),
+                        )
+                      : const Icon(Icons.notifications),
+                ),
+                const Tab(text: 'Bookings', icon: Icon(Icons.event)),
+                const Tab(text: 'Updates', icon: Icon(Icons.campaign)),
+              ],
+            ),
           ),
-        ),
-        actions: [
-          if (unreadNotifications.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  for (var notif in _allNotifications) {
-                    notif['isRead'] = true;
-                  }
-                });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('All notifications marked as read')),
-                );
-              },
-              child: const Text('Mark all read'),
-            ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppColors.primary,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary,
-          tabs: [
-            Tab(
-              text: 'All',
-              icon: unreadNotifications.isNotEmpty
-                  ? Badge(
-                      label: Text('${unreadNotifications.length}'),
-                      child: const Icon(Icons.notifications),
-                    )
-                  : const Icon(Icons.notifications),
-            ),
-            const Tab(text: 'Bookings', icon: Icon(Icons.event)),
-            const Tab(text: 'Updates', icon: Icon(Icons.campaign)),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildNotificationsList(_allNotifications),
-          _buildNotificationsList(bookingNotifications),
-          _buildNotificationsList(otherNotifications),
-        ],
-      ),
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildNotificationsList(allUi),
+              _buildNotificationsList(bookingUi),
+              _buildNotificationsList(otherUi),
+            ],
+          ),
+        );
+      },
     );
+  }
+
+  Map<String, dynamic> _toUiNotification(FirebaseNotificationModel n) {
+    // Map Firestore model -> existing card UI contract.
+    IconData icon;
+    Color color;
+    String actionText;
+
+    switch (n.type) {
+      case 'booking_confirmed':
+        icon = Icons.check_circle;
+        color = Colors.green;
+        actionText = 'View Details';
+        break;
+      case 'booking_request':
+        icon = Icons.event_note;
+        color = AppColors.primary;
+        actionText = 'View Details';
+        break;
+      case 'reel_delivered':
+      case 'reel_ready':
+        icon = Icons.video_library;
+        color = AppColors.primary;
+        actionText = 'Watch Now';
+        break;
+      case 'payment_success':
+        icon = Icons.payment;
+        color = Colors.blue;
+        actionText = 'View Receipt';
+        break;
+      case 'referral_earned':
+        icon = Icons.card_giftcard;
+        color = Colors.amber;
+        actionText = 'View Wallet';
+        break;
+      case 'event_reminder':
+        icon = Icons.event;
+        color = Colors.orange;
+        actionText = 'View Event';
+        break;
+      case 'provider_message':
+        icon = Icons.message;
+        color = Colors.purple;
+        actionText = 'Reply';
+        break;
+      case 'offer':
+        icon = Icons.local_offer;
+        color = Colors.pink;
+        actionText = 'Use Offer';
+        break;
+      default:
+        icon = Icons.notifications;
+        color = AppColors.primary;
+        actionText = 'Open';
+    }
+
+    return {
+      'id': n.notificationId,
+      'type': n.type,
+      'title': n.title,
+      'message': n.body,
+      'time': n.createdAt,
+      'isRead': n.isRead,
+      'icon': icon,
+      'color': color,
+      'actionText': actionText,
+    };
   }
 
   Widget _buildNotificationsList(List<Map<String, dynamic>> notifications) {
@@ -244,10 +352,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            setState(() {
-              notification['isRead'] = true;
-            });
+          onTap: () async {
+            if (!isRead) {
+              await _firestoreService
+                  .markNotificationAsRead(notification['id'] as String);
+            }
             _handleNotificationAction(notification);
           },
           child: Padding(
@@ -317,7 +426,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
                             ),
                           ),
                           TextButton(
-                            onPressed: () {
+                            onPressed: () async {
+                              if (!isRead) {
+                                await _firestoreService.markNotificationAsRead(
+                                    notification['id'] as String);
+                              }
                               _handleNotificationAction(notification);
                             },
                             style: TextButton.styleFrom(

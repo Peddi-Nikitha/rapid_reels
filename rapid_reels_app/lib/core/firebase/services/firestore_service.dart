@@ -615,6 +615,61 @@ class FirestoreService {
     }
   }
 
+  /// Get homepage-ready reviews (approved + public).
+  /// Note: city-based filtering should typically be done client-side after joining providers.
+  Future<List<FirebaseReviewModel>> getApprovedPublicReviews({int limit = 50}) async {
+    try {
+      final snapshot = await _firestore
+          .collection('reviews')
+          .where('status', isEqualTo: 'approved')
+          .where('isPublic', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+      return snapshot.docs
+          .map((doc) => FirebaseReviewModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Error getting approved public reviews: $e');
+    }
+  }
+
+  /// Admin: list reviews by status (e.g., pending/approved/rejected)
+  Future<List<FirebaseReviewModel>> getReviewsForAdmin({
+    String? status,
+    bool? isPublic,
+    int? limit,
+  }) async {
+    try {
+      Query query = _firestore.collection('reviews').orderBy('createdAt', descending: true);
+      if (status != null) {
+        query = query.where('status', isEqualTo: status);
+      }
+      if (isPublic != null) {
+        query = query.where('isPublic', isEqualTo: isPublic);
+      }
+      if (limit != null) {
+        query = query.limit(limit);
+      }
+      final snapshot = await query.get();
+      return snapshot.docs.map((doc) => FirebaseReviewModel.fromFirestore(doc)).toList();
+    } catch (e) {
+      throw Exception('Error getting reviews for admin: $e');
+    }
+  }
+
+  /// Admin: update review partial fields (e.g., `status`, `isPublic`)
+  Future<void> updateReview(String reviewId, Map<String, dynamic> updates) async {
+    try {
+      await _firestore.collection('reviews').doc(reviewId).update({
+        ...updates,
+        'updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      throw Exception('Error updating review: $e');
+    }
+  }
+
   // ==================== REFERRALS ====================
 
   /// Create referral
@@ -842,6 +897,67 @@ class FirestoreService {
     }
   }
 
+  /// Admin: list offers (optionally filter by active/public)
+  Future<List<FirebaseOfferModel>> getOffersForAdmin({
+    bool? isActive,
+    bool? isPublic,
+    int? limit,
+  }) async {
+    try {
+      Query query = _firestore.collection('offers');
+
+      if (isActive != null) {
+        query = query.where('isActive', isEqualTo: isActive);
+      }
+      if (isPublic != null) {
+        query = query.where('isPublic', isEqualTo: isPublic);
+      }
+      if (limit != null) {
+        query = query.limit(limit);
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map((doc) => FirebaseOfferModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Error getting offers for admin: $e');
+    }
+  }
+
+  /// Admin: create offer with stable document id (uses `offer.offerId`)
+  Future<void> createOffer(FirebaseOfferModel offer) async {
+    try {
+      await _firestore
+          .collection('offers')
+          .doc(offer.offerId)
+          .set(offer.toFirestore());
+    } catch (e) {
+      throw Exception('Error creating offer: $e');
+    }
+  }
+
+  /// Admin: update offer partial fields
+  Future<void> updateOffer(String offerId, Map<String, dynamic> updates) async {
+    try {
+      await _firestore.collection('offers').doc(offerId).update({
+        ...updates,
+        'updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      throw Exception('Error updating offer: $e');
+    }
+  }
+
+  /// Admin: delete offer
+  Future<void> deleteOffer(String offerId) async {
+    try {
+      await _firestore.collection('offers').doc(offerId).delete();
+    } catch (e) {
+      throw Exception('Error deleting offer: $e');
+    }
+  }
+
   /// Validate offer code
   Future<FirebaseOfferModel?> validateOfferCode(String code, String userId) async {
     try {
@@ -958,6 +1074,35 @@ class FirestoreService {
       return docRef.id;
     } catch (e) {
       throw Exception('Error creating support ticket: $e');
+    }
+  }
+
+  /// Get support tickets for a specific user (customer-facing “My Tickets”)
+  Future<List<FirebaseSupportTicketModel>> getUserSupportTickets({
+    required String userId,
+    String? status,
+    int? limit,
+  }) async {
+    try {
+      Query query = _firestore
+          .collection('support_tickets')
+          .where('userId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true);
+
+      if (status != null) {
+        query = query.where('status', isEqualTo: status);
+      }
+
+      if (limit != null) {
+        query = query.limit(limit);
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map((doc) => FirebaseSupportTicketModel.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Error getting user support tickets: $e');
     }
   }
 }

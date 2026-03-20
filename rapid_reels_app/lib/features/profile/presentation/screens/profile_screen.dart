@@ -172,11 +172,14 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 16),
                       // Display name - should show "test" from Firestore
-                      Text(
-                        displayName,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                      GestureDetector(
+                        onTap: () => context.push(AppRoutes.editProfile),
+                        child: Text(
+                          displayName,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       // Profile source label removed
@@ -263,6 +266,12 @@ class ProfileScreen extends ConsumerWidget {
                             title: 'My Venues',
                             subtitle: 'Manage saved venues and addresses',
                             onTap: () => context.push(AppRoutes.savedVenues),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.support_agent,
+                            title: 'My Tickets',
+                            subtitle: 'View and manage your tickets',
+                            onTap: () => context.push(AppRoutes.myTickets),
                           ),
                         ],
                       ),

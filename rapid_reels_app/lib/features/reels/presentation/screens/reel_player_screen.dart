@@ -29,6 +29,8 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
   late PageController _pageController;
   late int _currentIndex;
   final Map<String, bool> _likedReels = {};
+  final Map<String, int> _commentIncrements = {};
+  final Map<String, bool> _sharedReels = {};
   final Map<String, bool> _followedCreators = {};
   final _firestoreService = FirestoreService();
   final Map<String, FirebaseProviderModel?> _providerCache = {};
@@ -89,6 +91,9 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
     final isLiked = _likedReels[reel.reelId] ?? false;
     final provider = _providerCache[reel.providerId];
     final isFollowing = _followedCreators[reel.providerId] ?? false;
+    final isShared = _sharedReels[reel.reelId] ?? false;
+    final localComments = reel.analytics.comments + (_commentIncrements[reel.reelId] ?? 0);
+    final localShares = reel.shares + (isShared ? 1 : 0);
 
     return Stack(
       children: [
@@ -157,14 +162,19 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
               const SizedBox(height: 20),
               _buildActionButton(
                 icon: Icons.comment_rounded,
-                label: '0',
-                onTap: () {},
+                label: _formatNumber(localComments),
+                onTap: () => _showCommentSheet(reel.reelId),
               ),
               const SizedBox(height: 20),
               _buildActionButton(
                 icon: Icons.share_rounded,
-                label: _formatNumber(reel.shares),
+                label: _formatNumber(localShares),
                 onTap: () {
+                  if (!isShared) {
+                    setState(() {
+                      _sharedReels[reel.reelId] = true;
+                    });
+                  }
                   context.push('${AppRoutes.reelDetails}/${reel.reelId}/share');
                 },
               ),
@@ -620,6 +630,64 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showCommentSheet(String reelId) {
+    final controller = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add a comment',
+                style: AppTypography.titleMedium.copyWith(color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Write something...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final text = controller.text.trim();
+                    if (text.isEmpty) return;
+
+                    setState(() {
+                      _commentIncrements[reelId] = (_commentIncrements[reelId] ?? 0) + 1;
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Post'),
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        );
+      },
     );
   }
 

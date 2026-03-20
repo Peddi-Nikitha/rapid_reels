@@ -1,0 +1,37 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // User profile pictures
+    match /user_profile_pics/{userId}/{fileName} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+
+    // Provider uploads (portfolio, documents, reels)
+    match /providers/{providerId}/{allPaths=**} {
+      allow read, write: if isOwner(providerId);
+    }
+
+    // Admin banner uploads (stored per uploader UID)
+    match /admin_banners/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+
+    // Admin/public assets if needed in future
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
+

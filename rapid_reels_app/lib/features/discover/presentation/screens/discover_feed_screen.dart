@@ -22,6 +22,9 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
   late PageController _pageController;
   String _selectedFilter = 'all';
   final Map<String, bool> _followedCreators = {};
+  final Map<String, bool> _likedReels = {};
+  final Map<String, int> _commentIncrements = {};
+  final Map<String, bool> _sharedReels = {};
   List<FirebaseReelModel> _reels = [];
   final Map<String, FirebaseProviderModel?> _providerCache = {};
   bool _isLoading = true;
@@ -40,7 +43,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
     super.dispose();
   }
 
-  Future<void> _loadReels() async {
+  Future<void> _loadReels({String? searchQuery}) async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -49,7 +52,18 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
       final reels = await _firestoreService.getDiscoverReels(
         eventType: _selectedFilter == 'all' ? null : _selectedFilter,
       );
-      final providerIds = reels.map((r) => r.providerId).toSet().toList();
+
+      final q = searchQuery?.trim().toLowerCase();
+      final filteredReels = (q == null || q.isEmpty)
+          ? reels
+          : reels.where((r) {
+              final inTitle = r.title.toLowerCase().contains(q);
+              final inEventName = r.eventName.toLowerCase().contains(q);
+              final inDescription = (r.description ?? '').toLowerCase().contains(q);
+              return inTitle || inEventName || inDescription;
+            }).toList();
+
+      final providerIds = filteredReels.map((r) => r.providerId).toSet().toList();
       final providers = await Future.wait(
         providerIds.map((id) => _firestoreService.getProvider(id)),
       );
@@ -59,7 +73,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
       }
       if (mounted) {
         setState(() {
-          _reels = reels;
+          _reels = filteredReels;
           _providerCache.addAll(cache);
           _isLoading = false;
         });
@@ -146,6 +160,12 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
               }
               final reel = _reels[index];
               final provider = _providerCache[reel.providerId];
+              final reelId = reel.reelId;
+              final isLiked = _likedReels[reelId] ?? false;
+              final localComments =
+                  reel.analytics.comments + (_commentIncrements[reelId] ?? 0);
+              final isShared = _sharedReels[reelId] ?? false;
+              final localShares = reel.shares + (isShared ? 1 : 0);
               
               return GestureDetector(
                 onTap: () => _viewReel(reel),
@@ -199,21 +219,94 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildActionButton(
-                          Icons.favorite_border_rounded,
-                          _formatNumber(reel.likes),
-                          () {},
+                          isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          _formatNumber(reel.likes + (isLiked ? 1 : 0)),
+                          () {
+                            setState(() {
+                              _likedReels[reelId] = !isLiked;
+                            });
+                          },
                         ),
                         const SizedBox(height: 20),
                         _buildActionButton(
                           Icons.comment_rounded,
-                          '0',
-                          () {},
+                          _formatNumber(localComments),
+                          () {
+                            final controller = TextEditingController();
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: AppColors.surface,
+                              isScrollControlled: true,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(20),
+                                ),
+                              ),
+                              builder: (context) {
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    left: 20,
+                                    right: 20,
+                                    top: 16,
+                                    bottom: MediaQuery.of(context).viewInsets.bottom +
+                                        12,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Add a comment',
+                                        style: AppTypography.titleMedium.copyWith(
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextField(
+                                        controller: controller,
+                                        maxLines: 4,
+                                        decoration: const InputDecoration(
+                                          hintText: 'Write something...',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            final text = controller.text.trim();
+                                            if (text.isEmpty) return;
+                                            setState(() {
+                                              _commentIncrements[reelId] =
+                                                  (_commentIncrements[reelId] ??
+                                                          0) +
+                                                      1;
+                                            });
+                                            Navigator.pop(context);
+                                          },
+                                          child: const Text('Post'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                         const SizedBox(height: 20),
                         _buildActionButton(
                           Icons.share_rounded,
-                          _formatNumber(reel.shares),
-                          () {},
+                          _formatNumber(localShares),
+                          () {
+                            if (!isShared) {
+                              setState(() {
+                                _sharedReels[reelId] = true;
+                              });
+                            }
+                            context.push('${AppRoutes.reelDetails}/$reelId/share');
+                          },
                         ),
                         const SizedBox(height: 20),
                         _buildActionButton(
@@ -757,6 +850,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
   }
 
   void _showSearchSheet() {
+    final controller = TextEditingController();
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -774,6 +868,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
+                controller: controller,
                 autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'Search reels...',
@@ -784,6 +879,24 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
+                ),
+                textInputAction: TextInputAction.search,
+                onSubmitted: (value) {
+                  Navigator.pop(context);
+                  final q = value.trim();
+                  _loadReels(searchQuery: q.isEmpty ? null : q);
+                },
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    final q = controller.text.trim();
+                    _loadReels(searchQuery: q.isEmpty ? null : q);
+                  },
+                  child: const Text('Search'),
                 ),
               ),
             ],

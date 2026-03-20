@@ -47,6 +47,7 @@ import '../../features/profile/presentation/screens/saved_venues_screen.dart';
 import '../../features/profile/presentation/screens/payment_methods_screen.dart';
 import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/support_screen.dart';
+import '../../features/profile/presentation/screens/my_tickets_screen.dart';
 
 // Provider screens
 import '../../features/provider/presentation/screens/provider_login_screen.dart';
@@ -81,6 +82,8 @@ import '../../features/admin/presentation/screens/admin_analytics_screen.dart';
 import '../../features/admin/presentation/screens/admin_payment_management_screen.dart';
 import '../../features/admin/presentation/screens/admin_support_tickets_screen.dart';
 import '../../features/admin/presentation/screens/admin_provider_earnings_screen.dart';
+import '../../features/admin/presentation/screens/admin_offers_management_screen.dart';
+import '../../features/admin/presentation/screens/admin_reviews_moderation_screen.dart';
 
 // Main scaffold
 import '../../shared/widgets/main_scaffold.dart';
@@ -459,7 +462,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const SavedVenuesScreen(),
+          SavedVenuesScreen(),
         ),
       ),
       GoRoute(
@@ -487,6 +490,15 @@ class AppRouter {
           context,
           state,
           const SupportScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.myTickets,
+        name: 'myTickets',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const MyTicketsScreen(),
         ),
       ),
 
@@ -804,6 +816,24 @@ class AppRouter {
           context,
           state,
           const AdminSupportTicketsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.adminOffersManagement,
+        name: 'adminOffersManagement',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const AdminOffersManagementScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.adminReviewsModeration,
+        name: 'adminReviewsModeration',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const AdminReviewsModerationScreen(),
         ),
       ),
       GoRoute(

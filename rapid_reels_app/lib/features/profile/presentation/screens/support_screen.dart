@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/firebase/models/firebase_admin_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/custom_text_field.dart';
 
@@ -15,6 +19,8 @@ class _SupportScreenState extends State<SupportScreen> {
   final _subjectController = TextEditingController();
   final _messageController = TextEditingController();
   String _selectedCategory = 'Booking Issue';
+  final _firestoreService = FirestoreService();
+  final _uuid = const Uuid();
 
   @override
   void dispose() {
@@ -324,14 +330,84 @@ class _SupportScreenState extends State<SupportScreen> {
     );
   }
 
-  void _submitTicket() {
-    if (_formKey.currentState!.validate()) {
+  Future<void> _submitTicket() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Support ticket submitted successfully!'),
-        ),
+        const SnackBar(content: Text('Please login to submit a ticket.')),
       );
-      Navigator.pop(context);
+      return;
+    }
+
+    final subject = _subjectController.text.trim();
+    final description = _messageController.text.trim();
+
+    String type;
+    switch (_selectedCategory) {
+      case 'Booking Issue':
+        type = 'booking_issue';
+        break;
+      case 'Payment Issue':
+        type = 'payment_issue';
+        break;
+      case 'Reel Quality':
+        type = 'technical';
+        break;
+      case 'Provider Issue':
+        type = 'general';
+        break;
+      case 'Other':
+      default:
+        type = 'complaint';
+    }
+
+    final createdAt = DateTime.now();
+    final message = SupportMessage(
+      messageId: _uuid.v4(),
+      senderId: user.uid,
+      senderType: 'user',
+      message: description,
+      sentAt: createdAt,
+      isRead: false,
+    );
+
+    final ticket = FirebaseSupportTicketModel(
+      ticketId: _uuid.v4(),
+      userId: user.uid,
+      providerId: null,
+      type: type,
+      priority: 'medium',
+      status: 'open',
+      subject: subject,
+      description: description,
+      attachments: null,
+      bookingId: null,
+      messages: [message],
+      assignedTo: null,
+      createdAt: createdAt,
+      resolvedAt: null,
+      closedAt: null,
+      metadata: null,
+    );
+
+    try {
+      await _firestoreService.createSupportTicket(ticket);
+      if (!mounted) return;
+
+      _subjectController.clear();
+      _messageController.clear();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Support ticket submitted successfully!')),
+      );
+      // Optionally navigate to My Tickets in a later step.
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to submit ticket: $e')),
+      );
     }
   }
 }
