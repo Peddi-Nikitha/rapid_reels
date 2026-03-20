@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_routes.dart';
 import '../../../../shared/widgets/reel_viewer_screen.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
@@ -74,6 +75,11 @@ class _ProviderMyReelsScreenState extends State<ProviderMyReelsScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.upload_rounded),
+            tooltip: 'Upload Reels',
+            onPressed: () => context.push(AppRoutes.uploadFootage),
+          ),
+          IconButton(
             icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
             onPressed: () => setState(() => _isGridView = !_isGridView),
           ),
@@ -121,6 +127,17 @@ class _ProviderMyReelsScreenState extends State<ProviderMyReelsScreen> {
               'Upload reels from the dashboard to get started',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () => context.push(AppRoutes.uploadFootage),
+              icon: const Icon(Icons.upload_rounded),
+              label: const Text('Upload Reels'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
             ),
           ],
         ),

@@ -63,17 +63,6 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
           'My Events',
           style: AppTypography.headlineSmall,
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => _buildSearchDialog(),
-              );
-            },
-          ),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -81,6 +70,53 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
         },
         child: CustomScrollView(
           slivers: [
+            // Inline search bar (instead of search dialog)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.cardBackground.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
+                    style: AppTypography.bodyMedium,
+                    decoration: InputDecoration(
+                      hintText: 'Search events...',
+                      hintStyle: AppTypography.bodyMedium.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             // Statistics Bar
             _buildStatsBar(stats),
             
@@ -330,17 +366,6 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
                     children: [
                       Expanded(
                         child: CustomButton(
-                          text: 'Track Live',
-                          onPressed: () {
-                            context.push('${AppRoutes.eventTracking}/${booking.bookingId}');
-                          },
-                          type: ButtonType.outline,
-                          height: 40,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: CustomButton(
                           text: 'View Details',
                           onPressed: () {
                             context.push('${AppRoutes.eventDetails2}/${booking.bookingId}');
@@ -462,61 +487,6 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSearchDialog() {
-    return AlertDialog(
-      backgroundColor: AppColors.surface,
-      title: Text(
-        'Search Events',
-        style: AppTypography.titleLarge,
-      ),
-      content: TextField(
-        controller: _searchController,
-        style: AppTypography.bodyMedium,
-        decoration: InputDecoration(
-          hintText: 'Search by event name, type, or venue...',
-          hintStyle: AppTypography.bodyMedium.copyWith(
-            color: AppColors.textSecondary,
-          ),
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() {
-                      _searchQuery = '';
-                    });
-                  },
-                )
-              : null,
-        ),
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value;
-          });
-        },
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-            _searchController.clear();
-            setState(() {
-              _searchQuery = '';
-            });
-          },
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
-          child: const Text('Search'),
-        ),
-      ],
     );
   }
 

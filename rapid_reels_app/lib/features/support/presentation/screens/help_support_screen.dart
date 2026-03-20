@@ -270,13 +270,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildContactButton(
-                                  'Live Chat',
-                                  Icons.support_agent,
-                                  () => _openLiveChat(),
-                                ),
-                              ),
+                              // Live Chat removed (not available yet)
                             ],
                           ),
                         ],
@@ -458,75 +452,6 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
     } else {
       _showMessage('Unable to open email client');
     }
-  }
-
-  void _openLiveChat() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.8,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Live Chat',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.support_agent,
-                        size: 80,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Chat Feature',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Live chat will be available soon!\nFor now, please use other contact methods.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   void _showMessage(String message) {

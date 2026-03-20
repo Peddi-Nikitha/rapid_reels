@@ -28,6 +28,7 @@ class AppColors {
   static const Color engagement = Color(0xFFFF1493);
   static const Color corporate = Color(0xFF4169E1);
   static const Color brand = Color(0xFF9370DB);
+  static const Color other = Color(0xFF26A69A);
   
   // Gradient
   static const LinearGradient primaryGradient = LinearGradient(

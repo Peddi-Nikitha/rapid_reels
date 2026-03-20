@@ -17,7 +17,6 @@ import '../../../../core/theme/text_styles.dart';
 import '../../../../shared/widgets/reel_viewer_screen.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../providers/presentation/screens/provider_details_screen.dart';
-import 'schedule_packages_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -510,34 +509,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildActionButton(
-                        icon: Icons.calendar_today_rounded,
-                        label: AppStrings.schedule,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SchedulePackagesScreen(),
-                            ),
-                          );
-                        },
-                        isPrimary: false,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildActionButton(
                         icon: Icons.receipt_long_rounded,
-                        label: 'Bookings',
+                        label: 'My Bookings',
                         onTap: () => context.push(AppRoutes.myEvents),
-                        isPrimary: false,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildActionButton(
-                        icon: Icons.card_giftcard_rounded,
-                        label: 'Refer',
-                        onTap: () => _showReferralDialog(),
                         isPrimary: false,
                       ),
                     ),
@@ -624,7 +598,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () {},
+                          onPressed: () => context.push('${AppRoutes.discover}/trending'),
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           ),
@@ -679,9 +653,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           if (_nearbyProviders.isNotEmpty)
                             TextButton(
-                              onPressed: () {
-                                _showSnackbar('View all nearby photography studios');
-                              },
+                              onPressed: () => context.push(AppRoutes.discover),
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               ),
@@ -778,7 +750,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () => _showSnackbar('View all providers'),
+                          onPressed: () => context.push(AppRoutes.discover),
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           ),
@@ -1460,6 +1432,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return AppColors.engagement;
       case 'corporate':
         return AppColors.corporate;
+      case 'other':
+        return AppColors.other;
       default:
         return AppColors.primary;
     }
@@ -1561,6 +1535,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   _buildQuickBookCard('Birthday', Icons.cake, AppColors.birthday),
                   _buildQuickBookCard('Engagement', Icons.diamond, AppColors.engagement),
                   _buildQuickBookCard('Corporate', Icons.business, AppColors.corporate),
+                  _buildQuickBookCard('Other', Icons.more_horiz, AppColors.other),
                 ],
               ),
               const SizedBox(height: 20),
@@ -1608,115 +1583,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _showReferralDialog() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.card_giftcard,
-                      size: 60,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Refer & Earn',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Invite friends and earn ₹100 for each referral!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          const Text(
-                            'Your Referral Code',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'RAPID001',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
-                              letterSpacing: 3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _showSnackbar('Sharing referral code...');
-                  },
-                  icon: const Icon(Icons.share),
-                  label: const Text('Share Now'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   void _navigateToBooking(String eventType) {
     final eventTypeMap = {
       'Wedding': 'wedding',
       'Birthday': 'birthday',
       'Engagement': 'engagement',
       'Corporate': 'corporate',
+      'Other': 'other',
       'Brand Collaboration': 'brand',
     };
     
@@ -1741,16 +1614,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       }
     }
-  }
-
-  void _showSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   // Get city-based review data
@@ -2219,7 +2082,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final steps = [
       {
         'title': 'Quick Actions',
-        'description': 'Use these buttons to book events, view schedule, check bookings, and refer friends',
+        'description': 'Use these buttons to book events and check your bookings',
         'position': 'top',
       },
       {

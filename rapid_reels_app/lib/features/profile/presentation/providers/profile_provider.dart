@@ -3,7 +3,6 @@ import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
-import '../../../../core/firebase/models/firebase_wallet_model.dart';
 
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
@@ -44,6 +43,21 @@ final walletBalanceProvider = Provider.family<double, String>(
       loading: () => 0.0,
       error: (_, __) => 0.0,
     );
+  },
+);
+
+// Real-time counts (avoid relying on stored totals in the user document)
+final userBookingsCountProvider = StreamProvider.family<int, String>(
+  (ref, userId) {
+    final service = ref.watch(firestoreServiceProvider);
+    return service.streamUserBookingsCount(userId);
+  },
+);
+
+final userReelsCountProvider = StreamProvider.family<int, String>(
+  (ref, userId) {
+    final service = ref.watch(firestoreServiceProvider);
+    return service.streamUserReelsCount(userId);
   },
 );
 

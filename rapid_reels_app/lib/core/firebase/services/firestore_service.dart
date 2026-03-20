@@ -406,6 +406,16 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs.map((doc) => FirebaseBookingModel.fromFirestore(doc)).toList());
   }
 
+  /// Stream user bookings count (updates in real-time).
+  /// Uses snapshot size only (no document parsing) for better performance.
+  Stream<int> streamUserBookingsCount(String userId) {
+    return _firestore
+        .collection('bookings')
+        .where('customerId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
   // ==================== REELS ====================
 
   /// Get reel by ID
@@ -454,6 +464,16 @@ class FirestoreService {
     } catch (e) {
       throw Exception('Error getting user reels: $e');
     }
+  }
+
+  /// Stream user reels count (updates in real-time).
+  /// Uses snapshot size only (no document parsing) for better performance.
+  Stream<int> streamUserReelsCount(String userId) {
+    return _firestore
+        .collection('reels')
+        .where('customerId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 
   /// Get booking reels

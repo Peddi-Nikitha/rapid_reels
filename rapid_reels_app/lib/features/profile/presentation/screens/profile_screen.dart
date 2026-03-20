@@ -31,6 +31,8 @@ class ProfileScreen extends ConsumerWidget {
     debugPrint('Profile Screen - Current User Phone: ${currentUser.phoneNumber}');
     
     final userProfileAsync = ref.watch(userProfileProvider(userId));
+    final userBookingsCount = ref.watch(userBookingsCountProvider(userId));
+    final userReelsCount = ref.watch(userReelsCountProvider(userId));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -44,12 +46,6 @@ class ProfileScreen extends ConsumerWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push(AppRoutes.settings),
-          ),
-        ],
       ),
       body: userProfileAsync.when(
         data: (userProfile) {
@@ -95,10 +91,18 @@ class ProfileScreen extends ConsumerWidget {
           
           final initials = getInitials(displayName);
 
-          // Calculate stats from user profile (with defaults if null)
+          // Live stats:
+          // - Events count from bookings collection (real-time stream)
+          // - Reels count from reels collection (real-time stream)
           final stats = {
-            'totalBookings': userProfile?.totalEventsBooked ?? 0,
-            'totalReels': userProfile?.totalReelsReceived ?? 0,
+            'totalBookings': userBookingsCount.maybeWhen(
+              data: (count) => count,
+              orElse: () => userProfile?.totalEventsBooked ?? 0,
+            ),
+            'totalReels': userReelsCount.maybeWhen(
+              data: (count) => count,
+              orElse: () => userProfile?.totalReelsReceived ?? 0,
+            ),
             'walletBalance': userProfile?.walletBalance ?? 0.0,
           };
 
@@ -175,16 +179,7 @@ class ProfileScreen extends ConsumerWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      // Debug: Show source of name
-                      if (userProfile != null && userProfile.fullName.isNotEmpty)
-                        Text(
-                          'From Firestore',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.green[600],
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
+                      // Profile source label removed
                       const SizedBox(height: 4),
                       Text(
                         email ?? phoneNumber ?? 'N/A',
@@ -243,15 +238,6 @@ class ProfileScreen extends ConsumerWidget {
                           color: Colors.purple,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          title: 'Wallet',
-                          value: '₹${(stats['walletBalance'] as double).toStringAsFixed(0)}',
-                          icon: Icons.account_balance_wallet,
-                          color: Colors.green,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -277,12 +263,6 @@ class ProfileScreen extends ConsumerWidget {
                             title: 'My Venues',
                             subtitle: 'Manage saved venues and addresses',
                             onTap: () => context.push(AppRoutes.savedVenues),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.payment,
-                            title: 'Payment Methods',
-                            subtitle: 'Manage cards and payment options',
-                            onTap: () => context.push(AppRoutes.paymentMethods),
                           ),
                         ],
                       ),

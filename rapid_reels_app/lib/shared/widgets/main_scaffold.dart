@@ -56,7 +56,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           BottomNavigationBarItem(
             icon: Icon(Icons.explore_outlined),
             activeIcon: Icon(Icons.explore),
-            label: 'Discover',
+            label: 'Reels',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.event_outlined),
@@ -125,6 +125,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                   _buildQuickBookCard(context, 'birthday', 'Birthday', Icons.cake, AppColors.birthday),
                   _buildQuickBookCard(context, 'engagement', 'Engagement', Icons.diamond, AppColors.engagement),
                   _buildQuickBookCard(context, 'corporate', 'Corporate', Icons.business, AppColors.corporate),
+                  _buildQuickBookCard(context, 'other', 'Other', Icons.more_horiz, AppColors.other),
                 ],
               ),
               const SizedBox(height: 20),

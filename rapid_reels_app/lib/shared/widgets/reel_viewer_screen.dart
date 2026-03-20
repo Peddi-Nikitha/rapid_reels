@@ -3,7 +3,7 @@ import 'package:video_player/video_player.dart';
 import '../../core/constants/app_colors.dart';
 
 /// Shared full-screen video viewer - same as provider's _ReelViewerScreen.
-/// Uses VideoPlayerController.networkUrl + AspectRatio + manual play FAB.
+/// Uses VideoPlayerController.networkUrl + AspectRatio + auto-play on open.
 /// Use this when tapping a reel to play video (provider My Reels, user Discover, etc.).
 class ReelViewerScreen extends StatefulWidget {
   final String videoUrl;
@@ -33,7 +33,9 @@ class _ReelViewerScreenState extends State<ReelViewerScreen> {
     }
     _controller = VideoPlayerController.networkUrl(Uri.parse(url))
       ..initialize().then((_) {
-        if (mounted) setState(() {});
+        if (!mounted) return;
+        _controller!.play();
+        setState(() {});
       }).catchError((e) {
         if (mounted) setState(() => _loadError = true);
       });

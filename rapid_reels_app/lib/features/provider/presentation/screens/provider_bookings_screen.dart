@@ -25,7 +25,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -41,8 +41,9 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
       builder: (context, snapshot) {
         final bookings = snapshot.data ?? [];
         final pending = bookings.where((b) => b.status == 'pending').toList();
-        final confirmed = bookings.where((b) => b.status == 'confirmed').toList();
-        final ongoing = bookings.where((b) => b.status == 'ongoing').toList();
+        final confirmed = bookings
+            .where((b) => b.status == 'confirmed' || b.status == 'ongoing')
+            .toList();
         final completed = bookings.where((b) => b.status == 'completed').toList();
 
         if (snapshot.hasError) {
@@ -72,7 +73,6 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
           tabs: [
             Tab(text: 'Pending (${pending.length})'),
             Tab(text: 'Confirmed (${confirmed.length})'),
-            Tab(text: 'Ongoing (${ongoing.length})'),
             Tab(text: 'Completed (${completed.length})'),
           ],
         ),
@@ -82,7 +82,6 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
         children: [
           _buildBookingsList(pending, 'pending'),
           _buildBookingsList(confirmed, 'confirmed'),
-          _buildBookingsList(ongoing, 'ongoing'),
           _buildBookingsList(completed, 'completed'),
         ],
       ),
@@ -147,15 +146,15 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: _getStatusColor(status).withValues(alpha: 0.1),
+                  color: _getStatusColor(booking.status).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  status.toUpperCase(),
+                  booking.status.toUpperCase(),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: _getStatusColor(status),
+                    color: _getStatusColor(booking.status),
                   ),
                 ),
               ),
@@ -193,7 +192,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                   ),
                 ),
               ),
-              if (status == 'pending') ...[
+              if (booking.status == 'pending') ...[
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton(
@@ -214,7 +213,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                   ),
                 ),
               ],
-              if (status == 'confirmed' || status == 'ongoing') ...[
+              if (booking.status == 'confirmed' || booking.status == 'ongoing') ...[
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(

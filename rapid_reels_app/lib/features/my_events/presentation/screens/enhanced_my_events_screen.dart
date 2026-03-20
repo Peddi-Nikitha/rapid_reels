@@ -373,10 +373,7 @@ class _EnhancedMyEventsScreenState extends ConsumerState<EnhancedMyEventsScreen>
                 ),
 
                 // Progress/Actions based on type
-                if (type == 'ongoing') ...[
-                  const SizedBox(height: 16),
-                  _buildLiveTracking(),
-                ] else if (type == 'upcoming') ...[
+                if (type == 'upcoming') ...[
                   const SizedBox(height: 16),
                   _buildUpcomingActions(event),
                 ] else if (type == 'past') ...[
@@ -435,95 +432,6 @@ class _EnhancedMyEventsScreenState extends ConsumerState<EnhancedMyEventsScreen>
               color: Colors.white,
               fontSize: 12,
               fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLiveTracking() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.green.withOpacity(0.1),
-            Colors.green.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: const BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Event in Progress',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Progress steps
-          _buildProgressStep('Event Started', true, true),
-          _buildProgressStep('Capturing Moments', true, false),
-          _buildProgressStep('Editing Reels', false, false),
-          _buildProgressStep('Ready for Delivery', false, false),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.visibility),
-              label: const Text('View Live Updates'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressStep(String title, bool completed, bool active) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            completed ? Icons.check_circle : Icons.radio_button_unchecked,
-            size: 20,
-            color: completed ? Colors.green : (active ? Colors.orange : Colors.grey),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              color: completed || active ? AppColors.textPrimary : AppColors.textSecondary,
-              fontWeight: active ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
         ],
