@@ -4,6 +4,7 @@ class AppRoutes {
   static const String onboarding = '/onboarding';
   static const String login = '/login';
   static const String otpVerification = '/otp-verification';
+  static const String unauthorized = '/unauthorized';
   static const String profileSetup = '/profile-setup';
   static const String citySelection = '/city-selection';
   
@@ -22,6 +23,8 @@ class AppRoutes {
   static const String providerSelection = '/provider-selection';
   static const String providerDetails = '/provider-details';
   static const String providerPortfolio = '/provider-portfolio';
+  static const String catalogueSelection = '/catalogue-selection';
+  static const String providerPackagePick = '/provider-package-pick';
   static const String packageCustomization = '/package-customization';
   static const String bookingSummary = '/booking-summary';
   static const String payment = '/payment';
@@ -77,8 +80,11 @@ class AppRoutes {
   static const String providerDocumentUpload = '/provider-document-upload';
   static const String providerAvailabilityCalendar = '/provider-availability-calendar';
   static const String providerVerification = '/provider-verification';
+  static const String providerCatalogue = '/provider-catalogue';
+  static const String providerCatalogueEdit = '/provider-catalogue-edit';
   
   // Admin Routes
+  static const String adminLogin = '/admin-login';
   static const String adminDashboard = '/admin-dashboard';
   static const String adminUserManagement = '/admin-user-management';
   static const String adminBookingManagement = '/admin-booking-management';
@@ -86,7 +92,6 @@ class AppRoutes {
   static const String adminContentModeration = '/admin-content-moderation';
   static const String adminAnalytics = '/admin-analytics';
   static const String adminPaymentManagement = '/admin-payment-management';
-  static const String adminSupportTickets = '/admin-support-tickets';
   static const String adminProviderEarnings = '/admin-provider-earnings';
   static const String adminOffersManagement = '/admin-offers-management';
   static const String adminReviewsModeration = '/admin-reviews-moderation';

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -27,6 +27,7 @@ class OTPVerificationScreen extends ConsumerStatefulWidget {
 
 class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   final TextEditingController _otpController = TextEditingController();
+  final FocusNode _otpFocusNode = FocusNode();
   int _timerSeconds = 30;
   late Timer _timer;
   bool _canResend = false;
@@ -40,12 +41,19 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
     super.initState();
     _currentVerificationId = widget.verificationId;
     _startTimer();
+    // Focus OTP field after route transition so keyboard opens without an extra tap.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _otpFocusNode.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
     _timer.cancel();
     _rateLimitTimer?.cancel();
+    _otpFocusNode.dispose();
     _otpController.dispose();
     super.dispose();
   }
@@ -107,54 +115,31 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Create a PhoneAuthCredential with the code
-      PhoneAuthCredential credential = PhoneAuthProvider.credential(
-        verificationId: _currentVerificationId ?? widget.verificationId,
-        smsCode: smsCode,
-      );
-
-      // Sign the user in
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      final verified = await ref.read(authNotifierProvider.notifier).verifyOTP(
+            _currentVerificationId ?? widget.verificationId,
+            smsCode,
+          );
 
       setState(() => _isLoading = false);
 
+      if (!verified) {
+        if (mounted) {
+          Helpers.showSnackBar(
+            context,
+            'Authentication failed. Please try again.',
+            isError: true,
+          );
+        }
+        return;
+      }
+
       if (mounted) {
-        // Wait a moment for user state to update
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: 300));
 
-        // Check if user profile exists
-        final user = ref.read(currentUserProvider);
-        if (user != null) {
-          try {
-            final profileExists = await ref
-                .read(authNotifierProvider.notifier)
-                .userProfileExists(user.uid);
-
-            debugPrint('User ID: ${user.uid}');
-            debugPrint('Profile exists: $profileExists');
-
-            if (profileExists) {
-              // Existing user - go to home screen
-              debugPrint('Navigating to home screen');
-              if (mounted) {
-                context.go(AppRoutes.home);
-              }
-            } else {
-              // New user - go to profile setup screen
-              debugPrint('Navigating to profile setup screen');
-              if (mounted) {
-                context.go(AppRoutes.profileSetup);
-              }
-            }
-          } catch (e) {
-            debugPrint('Error checking profile: $e');
-            // If check fails, assume new user and go to profile setup
-            if (mounted) {
-              context.go(AppRoutes.profileSetup);
-            }
-          }
-        } else {
-          // User is null, show error
+        // Prefer Firebase after sign-in — Riverpod can lag one frame behind authStateChanges.
+        final user =
+            FirebaseAuth.instance.currentUser ?? ref.read(currentUserProvider);
+        if (user == null) {
           debugPrint('User is null after OTP verification');
           if (mounted) {
             Helpers.showSnackBar(
@@ -162,6 +147,33 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
               'Authentication failed. Please try again.',
               isError: true,
             );
+          }
+          return;
+        }
+
+        try {
+          final profileExists = await ref
+              .read(authNotifierProvider.notifier)
+              .userProfileExists(user.uid);
+
+          debugPrint('User ID: ${user.uid}');
+          debugPrint('Profile exists: $profileExists');
+
+          if (profileExists) {
+            debugPrint('Navigating to home screen');
+            if (mounted) {
+              context.go(AppRoutes.home);
+            }
+          } else {
+            debugPrint('Navigating to profile setup screen');
+            if (mounted) {
+              context.go(AppRoutes.profileSetup);
+            }
+          }
+        } catch (e) {
+          debugPrint('Error checking profile: $e');
+          if (mounted) {
+            context.go(AppRoutes.profileSetup);
           }
         }
       }
@@ -284,6 +296,8 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
               // OTP Input Field
               TextField(
                 controller: _otpController,
+                focusNode: _otpFocusNode,
+                autofocus: true,
                 keyboardType: TextInputType.number,
                 maxLength: 6,
                 textAlign: TextAlign.center,

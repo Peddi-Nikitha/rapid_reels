@@ -10,10 +10,12 @@ service firebase.storage {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // User profile pictures
+    // User profile pictures (path must match EditProfileScreen: user_profile_pics/{uid}/{file})
+    // Public read so avatar URLs work in NetworkImage/CachedNetworkImage for any viewer.
+    // Write only for the signed-in user whose uid matches the folder name.
     match /user_profile_pics/{userId}/{fileName} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId);
+      allow read: if true;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Provider uploads (portfolio, documents, reels)

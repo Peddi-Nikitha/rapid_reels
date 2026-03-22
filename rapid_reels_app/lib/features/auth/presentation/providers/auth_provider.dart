@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../../core/admin/admin_route_cache.dart';
+import '../../../../core/router/router_refresh_notifier.dart';
+import '../../../../core/session/user_session_cleanup.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/models/user_model.dart';
 
@@ -15,8 +18,13 @@ final authStateProvider = StreamProvider<User?>((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 });
 
-// Current User Provider
+// Current User Provider — must depend on live auth signals. The repository instance never
+// changes, so without these watches Riverpod keeps a stale null after sign-in. We watch
+// [authNotifierProvider] so OTP/email flows that update the notifier invalidate this
+// immediately; [authStateProvider] covers stream-driven updates (sign-out, token refresh).
 final currentUserProvider = Provider<User?>((ref) {
+  ref.watch(authStateProvider);
+  ref.watch(authNotifierProvider);
   return ref.watch(authRepositoryProvider).currentUser;
 });
 
@@ -119,10 +127,17 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // Sign Out
-  Future<void> signOut() async {
+  // Sign Out — clears local Riverpod caches for the signed-out uid so Firestore
+  // streams do not keep a PERMISSION_DENIED error for the next login.
+  Future<void> signOut([WidgetRef? ref]) async {
+    final uid = _authRepository.currentUser?.uid;
     await _authRepository.signOut();
     state = const AsyncValue.data(null);
+    AdminRouteCache.invalidate();
+    appRouterAuthRefresh.refresh();
+    if (ref != null && uid != null) {
+      invalidateUserSessionProviders(ref, uid);
+    }
   }
 
   // Create User Profile

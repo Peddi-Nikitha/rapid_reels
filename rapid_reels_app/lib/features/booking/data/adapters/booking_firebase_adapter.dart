@@ -80,6 +80,10 @@ class BookingFirebaseAdapter {
 
     final now = DateTime.now();
 
+    final catalogueEventId = data['catalogueEventId']?.toString();
+    final catalogueTitle = data['catalogueTitle']?.toString();
+    final catalogueHeroUrl = data['catalogueHeroUrl']?.toString();
+
     return FirebaseBookingModel(
       bookingId: '',
       customerId: customerId,
@@ -117,6 +121,9 @@ class BookingFirebaseAdapter {
       cancellationReason: null,
       completedAt: null,
       metadata: null,
+      catalogueEventId: catalogueEventId != null && catalogueEventId.isEmpty ? null : catalogueEventId,
+      catalogueTitle: catalogueTitle != null && catalogueTitle.isEmpty ? null : catalogueTitle,
+      catalogueHeroUrl: catalogueHeroUrl != null && catalogueHeroUrl.isEmpty ? null : catalogueHeroUrl,
     );
   }
 

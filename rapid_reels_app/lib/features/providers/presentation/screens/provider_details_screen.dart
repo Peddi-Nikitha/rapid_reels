@@ -4,6 +4,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/models/firebase_catalogue_event_model.dart';
+import '../../../../shared/widgets/catalogue_event_card.dart';
 
 /// Provider Details & Portfolio Screen - loads provider dynamically from Firestore
 class ProviderDetailsScreen extends ConsumerStatefulWidget {
@@ -544,24 +546,89 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
   }
 
   Widget _buildPackagesTab(FirebaseProviderModel provider) {
-    final packages = provider.packages;
-    if (packages.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'No packages added yet',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-        ),
-      );
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: packages.length,
-      itemBuilder: (context, index) {
-        final package = packages[index];
-        return _buildPackageCard(package);
+    return StreamBuilder<List<FirebaseCatalogueEventModel>>(
+      stream: _firestoreService.streamCatalogueEvents(provider.providerId),
+      builder: (context, snapshot) {
+        final catalogue = (snapshot.data ?? [])
+            .where((e) => e.isPublished)
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+        final packages = provider.packages;
+
+        if (catalogue.isEmpty && packages.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'No catalogue or packages yet',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
+          );
+        }
+
+        return ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          children: [
+            if (catalogue.isNotEmpty) ...[
+              const Text(
+                'Featured offerings',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Curated options from this provider (full booking uses the main booking flow).',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              ...catalogue.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: CatalogueEventCard(
+                    event: e,
+                    onTap: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: Text(e.title),
+                          content: SingleChildScrollView(
+                            child: Text(
+                              e.longDescription.isNotEmpty ? e.longDescription : e.shortDescription,
+                              style: const TextStyle(height: 1.4),
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (packages.isNotEmpty) ...[
+              const Text(
+                'Packages',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...packages.map(_buildPackageCard),
+            ],
+          ],
+        );
       },
     );
   }

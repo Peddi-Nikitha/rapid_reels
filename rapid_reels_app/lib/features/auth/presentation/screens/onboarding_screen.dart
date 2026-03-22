@@ -191,11 +191,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           // Content
           Stack(
             children: [
-              // Skip button - Elegant and compact
-              SafeArea(
-                child: _buildSkipButton(),
-              ),
-              
               // Banner for slide 2 (Car) - positioned at top below status bar
               if (_currentPage == 1)
                 Positioned(
@@ -204,8 +199,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   right: 0,
                   child: _buildCarBanner(),
                 ),
-              
-              // Page view with text overlay
+
+              // Page view with text overlay (must be below Skip so taps reach Skip)
               SafeArea(
                 child: PageView.builder(
                   controller: _pageController,
@@ -216,7 +211,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   },
                 ),
               ),
-              
+
               // Bottom section with dots and button
               Positioned(
                 bottom: 0,
@@ -226,6 +221,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   top: false,
                   child: _buildBottomSection(),
                 ),
+              ),
+
+              // Skip last so it is above PageView for hit-testing (full-screen PageView was stealing taps)
+              SafeArea(
+                child: _buildSkipButton(),
               ),
             ],
           ),

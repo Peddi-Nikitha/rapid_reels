@@ -134,6 +134,12 @@ class EventDetailsScreen extends ConsumerWidget {
                         title: 'Duration',
                         value: '${event.duration ~/ 60} hours',
                       ),
+                      if (event.catalogueTitle != null && event.catalogueTitle!.isNotEmpty)
+                        _buildInfoCard(
+                          icon: Icons.event_note,
+                          title: 'Offering',
+                          value: event.catalogueTitle!,
+                        ),
                       const SizedBox(height: 24),
                       const Text(
                         'Service Provider',

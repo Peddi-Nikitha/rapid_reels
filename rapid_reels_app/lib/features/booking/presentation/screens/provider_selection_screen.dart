@@ -137,11 +137,13 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
         final prefs = await SharedPreferences.getInstance();
         city = prefs.getString('selected_city');
       }
+      final eventType = widget.bookingData['eventType'] as String?;
       final providers = await _firestoreService.getProviders(
         city: city,
         isActive: true,
         isVerified: true,
         verificationStatus: 'approved',
+        eventTypes: eventType != null && eventType.isNotEmpty ? [eventType] : null,
       );
       if (!mounted) return;
       setState(() {

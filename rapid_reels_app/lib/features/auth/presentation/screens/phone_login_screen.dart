@@ -430,7 +430,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                     ),
                     TextButton(
                       onPressed: () {
-                        context.push(AppRoutes.adminDashboard);
+                        context.push(AppRoutes.adminLogin);
                       },
                       child: Row(
                         mainAxisSize: MainAxisSize.min,

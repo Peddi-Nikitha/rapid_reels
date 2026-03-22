@@ -1,29 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/admin/admin_access_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/firebase/models/firebase_review_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 
-class AdminReviewsModerationScreen extends StatefulWidget {
+class AdminReviewsModerationScreen extends ConsumerStatefulWidget {
   const AdminReviewsModerationScreen({super.key});
 
   @override
-  State<AdminReviewsModerationScreen> createState() =>
+  ConsumerState<AdminReviewsModerationScreen> createState() =>
       _AdminReviewsModerationScreenState();
 }
 
 class _AdminReviewsModerationScreenState
-    extends State<AdminReviewsModerationScreen> {
+    extends ConsumerState<AdminReviewsModerationScreen> {
   final _firestoreService = FirestoreService();
 
   int _refreshKey = 0;
 
   Future<List<FirebaseReviewModel>> _fetch(String status) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('Please login first to access Review Moderation.');
-    }
     return _firestoreService.getReviewsForAdmin(status: status, limit: 200);
   }
 
@@ -134,6 +131,22 @@ class _AdminReviewsModerationScreenState
   }
 
   Widget _buildList(String status) {
+    final access = ref.watch(hasAdminPanelAccessProvider);
+    if (access == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (access == false) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text(
+            'You do not have access to Review Moderation.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
     return FutureBuilder<List<FirebaseReviewModel>>(
       key: ValueKey('reviews-$status-$_refreshKey'),
       future: _fetch(status),

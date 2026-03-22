@@ -233,6 +233,9 @@ class BookingRepository {
       cancellationReason: e.cancellationReason,
       completedAt: e.completedAt,
       metadata: null,
+      catalogueEventId: e.catalogueEventId,
+      catalogueTitle: e.catalogueTitle,
+      catalogueHeroUrl: e.catalogueHeroUrl,
     );
   }
 }

@@ -1,25 +1,73 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../../core/admin/admin_route_cache.dart';
+import '../../../../core/admin/static_admin_session_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/models/firebase_admin_model.dart';
 import '../../../../core/firebase/seed/seed_sample_providers.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/router/router_refresh_notifier.dart';
+import '../../../../core/session/user_session_cleanup.dart';
 
-class AdminDashboardScreen extends StatelessWidget {
+class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
+  ConsumerState<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
+  final _firestore = FirestoreService();
+  AdminDashboardMetrics? _metrics;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMetrics();
+  }
+
+  Future<void> _loadMetrics() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final m = await _firestore.getAdminDashboardMetrics();
+      if (mounted) {
+        setState(() {
+          _metrics = m;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  static String _formatRevenueInr(double amount) {
+    if (amount >= 100000) {
+      return '₹${(amount / 100000).toStringAsFixed(1)}L';
+    }
+    if (amount >= 1000) {
+      return '₹${(amount / 1000).toStringAsFixed(1)}K';
+    }
+    return '₹${amount.toStringAsFixed(0)}';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Mock admin statistics
-    final stats = {
-      'totalUsers': 1250,
-      'totalProviders': 45,
-      'totalBookings': 320,
-      'pendingVerifications': 8,
-      'pendingTickets': 12,
-      'totalRevenue': 2500000.0,
-      'todayBookings': 15,
-      'activeProviders': 38,
-    };
+    final stats = _metrics;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -37,6 +85,7 @@ class AdminDashboardScreen extends StatelessWidget {
             onPressed: () async {
               try {
                 await seedSampleProviders();
+                await _loadMetrics();
                 // ignore: use_build_context_synchronously
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -62,20 +111,65 @@ class AdminDashboardScreen extends StatelessWidget {
             icon: const Icon(Icons.settings),
             onPressed: () {},
           ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () async {
+              final uid = FirebaseAuth.instance.currentUser?.uid;
+              ref.read(staticAdminSessionProvider.notifier).state = false;
+              AdminRouteCache.invalidate();
+              appRouterAuthRefresh.refresh();
+              try {
+                await FirebaseAuth.instance.signOut();
+              } catch (_) {}
+              if (uid != null) {
+                invalidateUserSessionProviders(ref, uid);
+              }
+              if (context.mounted) {
+                context.go(AppRoutes.login);
+              }
+            },
+          ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: RefreshIndicator(
+        onRefresh: _loadMetrics,
+        child: _loading && stats == null
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null && stats == null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: _loadMetrics,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
             // Quick Stats Grid
             Row(
               children: [
                 Expanded(
                   child: _buildStatCard(
                     title: 'Total Users',
-                    value: '${stats['totalUsers']}',
+                    value: '${stats?.totalUsers ?? '—'}',
                     icon: Icons.people,
                     color: Colors.blue,
                     onTap: () => context.push(AppRoutes.adminUserManagement),
@@ -85,7 +179,7 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildStatCard(
                     title: 'Providers',
-                    value: '${stats['totalProviders']}',
+                    value: '${stats?.totalProviders ?? '—'}',
                     icon: Icons.business,
                     color: Colors.green,
                     onTap: () => context.push(AppRoutes.adminUserManagement),
@@ -99,7 +193,7 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildStatCard(
                     title: 'Bookings',
-                    value: '${stats['totalBookings']}',
+                    value: '${stats?.totalBookings ?? '—'}',
                     icon: Icons.event,
                     color: Colors.purple,
                     onTap: () => context.push(AppRoutes.adminBookingManagement),
@@ -109,7 +203,9 @@ class AdminDashboardScreen extends StatelessWidget {
                 Expanded(
                   child: _buildStatCard(
                     title: 'Revenue',
-                    value: '₹${((stats['totalRevenue'] as double) / 100000).toStringAsFixed(1)}L',
+                    value: stats != null
+                        ? _formatRevenueInr(stats.totalRevenueInr)
+                        : '—',
                     icon: Icons.currency_rupee,
                     color: Colors.amber,
                     onTap: () => context.push(AppRoutes.adminPaymentManagement),
@@ -140,7 +236,7 @@ class AdminDashboardScreen extends StatelessWidget {
                   context: context,
                   icon: Icons.verified_user,
                   title: 'Provider Verification',
-                  subtitle: '${stats['pendingVerifications']} pending',
+                  subtitle: '${stats?.pendingProviderVerifications ?? '—'} pending',
                   color: Colors.orange,
                   onTap: () => context.push(AppRoutes.adminProviderVerification),
                 ),
@@ -151,14 +247,6 @@ class AdminDashboardScreen extends StatelessWidget {
                   subtitle: 'Moderate reels',
                   color: Colors.red,
                   onTap: () => context.push(AppRoutes.adminContentModeration),
-                ),
-                _buildActionCard(
-                  context: context,
-                  icon: Icons.support_agent,
-                  title: 'Support Tickets',
-                  subtitle: '${stats['pendingTickets']} open',
-                  color: Colors.blue,
-                  onTap: () => context.push(AppRoutes.adminSupportTickets),
                 ),
                 _buildActionCard(
                   context: context,
@@ -208,10 +296,10 @@ class AdminDashboardScreen extends StatelessWidget {
             _buildActivityItem('New provider registration', '2 hours ago', Icons.person_add, Colors.green),
             _buildActivityItem('Booking completed', '3 hours ago', Icons.check_circle, Colors.blue),
             _buildActivityItem('Payment processed', '4 hours ago', Icons.payment, Colors.amber),
-            _buildActivityItem('Support ticket opened', '5 hours ago', Icons.support, Colors.red),
             _buildActivityItem('Provider verified', '6 hours ago', Icons.verified, Colors.purple),
-          ],
-        ),
+                      ],
+                    ),
+                  ),
       ),
     );
   }

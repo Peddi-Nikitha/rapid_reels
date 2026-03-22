@@ -58,6 +58,9 @@ class BookingFirebaseMappers {
       cancelledAt: b.cancelledAt,
       cancellationReason: b.cancellationReason,
       completedAt: b.completedAt,
+      catalogueEventId: b.catalogueEventId,
+      catalogueTitle: b.catalogueTitle,
+      catalogueHeroUrl: b.catalogueHeroUrl,
     );
   }
 }

@@ -375,7 +375,13 @@ class _PortfolioContent extends StatelessWidget {
           child: CustomButton(
             text: 'Book ${provider.businessName}',
             onPressed: () {
-              context.push(AppRoutes.packageCustomization, extra: bookingData);
+              context.push(
+                AppRoutes.catalogueSelection,
+                extra: {
+                  'provider': provider,
+                  'bookingData': bookingData,
+                },
+              );
             },
           ),
         ),

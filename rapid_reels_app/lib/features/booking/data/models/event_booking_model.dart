@@ -32,6 +32,9 @@ class EventBooking {
   final DateTime? cancelledAt;
   final String? cancellationReason;
   final DateTime? completedAt;
+  final String? catalogueEventId;
+  final String? catalogueTitle;
+  final String? catalogueHeroUrl;
 
   EventBooking({
     required this.eventId,
@@ -67,6 +70,9 @@ class EventBooking {
     this.cancelledAt,
     this.cancellationReason,
     this.completedAt,
+    this.catalogueEventId,
+    this.catalogueTitle,
+    this.catalogueHeroUrl,
   });
 
   factory EventBooking.fromMap(Map<String, dynamic> data, String id) {
@@ -113,6 +119,9 @@ class EventBooking {
       completedAt: data['completedAt'] != null && data['completedAt'] is String
           ? DateTime.parse(data['completedAt'])
           : null,
+      catalogueEventId: data['catalogueEventId'] as String?,
+      catalogueTitle: data['catalogueTitle'] as String?,
+      catalogueHeroUrl: data['catalogueHeroUrl'] as String?,
     );
   }
 
@@ -150,6 +159,9 @@ class EventBooking {
       'cancelledAt': cancelledAt?.toIso8601String(),
       'cancellationReason': cancellationReason,
       'completedAt': completedAt?.toIso8601String(),
+      'catalogueEventId': catalogueEventId,
+      'catalogueTitle': catalogueTitle,
+      'catalogueHeroUrl': catalogueHeroUrl,
     };
   }
 }

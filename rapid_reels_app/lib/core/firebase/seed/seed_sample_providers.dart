@@ -209,5 +209,38 @@ Future<void> seedSampleProviders() async {
   }
 
   await batch.commit();
+
+  // Sample catalogue event (subcollection) for demo_provider_1
+  final catRef = db
+      .collection('providers')
+      .doc('demo_provider_1')
+      .collection('catalogue_events')
+      .doc('seed_wedding_premium');
+  await catRef.set({
+    'title': 'Premium Wedding Coverage',
+    'shortDescription': 'Full-day cinematic reels with same-day highlights.',
+    'slug': 'premium-wedding',
+    'eventType': 'wedding',
+    'heroImageUrl':
+        'https://images.unsplash.com/photo-1519741497674-611481863552?w=1200',
+    'galleryImageUrls': [
+      'https://images.unsplash.com/photo-1464366400600-7160989b8a73?w=800',
+    ],
+    'longDescription':
+        'Our signature wedding bundle: multiple shooters, gimbal work, and fast-turnaround reels for your guests to share.',
+    'highlights': [
+      'Up to 6 cinematic reels',
+      'Highlight montage included',
+      'Same-day delivery for select reels',
+    ],
+    'tags': ['wedding', 'premium'],
+    'packageIds': ['pkg_gold', 'pkg_silver'],
+    'isPublished': true,
+    'sortOrder': 0,
+    'startingPrice': 24999.0,
+    'durationLabel': '4+ hours coverage',
+    'createdAt': Timestamp.fromDate(now),
+    'updatedAt': Timestamp.fromDate(now),
+  }, SetOptions(merge: true));
 }
 

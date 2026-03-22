@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 
 // My Events Provider - Stream of all user bookings
-final myEventsProvider = StreamProvider.family<List<FirebaseBookingModel>, String>(
+final myEventsProvider =
+    StreamProvider.autoDispose.family<List<FirebaseBookingModel>, String>(
   (ref, userId) {
     final service = ref.watch(firestoreServiceProvider);
     return service.streamUserBookings(userId);
@@ -12,7 +12,8 @@ final myEventsProvider = StreamProvider.family<List<FirebaseBookingModel>, Strin
 );
 
 // Filtered Events Provider
-final filteredEventsProvider = Provider.family<List<FirebaseBookingModel>, ({String userId, String? status})>(
+final filteredEventsProvider =
+    Provider.autoDispose.family<List<FirebaseBookingModel>, ({String userId, String? status})>(
   (ref, params) {
     final eventsAsync = ref.watch(myEventsProvider(params.userId));
     return eventsAsync.when(
@@ -27,7 +28,8 @@ final filteredEventsProvider = Provider.family<List<FirebaseBookingModel>, ({Str
 );
 
 // Search Events Provider
-final searchEventsProvider = Provider.family<List<FirebaseBookingModel>, ({String userId, String query})>(
+final searchEventsProvider =
+    Provider.autoDispose.family<List<FirebaseBookingModel>, ({String userId, String query})>(
   (ref, params) {
     final eventsAsync = ref.watch(myEventsProvider(params.userId));
     return eventsAsync.when(
@@ -48,7 +50,7 @@ final searchEventsProvider = Provider.family<List<FirebaseBookingModel>, ({Strin
 );
 
 // Event Statistics Provider
-final eventStatsProvider = Provider.family<Map<String, int>, String>(
+final eventStatsProvider = Provider.autoDispose.family<Map<String, int>, String>(
   (ref, userId) {
     final eventsAsync = ref.watch(myEventsProvider(userId));
     return eventsAsync.when(

@@ -9,11 +9,14 @@ import '../../core/firebase/models/firebase_reel_model.dart';
 class ReelVideoLayer extends StatefulWidget {
   final FirebaseReelModel reel;
   final bool isActive;
+  /// Called on double-tap (e.g. like). Single tap toggles play/pause.
+  final VoidCallback? onDoubleTap;
 
   const ReelVideoLayer({
     super.key,
     required this.reel,
     required this.isActive,
+    this.onDoubleTap,
   });
 
   @override
@@ -121,6 +124,7 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
                 }
                 setState(() {});
               },
+              onDoubleTap: widget.onDoubleTap,
               child: Center(
                 child: AspectRatio(
                   aspectRatio: _controller!.value.aspectRatio,
@@ -140,6 +144,7 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
                 _controller!.play();
                 setState(() {});
               },
+              onDoubleTap: widget.onDoubleTap,
               child: Center(
                 child: Container(
                   padding: const EdgeInsets.all(24),

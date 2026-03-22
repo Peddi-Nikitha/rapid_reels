@@ -291,6 +291,17 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
       children: [
         _buildActionCard(
           context: context,
+          icon: Icons.storefront_outlined,
+          title: 'Event catalogue',
+          subtitle: 'Offerings, photos, and linked packages',
+          gradient: const LinearGradient(
+            colors: [Color(0xFF11998e), Color(0xFF38ef7d)],
+          ),
+          onTap: () => context.push('${AppRoutes.providerCatalogue}/${widget.providerId}'),
+        ),
+        const SizedBox(height: 12),
+        _buildActionCard(
+          context: context,
           icon: Icons.person,
           title: 'Business Profile',
           subtitle: 'Update your provider profile',

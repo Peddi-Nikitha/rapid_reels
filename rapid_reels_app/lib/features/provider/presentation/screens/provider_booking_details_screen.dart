@@ -109,6 +109,12 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
+            if (booking.catalogueTitle != null && booking.catalogueTitle!.isNotEmpty)
+              _buildInfoCard(
+                icon: Icons.auto_awesome,
+                title: 'Catalogue offering',
+                value: booking.catalogueTitle!,
+              ),
             _buildInfoCard(
               icon: Icons.event,
               title: 'Event Type',

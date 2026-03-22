@@ -32,6 +32,10 @@ class FirebaseBookingModel {
   final String? cancellationReason;
   final DateTime? completedAt;
   final Map<String, dynamic>? metadata;
+  /// Optional: marketing offering from catalogue (`providers/{id}/catalogue_events/...`).
+  final String? catalogueEventId;
+  final String? catalogueTitle;
+  final String? catalogueHeroUrl;
 
   FirebaseBookingModel({
     required this.bookingId,
@@ -62,6 +66,9 @@ class FirebaseBookingModel {
     this.cancellationReason,
     this.completedAt,
     this.metadata,
+    this.catalogueEventId,
+    this.catalogueTitle,
+    this.catalogueHeroUrl,
   });
 
   factory FirebaseBookingModel.fromFirestore(DocumentSnapshot doc) {
@@ -99,6 +106,9 @@ class FirebaseBookingModel {
       cancellationReason: data['cancellationReason'],
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
       metadata: data['metadata'],
+      catalogueEventId: data['catalogueEventId'] as String?,
+      catalogueTitle: data['catalogueTitle'] as String?,
+      catalogueHeroUrl: data['catalogueHeroUrl'] as String?,
     );
   }
 
@@ -131,6 +141,9 @@ class FirebaseBookingModel {
       'cancellationReason': cancellationReason,
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'metadata': metadata,
+      'catalogueEventId': catalogueEventId,
+      'catalogueTitle': catalogueTitle,
+      'catalogueHeroUrl': catalogueHeroUrl,
     };
   }
 
@@ -163,6 +176,9 @@ class FirebaseBookingModel {
     String? cancellationReason,
     DateTime? completedAt,
     Map<String, dynamic>? metadata,
+    String? catalogueEventId,
+    String? catalogueTitle,
+    String? catalogueHeroUrl,
   }) {
     return FirebaseBookingModel(
       bookingId: bookingId ?? this.bookingId,
@@ -193,6 +209,9 @@ class FirebaseBookingModel {
       cancellationReason: cancellationReason ?? this.cancellationReason,
       completedAt: completedAt ?? this.completedAt,
       metadata: metadata ?? this.metadata,
+      catalogueEventId: catalogueEventId ?? this.catalogueEventId,
+      catalogueTitle: catalogueTitle ?? this.catalogueTitle,
+      catalogueHeroUrl: catalogueHeroUrl ?? this.catalogueHeroUrl,
     );
   }
 }

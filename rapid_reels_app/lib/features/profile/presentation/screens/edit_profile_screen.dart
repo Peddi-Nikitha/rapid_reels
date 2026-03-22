@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
@@ -10,6 +12,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../../../shared/widgets/custom_text_field.dart';
+import '../../../../shared/widgets/firebase_storage_image.dart';
 import '../providers/profile_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
@@ -104,30 +107,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     Center(
                       child: Stack(
                         children: [
-                          Container(
+                          SizedBox(
                             width: 120,
                             height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              image: effectiveProfileImage != null && effectiveProfileImage.isNotEmpty
-                                  ? DecorationImage(
-                                      image: NetworkImage(effectiveProfileImage),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                              color: effectiveProfileImage == null || effectiveProfileImage.isEmpty
-                                  ? AppColors.primary.withValues(alpha: 0.2)
-                                  : null,
+                            child: ClipOval(
+                              child: _buildAvatarPreview(effectiveProfileImage),
                             ),
-                            child: effectiveProfileImage == null || effectiveProfileImage.isEmpty
-                                ? const Center(
-                                    child: Icon(
-                                      Icons.person,
-                                      size: 60,
-                                      color: AppColors.primary,
-                                    ),
-                                  )
-                                : null,
                           ),
                           Positioned(
                             bottom: 0,
@@ -293,15 +278,71 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
+  /// Avoid [NetworkImage] on web for Firebase Storage URLs (CORS / statusCode 0).
+  Widget _buildAvatarPreview(String? imageUrl) {
+    final raw = imageUrl?.trim();
+    if (raw == null || raw.isEmpty) {
+      return Container(
+        color: AppColors.primary.withValues(alpha: 0.2),
+        alignment: Alignment.center,
+        child: const Icon(Icons.person, size: 60, color: AppColors.primary),
+      );
+    }
+
+    final placeholder = Container(
+      color: AppColors.primary.withValues(alpha: 0.2),
+      alignment: Alignment.center,
+      child: const SizedBox(
+        width: 32,
+        height: 32,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+    final error = Container(
+      color: AppColors.primary.withValues(alpha: 0.2),
+      alignment: Alignment.center,
+      child: const Icon(Icons.person, size: 60, color: AppColors.primary),
+    );
+
+    if (kIsWeb && isFirebaseStorageDownloadUrl(raw)) {
+      return FirebaseStorageImage(
+        url: raw,
+        fit: BoxFit.cover,
+        width: 120,
+        height: 120,
+        placeholder: placeholder,
+        errorWidget: error,
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: raw,
+      fit: BoxFit.cover,
+      width: 120,
+      height: 120,
+      memCacheWidth: 240,
+      memCacheHeight: 240,
+      placeholder: (_, __) => placeholder,
+      errorWidget: (_, __, ___) => error,
+    );
+  }
+
   Future<void> _pickAndUploadProfilePicture(ImageSource source) async {
     if (_isUploadingProfileImage) return;
 
     final currentUser = ref.read(currentUserProvider);
-    final userId = currentUser?.uid ?? '';
-    if (userId.isEmpty) return;
+    if (currentUser == null) return;
 
     setState(() => _isUploadingProfileImage = true);
     try {
+      // Refresh ID token so Storage rules see a valid request.auth (web + phone auth).
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      final userId = FirebaseAuth.instance.currentUser?.uid ?? currentUser.uid;
+      if (userId.isEmpty) {
+        setState(() => _isUploadingProfileImage = false);
+        return;
+      }
+
       final picker = ImagePicker();
       final picked = await picker.pickImage(
         source: source,
@@ -315,20 +356,20 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
       final uuid = const Uuid().v4();
       final ext = _extractFileExtension(picked);
+      final contentType = _imageContentType(ext);
 
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('user_profile_pics/$userId/$uuid.$ext');
 
+      final metadata = SettableMetadata(contentType: contentType);
+
       if (kIsWeb) {
         final Uint8List bytes = await picked.readAsBytes();
-        await storageRef.putData(
-          bytes,
-          SettableMetadata(contentType: 'image/$ext'),
-        );
+        await storageRef.putData(bytes, metadata);
       } else {
         final file = File(picked.path);
-        await storageRef.putFile(file);
+        await storageRef.putFile(file, metadata);
       }
       final downloadUrl = await storageRef.getDownloadURL();
 
@@ -353,6 +394,26 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     return source.substring(dot + 1).toLowerCase();
   }
 
+  /// Valid MIME type for Storage metadata (avoids weak types like image/jpg).
+  String _imageContentType(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      case 'heic':
+      case 'heif':
+        return 'image/heic';
+      default:
+        return 'image/jpeg';
+    }
+  }
+
   Future<void> _saveChanges(String userId) async {
     if (!_formKey.currentState!.validate() || userId.isEmpty) return;
     final success = await ref.read(authNotifierProvider.notifier).updateUserProfile(
@@ -374,6 +435,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     if (mounted) {
       _showSnackBar(success ? 'Profile updated successfully!' : 'Failed to update profile');
       if (success) {
+        ref.invalidate(userProfileProvider(userId));
         _pendingProfileImageUrl = null;
         Navigator.pop(context);
       }

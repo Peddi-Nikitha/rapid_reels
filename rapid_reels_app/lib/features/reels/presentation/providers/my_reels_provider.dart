@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../profile/presentation/providers/profile_provider.dart';
 
 // My Reels Provider - Future provider for user reels
-final myReelsProvider = FutureProvider.family<List<FirebaseReelModel>, String>(
+final myReelsProvider =
+    FutureProvider.autoDispose.family<List<FirebaseReelModel>, String>(
   (ref, userId) {
     final service = ref.watch(firestoreServiceProvider);
     return service.getUserReels(userId);
@@ -12,7 +12,8 @@ final myReelsProvider = FutureProvider.family<List<FirebaseReelModel>, String>(
 );
 
 // Filtered Reels Provider
-final filteredReelsProvider = Provider.family<List<FirebaseReelModel>, ({String userId, String? status, String? eventType})>(
+final filteredReelsProvider =
+    Provider.autoDispose.family<List<FirebaseReelModel>, ({String userId, String? status, String? eventType})>(
   (ref, params) {
     final reelsAsync = ref.watch(myReelsProvider(params.userId));
     return reelsAsync.when(
@@ -33,7 +34,7 @@ final filteredReelsProvider = Provider.family<List<FirebaseReelModel>, ({String 
 );
 
 // Reel Statistics Provider
-final reelStatsProvider = Provider.family<Map<String, dynamic>, String>(
+final reelStatsProvider = Provider.autoDispose.family<Map<String, dynamic>, String>(
   (ref, userId) {
     final reelsAsync = ref.watch(myReelsProvider(userId));
     return reelsAsync.when(

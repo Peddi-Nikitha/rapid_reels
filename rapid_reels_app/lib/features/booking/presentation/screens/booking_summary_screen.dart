@@ -92,6 +92,9 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                   _buildSection(
                     'Event Details',
                     [
+                      if (widget.bookingData['catalogueTitle'] != null &&
+                          widget.bookingData['catalogueTitle'].toString().isNotEmpty)
+                        _buildDetailRow('Offering', widget.bookingData['catalogueTitle'].toString()),
                       _buildDetailRow('Event Name', widget.bookingData['eventName']),
                       _buildDetailRow('Event Type', _formatEventType(widget.bookingData['eventType'])),
                       _buildDetailRow(

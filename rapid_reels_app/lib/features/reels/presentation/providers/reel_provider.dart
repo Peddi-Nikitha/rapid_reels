@@ -5,7 +5,8 @@ import '../../../../core/firebase/services/firestore_service.dart';
 final _firestoreService = FirestoreService();
 
 // User Reels Provider
-final userReelsProvider = FutureProvider.family<List<FirebaseReelModel>, String>((ref, userId) async {
+final userReelsProvider =
+    FutureProvider.autoDispose.family<List<FirebaseReelModel>, String>((ref, userId) async {
   return _firestoreService.getUserReels(userId);
 });
 

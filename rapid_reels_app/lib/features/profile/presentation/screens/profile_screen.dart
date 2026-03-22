@@ -1,8 +1,11 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../shared/widgets/firebase_storage_image.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 
@@ -77,7 +80,8 @@ class ProfileScreen extends ConsumerWidget {
           
           final email = userProfile?.email ?? currentUser.email;
           final phoneNumber = userProfile?.phoneNumber ?? currentUser.phoneNumber;
-          final profileImage = userProfile?.profileImage ?? currentUser.photoURL;
+          final profileImageRaw = userProfile?.profileImage ?? currentUser.photoURL;
+          final profileImageUrl = _resolveProfileImageUrl(profileImageRaw);
           
           // Get initials for profile picture
           String getInitials(String name) {
@@ -118,33 +122,9 @@ class ProfileScreen extends ConsumerWidget {
                     children: [
                       Stack(
                         children: [
-                          Container(
-                            width: 100,
-                            height: 100,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              image: profileImage != null
-                                  ? DecorationImage(
-                                      image: NetworkImage(profileImage),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                              color: profileImage == null
-                                  ? AppColors.primary.withValues(alpha: 0.2)
-                                  : null,
-                            ),
-                            child: profileImage == null
-                                ? Center(
-                                    child: Text(
-                                      initials,
-                                      style: const TextStyle(
-                                        fontSize: 40,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  )
-                                : null,
+                          _ProfileAvatar(
+                            imageUrl: profileImageUrl,
+                            initials: initials,
                           ),
                           Positioned(
                             bottom: 0,
@@ -266,12 +246,6 @@ class ProfileScreen extends ConsumerWidget {
                             title: 'My Venues',
                             subtitle: 'Manage saved venues and addresses',
                             onTap: () => context.push(AppRoutes.savedVenues),
-                          ),
-                          _buildMenuItem(
-                            icon: Icons.support_agent,
-                            title: 'My Tickets',
-                            subtitle: 'View and manage your tickets',
-                            onTap: () => context.push(AppRoutes.myTickets),
                           ),
                         ],
                       ),
@@ -508,7 +482,7 @@ class ProfileScreen extends ConsumerWidget {
               Navigator.pop(context);
               // Sign out using auth notifier
               final authNotifier = ref.read(authNotifierProvider.notifier);
-              await authNotifier.signOut();
+              await authNotifier.signOut(ref);
               // Navigate to login page
               if (context.mounted) {
                 context.go(AppRoutes.login);
@@ -523,5 +497,97 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Firestore sometimes stores `""`; invalid strings break [NetworkImage] without fallback.
+String? _resolveProfileImageUrl(String? raw) {
+  if (raw == null) return null;
+  final s = raw.trim();
+  if (s.isEmpty) return null;
+  final uri = Uri.tryParse(s);
+  if (uri == null || !uri.hasScheme) return null;
+  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  return s;
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({
+    required this.imageUrl,
+    required this.initials,
+  });
+
+  final String? imageUrl;
+  final String initials;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl;
+    final hasUrl = url != null && url.isNotEmpty;
+
+    final placeholder = Container(
+      color: AppColors.primary.withValues(alpha: 0.2),
+      alignment: Alignment.center,
+      child: const SizedBox(
+        width: 28,
+        height: 28,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+    );
+
+    final errorWidget = _profileInitialsCircle(initials);
+
+    Widget imageChild;
+    if (!hasUrl) {
+      imageChild = errorWidget;
+    } else {
+      final u = url;
+      if (kIsWeb && isFirebaseStorageDownloadUrl(u)) {
+        // Flutter web: raw Image.network hits CORS on Storage; SDK download works.
+        imageChild = FirebaseStorageImage(
+          url: u,
+          fit: BoxFit.cover,
+          width: 100,
+          height: 100,
+          placeholder: placeholder,
+          errorWidget: errorWidget,
+        );
+      } else {
+        imageChild = CachedNetworkImage(
+        imageUrl: u,
+        fit: BoxFit.cover,
+        width: 100,
+        height: 100,
+        memCacheWidth: 200,
+        memCacheHeight: 200,
+        fadeInDuration: const Duration(milliseconds: 150),
+        placeholder: (_, __) => placeholder,
+        errorWidget: (_, __, ___) => errorWidget,
+      );
+      }
+    }
+
+    return SizedBox(
+      width: 100,
+      height: 100,
+      child: ClipOval(child: imageChild),
+    );
+  }
+}
+
+Widget _profileInitialsCircle(String initials) {
+  return Container(
+    width: 100,
+    height: 100,
+    color: AppColors.primary.withValues(alpha: 0.2),
+    alignment: Alignment.center,
+    child: Text(
+      initials,
+      style: const TextStyle(
+        fontSize: 40,
+        fontWeight: FontWeight.bold,
+        color: AppColors.primary,
+      ),
+    ),
+  );
 }
 

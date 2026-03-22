@@ -259,6 +259,23 @@ class AdminBookingStats {
   }
 }
 
+/// Live counts for the admin dashboard (Firestore aggregates).
+class AdminDashboardMetrics {
+  final int totalUsers;
+  final int totalProviders;
+  final int totalBookings;
+  final double totalRevenueInr;
+  final int pendingProviderVerifications;
+
+  const AdminDashboardMetrics({
+    required this.totalUsers,
+    required this.totalProviders,
+    required this.totalBookings,
+    required this.totalRevenueInr,
+    required this.pendingProviderVerifications,
+  });
+}
+
 /// Firebase Support Ticket Model
 /// Collection: support_tickets
 /// Document ID: ticketId

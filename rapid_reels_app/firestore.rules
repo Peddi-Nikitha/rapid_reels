@@ -56,6 +56,12 @@ service cloud.firestore {
       
       // Admin can read/write any provider
       allow read, write: if isAdmin();
+
+      // Catalogue events (marketing offerings)
+      match /catalogue_events/{catalogueEventId} {
+        allow read: if resource.data.isPublished == true || isOwner(providerId) || isAdmin();
+        allow create, update, delete: if isOwner(providerId) || isAdmin();
+      }
     }
     
     // ==================== BOOKINGS COLLECTION ====================
@@ -87,15 +93,40 @@ service cloud.firestore {
       // Provider can read reels for their bookings
       allow read: if isOwner(resource.data.providerId);
       
-      // Public reels can be read by anyone
-      allow read: if resource.data.isPublic == true && resource.data.status == 'delivered';
+      // Public reels (discover / feed)
+      allow read: if resource.data.isPublic == true &&
+        resource.data.status in ['delivered', 'published'];
       
       // Provider can create/update reels for their bookings
       allow create: if isAuthenticated() && request.resource.data.providerId == request.auth.uid;
       allow update: if isOwner(resource.data.providerId);
+
+      // Authenticated users can update engagement (likes, analytics) on public reels only
+      allow update: if isAuthenticated() &&
+        resource.data.isPublic == true &&
+        resource.data.status in ['delivered', 'published'] &&
+        request.resource.data.customerId == resource.data.customerId &&
+        request.resource.data.providerId == resource.data.providerId &&
+        request.resource.data.bookingId == resource.data.bookingId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy', 'analytics']);
       
       // Admin can read/write any reel
       allow read, write: if isAdmin();
+
+      // Comments subcollection (reel comment threads)
+      match /comments/{commentId} {
+        allow read: if
+          get(/databases/$(database)/documents/reels/$(reelId)).data.isPublic == true &&
+          get(/databases/$(database)/documents/reels/$(reelId)).data.status in ['delivered', 'published'] ||
+          isOwner(get(/databases/$(database)/documents/reels/$(reelId)).data.customerId) ||
+          isOwner(get(/databases/$(database)/documents/reels/$(reelId)).data.providerId) ||
+          isAdmin();
+        allow create: if isAuthenticated() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.reelId == reelId &&
+          get(/databases/$(database)/documents/reels/$(reelId)).data.isPublic == true &&
+          get(/databases/$(database)/documents/reels/$(reelId)).data.status in ['delivered', 'published'];
+      }
     }
     
     // ==================== REVIEWS COLLECTION ====================

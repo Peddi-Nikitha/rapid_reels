@@ -10,6 +10,7 @@ import '../models/firebase_notification_model.dart';
 import '../models/firebase_offer_model.dart';
 import '../models/firebase_live_event_model.dart';
 import '../models/firebase_admin_model.dart';
+import '../models/firebase_catalogue_event_model.dart';
 
 /// Comprehensive Firestore Service
 /// Handles all database operations for Rapid Reels
@@ -186,14 +187,15 @@ class FirestoreService {
     try {
       Query query = _firestore.collection('providers');
 
+      // Equality filters first (order matches firestore.indexes.json composites), then range on `rating`.
+      if (isActive != null) {
+        query = query.where('isActive', isEqualTo: isActive);
+      }
       if (city != null) {
         query = query.where('location.city', isEqualTo: city);
       }
       if (isVerified != null) {
         query = query.where('isVerified', isEqualTo: isVerified);
-      }
-      if (isActive != null) {
-        query = query.where('isActive', isEqualTo: isActive);
       }
       if (verificationStatus != null) {
         query = query.where('verificationStatus', isEqualTo: verificationStatus);
@@ -298,6 +300,85 @@ class FirestoreService {
       await _firestore.collection('providers').doc(providerId).update(updates);
     } catch (e) {
       throw Exception('Error updating provider verification status: $e');
+    }
+  }
+
+  // ==================== PROVIDER CATALOGUE EVENTS ====================
+  /// Subcollection: `providers/{providerId}/catalogue_events/{catalogueEventId}`
+
+  CollectionReference<Map<String, dynamic>> _catalogueCollection(String providerId) {
+    return _firestore.collection('providers').doc(providerId).collection('catalogue_events');
+  }
+
+  Stream<List<FirebaseCatalogueEventModel>> streamCatalogueEvents(String providerId) {
+    return _catalogueCollection(providerId).snapshots().map((snapshot) {
+      final list =
+          snapshot.docs.map((doc) => FirebaseCatalogueEventModel.fromFirestore(doc, providerId)).toList();
+      list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return list;
+    });
+  }
+
+  Future<List<FirebaseCatalogueEventModel>> getCatalogueEvents(String providerId) async {
+    try {
+      final snapshot = await _catalogueCollection(providerId).get();
+      final list =
+          snapshot.docs.map((doc) => FirebaseCatalogueEventModel.fromFirestore(doc, providerId)).toList();
+      list.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return list;
+    } catch (e) {
+      throw Exception('Error getting catalogue events: $e');
+    }
+  }
+
+  Future<FirebaseCatalogueEventModel?> getCatalogueEvent(
+    String providerId,
+    String catalogueEventId,
+  ) async {
+    try {
+      final doc = await _catalogueCollection(providerId).doc(catalogueEventId).get();
+      if (!doc.exists) return null;
+      return FirebaseCatalogueEventModel.fromFirestore(doc, providerId);
+    } catch (e) {
+      throw Exception('Error getting catalogue event: $e');
+    }
+  }
+
+  /// Creates new doc when [model.catalogueEventId] is empty; otherwise overwrites.
+  Future<String> upsertCatalogueEvent(String providerId, FirebaseCatalogueEventModel model) async {
+    try {
+      final col = _catalogueCollection(providerId);
+      if (model.catalogueEventId.isEmpty) {
+        final ref = await col.add(model.toFirestore());
+        return ref.id;
+      }
+      await col.doc(model.catalogueEventId).set(model.toFirestore(), SetOptions(merge: true));
+      return model.catalogueEventId;
+    } catch (e) {
+      throw Exception('Error saving catalogue event: $e');
+    }
+  }
+
+  Future<void> deleteCatalogueEvent(String providerId, String catalogueEventId) async {
+    try {
+      await _catalogueCollection(providerId).doc(catalogueEventId).delete();
+    } catch (e) {
+      throw Exception('Error deleting catalogue event: $e');
+    }
+  }
+
+  Future<void> updateCatalogueEventPublish(
+    String providerId,
+    String catalogueEventId,
+    bool isPublished,
+  ) async {
+    try {
+      await _catalogueCollection(providerId).doc(catalogueEventId).update({
+        'isPublished': isPublished,
+        'updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      throw Exception('Error updating catalogue publish flag: $e');
     }
   }
 
@@ -588,6 +669,121 @@ class FirestoreService {
     }
   }
 
+  /// Toggle like for a reel by user.
+  /// Returns true when reel is liked after operation, false when unliked.
+  Future<bool> toggleReelLike({
+    required String reelId,
+    required String userId,
+  }) async {
+    try {
+      final docRef = _firestore.collection('reels').doc(reelId);
+      return await _firestore.runTransaction<bool>((transaction) async {
+        final snapshot = await transaction.get(docRef);
+        if (!snapshot.exists) {
+          throw Exception('Reel not found');
+        }
+        final data = snapshot.data() ?? <String, dynamic>{};
+        final analytics = Map<String, dynamic>.from(
+          data['analytics'] as Map<String, dynamic>? ?? const {},
+        );
+        final likedBy = List<String>.from(
+          data['likedBy'] as List<dynamic>? ?? const [],
+        );
+
+        final isLiked = likedBy.contains(userId);
+        if (isLiked) {
+          likedBy.remove(userId);
+          final currentLikes = ((analytics['likes'] ?? 0) as num).toInt();
+          transaction.update(docRef, {
+            'likedBy': likedBy,
+            'analytics.likes': currentLikes > 0
+                ? FieldValue.increment(-1)
+                : 0,
+          });
+          return false;
+        } else {
+          likedBy.add(userId);
+          transaction.update(docRef, {
+            'likedBy': likedBy,
+            'analytics.likes': FieldValue.increment(1),
+          });
+          return true;
+        }
+      });
+    } catch (e) {
+      throw Exception('Error toggling reel like: $e');
+    }
+  }
+
+  /// Add a comment to a reel and increment comment count.
+  Future<void> addReelComment({
+    required String reelId,
+    required String userId,
+    required String commentText,
+  }) async {
+    try {
+      final cleanText = commentText.trim();
+      if (cleanText.isEmpty) return;
+
+      final reelRef = _firestore.collection('reels').doc(reelId);
+      final commentRef = reelRef.collection('comments').doc();
+
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(reelRef);
+        if (!snapshot.exists) {
+          throw Exception('Reel not found');
+        }
+        transaction.set(commentRef, {
+          'commentId': commentRef.id,
+          'reelId': reelId,
+          'userId': userId,
+          'text': cleanText,
+          'createdAt': Timestamp.now(),
+        });
+        transaction.update(reelRef, {
+          'analytics.comments': FieldValue.increment(1),
+        });
+      });
+    } catch (e) {
+      throw Exception('Error adding reel comment: $e');
+    }
+  }
+
+  /// Increment share count for a reel.
+  Future<void> incrementReelShares(String reelId) async {
+    try {
+      await _firestore.collection('reels').doc(reelId).update({
+        'analytics.shares': FieldValue.increment(1),
+      });
+    } catch (e) {
+      throw Exception('Error incrementing reel shares: $e');
+    }
+  }
+
+  /// Live updates for a single reel document (analytics, likedBy, etc.).
+  Stream<FirebaseReelModel?> streamReel(String reelId) {
+    return _firestore.collection('reels').doc(reelId).snapshots().map(
+          (doc) => doc.exists ? FirebaseReelModel.fromFirestore(doc) : null,
+        );
+  }
+
+  /// Comments on a reel, newest first.
+  Stream<List<ReelCommentDocument>> streamReelComments(
+    String reelId, {
+    int limit = 50,
+  }) {
+    return _firestore
+        .collection('reels')
+        .doc(reelId)
+        .collection('comments')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (snap) => snap.docs.map(ReelCommentDocument.fromFirestore).toList(),
+        );
+  }
+
   // ==================== REVIEWS ====================
 
   /// Create review
@@ -641,13 +837,14 @@ class FirestoreService {
     int? limit,
   }) async {
     try {
-      Query query = _firestore.collection('reviews').orderBy('createdAt', descending: true);
+      Query query = _firestore.collection('reviews');
       if (status != null) {
         query = query.where('status', isEqualTo: status);
       }
       if (isPublic != null) {
         query = query.where('isPublic', isEqualTo: isPublic);
       }
+      query = query.orderBy('createdAt', descending: true);
       if (limit != null) {
         query = query.limit(limit);
       }
@@ -1038,6 +1235,49 @@ class FirestoreService {
       return null;
     } catch (e) {
       throw Exception('Error getting admin analytics: $e');
+    }
+  }
+
+  /// Live dashboard stats: user/provider/booking counts, sum of booking `payment.totalAmount`, pending verifications.
+  Future<AdminDashboardMetrics> getAdminDashboardMetrics() async {
+    try {
+      final counts = await Future.wait([
+        _firestore.collection('users').count().get(),
+        _firestore.collection('providers').count().get(),
+        _firestore.collection('bookings').count().get(),
+        _firestore
+            .collection('providers')
+            .where('verificationStatus', isEqualTo: 'pending')
+            .count()
+            .get(),
+      ]);
+
+      double totalRevenue = 0;
+      try {
+        final revAgg = await _firestore
+            .collection('bookings')
+            .aggregate(sum('payment.totalAmount'))
+            .get();
+        totalRevenue = revAgg.getSum('payment.totalAmount') ?? 0.0;
+      } catch (_) {
+        final snap = await _firestore.collection('bookings').get();
+        for (final doc in snap.docs) {
+          final payment = doc.data()['payment'];
+          if (payment is Map<String, dynamic>) {
+            totalRevenue += (payment['totalAmount'] ?? 0.0).toDouble();
+          }
+        }
+      }
+
+      return AdminDashboardMetrics(
+        totalUsers: counts[0].count ?? 0,
+        totalProviders: counts[1].count ?? 0,
+        totalBookings: counts[2].count ?? 0,
+        totalRevenueInr: totalRevenue,
+        pendingProviderVerifications: counts[3].count ?? 0,
+      );
+    } catch (e) {
+      throw Exception('Error loading admin dashboard metrics: $e');
     }
   }
 

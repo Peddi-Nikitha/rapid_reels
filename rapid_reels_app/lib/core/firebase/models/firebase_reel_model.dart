@@ -27,6 +27,8 @@ class FirebaseReelModel {
   final DateTime? deliveredAt;
   final DateTime? publishedAt;
   final Map<String, dynamic>? editingDetails;
+  /// User IDs who liked this reel (Firestore `likedBy`). Used for heart state after reload.
+  final List<String> likedBy;
 
   FirebaseReelModel({
     required this.reelId,
@@ -51,7 +53,11 @@ class FirebaseReelModel {
     this.deliveredAt,
     this.publishedAt,
     this.editingDetails,
+    this.likedBy = const [],
   });
+
+  bool isLikedByUser(String? userId) =>
+      userId != null && userId.isNotEmpty && likedBy.contains(userId);
 
   // Display helpers for UI compatibility
   int get views => analytics.views;
@@ -85,6 +91,9 @@ class FirebaseReelModel {
       deliveredAt: (data['deliveredAt'] as Timestamp?)?.toDate(),
       publishedAt: (data['publishedAt'] as Timestamp?)?.toDate(),
       editingDetails: data['editingDetails'],
+      likedBy: data['likedBy'] != null
+          ? List<String>.from(data['likedBy'] as List<dynamic>)
+          : const [],
     );
   }
 
@@ -111,6 +120,7 @@ class FirebaseReelModel {
       'deliveredAt': deliveredAt != null ? Timestamp.fromDate(deliveredAt!) : null,
       'publishedAt': publishedAt != null ? Timestamp.fromDate(publishedAt!) : null,
       'editingDetails': editingDetails,
+      'likedBy': likedBy,
     };
   }
 
@@ -137,6 +147,7 @@ class FirebaseReelModel {
     DateTime? deliveredAt,
     DateTime? publishedAt,
     Map<String, dynamic>? editingDetails,
+    List<String>? likedBy,
   }) {
     return FirebaseReelModel(
       reelId: reelId ?? this.reelId,
@@ -161,6 +172,35 @@ class FirebaseReelModel {
       deliveredAt: deliveredAt ?? this.deliveredAt,
       publishedAt: publishedAt ?? this.publishedAt,
       editingDetails: editingDetails ?? this.editingDetails,
+      likedBy: likedBy ?? this.likedBy,
+    );
+  }
+}
+
+/// Comment document under `reels/{reelId}/comments/{commentId}`.
+class ReelCommentDocument {
+  final String commentId;
+  final String reelId;
+  final String userId;
+  final String text;
+  final DateTime createdAt;
+
+  ReelCommentDocument({
+    required this.commentId,
+    required this.reelId,
+    required this.userId,
+    required this.text,
+    required this.createdAt,
+  });
+
+  factory ReelCommentDocument.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>? ?? {};
+    return ReelCommentDocument(
+      commentId: data['commentId'] as String? ?? doc.id,
+      reelId: data['reelId'] as String? ?? '',
+      userId: data['userId'] as String? ?? '',
+      text: data['text'] as String? ?? '',
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 }

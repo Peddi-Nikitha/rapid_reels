@@ -1,15 +1,15 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/adapters/firebase_provider_adapter.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/reel_video_layer.dart';
-import '../../../../shared/widgets/reel_viewer_screen.dart';
+import '../../../reels/presentation/reel_engagement.dart';
 
 /// Main Discover Screen - TikTok-style vertical feed
 class MainDiscoverScreen extends ConsumerStatefulWidget {
@@ -25,6 +25,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
   late PageController _pageController;
   int _currentIndex = 0;
   final Map<String, bool> _followedCreators = {};
+  final Map<String, bool> _likedReels = {};
   final _firestoreService = FirestoreService();
   List<FirebaseReelModel> _reels = [];
   final Map<String, FirebaseProviderModel?> _providerCache = {};
@@ -70,6 +71,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
           _reels = reels;
           _providerCache.addAll(cache);
           _isLoading = false;
+          _seedLikesFromReels();
         });
       }
     } catch (e) {
@@ -77,24 +79,21 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
     }
   }
 
-  void _viewReel(FirebaseReelModel reel) {
-    // Same as provider: use videoUrl, fallback to thumbnailUrl if it's a video (portfolio uploads)
-    final videoUrl = reel.videoUrl.trim().isNotEmpty
-        ? reel.videoUrl.trim()
-        : (reel.thumbnailUrl.trim().isNotEmpty &&
-                (reel.thumbnailUrl.contains('firebasestorage') ||
-                    reel.thumbnailUrl.contains('.mp4') ||
-                    reel.thumbnailUrl.contains('.mov')))
-            ? reel.thumbnailUrl.trim()
-            : reel.videoUrl;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ReelViewerScreen(
-          videoUrl: videoUrl,
-          title: reel.title,
-        ),
-      ),
-    );
+  void _seedLikesFromReels() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    for (final r in _reels) {
+      _likedReels[r.reelId] = uid != null && r.isLikedByUser(uid);
+    }
+  }
+
+  void _mergeReel(FirebaseReelModel? fresh) {
+    if (fresh == null || !mounted) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    setState(() {
+      final i = _reels.indexWhere((r) => r.reelId == fresh.reelId);
+      if (i >= 0) _reels[i] = fresh;
+      if (uid != null) _likedReels[fresh.reelId] = fresh.isLikedByUser(uid);
+    });
   }
 
   @override
@@ -114,35 +113,6 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: _buildPremiumTabBar(),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _showSearchBottomSheet(),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      width: 0.5,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.search_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: PageView.builder(
         controller: _pageController,
@@ -155,10 +125,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
               child: Text('No reels yet', style: TextStyle(color: Colors.white70)),
             );
           }
-          return GestureDetector(
-            onTap: () => _viewReel(_reels[index]),
-            child: _buildReelPage(_reels[index], index),
-          );
+          return _buildReelPage(_reels[index], index);
         },
       ),
     );
@@ -168,29 +135,52 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
     final provider = _providerCache[reel.providerId];
     final isFollowing = _followedCreators[reel.providerId] ?? false;
     final isActive = index == _currentIndex;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final reelId = reel.reelId;
+    final isLiked = _likedReels.containsKey(reelId)
+        ? _likedReels[reelId]!
+        : (uid != null && reel.isLikedByUser(uid));
 
     return Stack(
       fit: StackFit.expand,
       children: [
         // Video layer - plays when active (visible), autoplay by default
         Positioned.fill(
-          child: ReelVideoLayer(reel: reel, isActive: isActive),
+          child: ReelVideoLayer(
+            reel: reel,
+            isActive: isActive,
+            onDoubleTap: () {
+              ReelEngagement.toggleLike(
+                context: context,
+                userId: uid,
+                reel: reel,
+                firestore: _firestoreService,
+                previousLiked: isLiked,
+                setLikedDisplay: (liked) {
+                  setState(() => _likedReels[reelId] = liked);
+                },
+                onSynced: _mergeReel,
+              );
+            },
+          ),
         ),
 
-        // Gradient Overlay
+        // Gradient Overlay (pass taps through to video for play/pause & double-tap like)
         Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.0),
-                  Colors.black.withValues(alpha: 0.3),
-                  Colors.black.withValues(alpha: 0.75),
-                ],
-                stops: const [0.0, 0.4, 0.7, 1.0],
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.0),
+                    Colors.black.withValues(alpha: 0.3),
+                    Colors.black.withValues(alpha: 0.75),
+                  ],
+                  stops: const [0.0, 0.4, 0.7, 1.0],
+                ),
               ),
             ),
           ),
@@ -222,13 +212,8 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                   if (provider != null)
                     GestureDetector(
                       onTap: () {
-                        context.push(
-                          AppRoutes.providerPortfolio,
-                          extra: {
-                            'provider': serviceProviderFromFirebase(provider),
-                            'bookingData': {},
-                          },
-                        );
+                        if (reel.providerId.isEmpty) return;
+                        context.push('${AppRoutes.providerDetails}/${reel.providerId}');
                       },
                       child: Row(
                         children: [
@@ -493,7 +478,10 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                     children: [
                       _buildStatChip(Icons.visibility_outlined, _formatCount(reel.views)),
                       const SizedBox(width: 10),
-                      _buildStatChip(Icons.favorite_border_rounded, _formatCount(reel.likes)),
+                      _buildStatChip(
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        _formatCount(reel.likes),
+                      ),
                       const SizedBox(width: 10),
                       _buildStatChip(Icons.share_rounded, _formatCount(reel.shares)),
                     ],
@@ -512,27 +500,51 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildActionButton(
-                Icons.favorite_border_rounded,
-                '${(reel.views * 0.12).toInt()}',
-                AppColors.primary,
+                icon: isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                label: _formatCount(reel.likes),
+                iconColor: isLiked ? const Color(0xFFFF3040) : Colors.white,
+                onTap: () {
+                  ReelEngagement.toggleLike(
+                    context: context,
+                    userId: uid,
+                    reel: reel,
+                    firestore: _firestoreService,
+                    previousLiked: isLiked,
+                    setLikedDisplay: (liked) {
+                      setState(() => _likedReels[reelId] = liked);
+                    },
+                    onSynced: _mergeReel,
+                  );
+                },
               ),
               const SizedBox(height: 20),
               _buildActionButton(
-                Icons.comment_rounded,
-                '${(reel.views * 0.08).toInt()}',
-                Colors.white,
+                icon: Icons.comment_rounded,
+                label: _formatCount(reel.analytics.comments),
+                iconColor: Colors.white,
+                onTap: () {
+                  ReelEngagement.showCommentsSheet(
+                    context: context,
+                    reelId: reelId,
+                    userId: uid,
+                    firestore: _firestoreService,
+                    onSynced: _mergeReel,
+                  );
+                },
               ),
               const SizedBox(height: 20),
               _buildActionButton(
-                Icons.share_rounded,
-                'Share',
-                Colors.white,
-              ),
-              const SizedBox(height: 20),
-              _buildActionButton(
-                Icons.bookmark_border_rounded,
-                'Save',
-                Colors.white,
+                icon: Icons.share_rounded,
+                label: 'Share',
+                iconColor: Colors.white,
+                onTap: () {
+                  ReelEngagement.shareReel(
+                    context: context,
+                    reel: reel,
+                    firestore: _firestoreService,
+                    onSynced: _mergeReel,
+                  );
+                },
               ),
             ],
           ),
@@ -579,11 +591,16 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color) {
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -608,7 +625,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
               ),
               child: Icon(
                 icon,
-                color: color,
+                color: iconColor,
                 size: 20,
               ),
             ),
@@ -754,138 +771,5 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
     return count.toString();
   }
 
-  void _showSearchBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.9,
-          minChildSize: 0.5,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) {
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Search bar
-                  TextField(
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: 'Search reels, providers, events...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: AppColors.background,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Trending Searches',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: ListView(
-                      controller: scrollController,
-                      children: [
-                        _buildTrendingSearchItem('Wedding Reels', Icons.favorite, '1.2K'),
-                        _buildTrendingSearchItem('Birthday Celebrations', Icons.cake, '890'),
-                        _buildTrendingSearchItem('Corporate Events', Icons.business, '654'),
-                        _buildTrendingSearchItem('Engagement Ceremony', Icons.diamond, '543'),
-                        _buildTrendingSearchItem('Brand Collaborations', Icons.handshake, '432'),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Popular Providers',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildProviderSearchItem('Creative Reels Studio', '4.8', '250+ events'),
-                        _buildProviderSearchItem('Moment Makers', '4.9', '180+ events'),
-                        _buildProviderSearchItem('RapidCut Productions', '4.7', '320+ events'),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildTrendingSearchItem(String title, IconData icon, String count) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: AppColors.primary, size: 24),
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      trailing: Text(
-        '$count reels',
-        style: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 12,
-        ),
-      ),
-      onTap: () {
-        Navigator.pop(context);
-      },
-    );
-  }
-
-  Widget _buildProviderSearchItem(String name, String rating, String events) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: AppColors.primary,
-        child: Text(
-          name.substring(0, 1),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      title: Text(
-        name,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Row(
-        children: [
-          Icon(Icons.star, size: 14, color: Colors.amber),
-          const SizedBox(width: 4),
-          Text(rating),
-          const SizedBox(width: 12),
-          Text(events),
-        ],
-      ),
-      onTap: () {
-        Navigator.pop(context);
-      },
-    );
-  }
 }
 

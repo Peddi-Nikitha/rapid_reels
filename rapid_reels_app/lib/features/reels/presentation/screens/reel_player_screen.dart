@@ -1,6 +1,10 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
@@ -8,6 +12,7 @@ import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/theme/text_styles.dart';
 import '../../../../shared/widgets/reel_video_layer.dart';
+import '../reel_engagement.dart';
 
 class ReelPlayerScreen extends StatefulWidget {
   final String reelId;
@@ -28,24 +33,54 @@ class ReelPlayerScreen extends StatefulWidget {
 class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
   late PageController _pageController;
   late int _currentIndex;
+  late List<FirebaseReelModel> _reels;
   final Map<String, bool> _likedReels = {};
-  final Map<String, int> _commentIncrements = {};
-  final Map<String, bool> _sharedReels = {};
   final Map<String, bool> _followedCreators = {};
   final _firestoreService = FirestoreService();
   final Map<String, FirebaseProviderModel?> _providerCache = {};
+  final Set<String> _countedViewReelIds = {};
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex.clamp(0, (widget.reels.length - 1).clamp(0, 999));
+    _reels = List<FirebaseReelModel>.from(widget.reels);
+    _currentIndex = widget.initialIndex.clamp(0, (_reels.length - 1).clamp(0, 999));
     _pageController = PageController(initialPage: _currentIndex);
+    _seedLikesFromReels();
     _loadProviders();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_reels.isNotEmpty) _recordViewForReel(_reels[_currentIndex].reelId);
+    });
+  }
+
+  void _seedLikesFromReels() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    for (final r in _reels) {
+      _likedReels[r.reelId] = uid != null && r.isLikedByUser(uid);
+    }
+  }
+
+  void _mergeReel(FirebaseReelModel? fresh) {
+    if (fresh == null || !mounted) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    setState(() {
+      final i = _reels.indexWhere((r) => r.reelId == fresh.reelId);
+      if (i >= 0) _reels[i] = fresh;
+      if (uid != null) _likedReels[fresh.reelId] = fresh.isLikedByUser(uid);
+    });
+  }
+
+  void _recordViewForReel(String reelId) {
+    if (_countedViewReelIds.contains(reelId)) return;
+    _countedViewReelIds.add(reelId);
+    unawaited(
+      _firestoreService.incrementReelViews(reelId).catchError((_) {}),
+    );
   }
 
   Future<void> _loadProviders() async {
-    if (widget.reels.isEmpty) return;
-    final providerIds = widget.reels.map((r) => r.providerId).toSet().toList();
+    if (_reels.isEmpty) return;
+    final providerIds = _reels.map((r) => r.providerId).toSet().toList();
     for (final id in providerIds) {
       final p = await _firestoreService.getProvider(id);
       if (mounted) _providerCache[id] = p;
@@ -61,7 +96,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.reels.isEmpty) {
+    if (_reels.isEmpty) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: const Center(
@@ -78,43 +113,65 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
           setState(() {
             _currentIndex = index;
           });
+          if (index >= 0 && index < _reels.length) {
+            _recordViewForReel(_reels[index].reelId);
+          }
         },
-        itemCount: widget.reels.length,
+        itemCount: _reels.length,
         itemBuilder: (context, index) {
-          return _buildReelPage(widget.reels[index], index == _currentIndex);
+          return _buildReelPage(_reels[index], index == _currentIndex);
         },
       ),
     );
   }
 
   Widget _buildReelPage(FirebaseReelModel reel, bool isActive) {
-    final isLiked = _likedReels[reel.reelId] ?? false;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final reelId = reel.reelId;
+    final isLiked = _likedReels.containsKey(reelId)
+        ? _likedReels[reelId]!
+        : (uid != null && reel.isLikedByUser(uid));
     final provider = _providerCache[reel.providerId];
     final isFollowing = _followedCreators[reel.providerId] ?? false;
-    final isShared = _sharedReels[reel.reelId] ?? false;
-    final localComments = reel.analytics.comments + (_commentIncrements[reel.reelId] ?? 0);
-    final localShares = reel.shares + (isShared ? 1 : 0);
 
     return Stack(
       children: [
         // Video player (plays when active) + thumbnail fallback
         Positioned.fill(
-          child: ReelVideoLayer(reel: reel, isActive: isActive),
+          child: ReelVideoLayer(
+            reel: reel,
+            isActive: isActive,
+            onDoubleTap: () {
+              ReelEngagement.toggleLike(
+                context: context,
+                userId: uid,
+                reel: reel,
+                firestore: _firestoreService,
+                previousLiked: isLiked,
+                setLikedDisplay: (liked) {
+                  setState(() => _likedReels[reelId] = liked);
+                },
+                onSynced: _mergeReel,
+              );
+            },
+          ),
         ),
-        // Refined Gradient Overlay
+        // Refined Gradient Overlay (taps pass through to video)
         Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.0),
-                  Colors.black.withValues(alpha: 0.3),
-                  Colors.black.withValues(alpha: 0.75),
-                ],
-                stops: const [0.0, 0.4, 0.7, 1.0],
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.0),
+                    Colors.black.withValues(alpha: 0.3),
+                    Colors.black.withValues(alpha: 0.75),
+                  ],
+                  stops: const [0.0, 0.4, 0.7, 1.0],
+                ),
               ),
             ),
           ),
@@ -151,38 +208,48 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
             children: [
               _buildActionButton(
                 icon: isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                label: _formatNumber(reel.likes + (isLiked ? 1 : 0)),
+                label: _formatNumber(reel.likes),
                 onTap: () {
-                  setState(() {
-                    _likedReels[reel.reelId] = !isLiked;
-                  });
+                  ReelEngagement.toggleLike(
+                    context: context,
+                    userId: uid,
+                    reel: reel,
+                    firestore: _firestoreService,
+                    previousLiked: isLiked,
+                    setLikedDisplay: (liked) {
+                      setState(() => _likedReels[reel.reelId] = liked);
+                    },
+                    onSynced: _mergeReel,
+                  );
                 },
                 color: isLiked ? const Color(0xFFFF3040) : Colors.white,
               ),
               const SizedBox(height: 20),
               _buildActionButton(
                 icon: Icons.comment_rounded,
-                label: _formatNumber(localComments),
-                onTap: () => _showCommentSheet(reel.reelId),
-              ),
-              const SizedBox(height: 20),
-              _buildActionButton(
-                icon: Icons.share_rounded,
-                label: _formatNumber(localShares),
+                label: _formatNumber(reel.analytics.comments),
                 onTap: () {
-                  if (!isShared) {
-                    setState(() {
-                      _sharedReels[reel.reelId] = true;
-                    });
-                  }
-                  context.push('${AppRoutes.reelDetails}/${reel.reelId}/share');
+                  ReelEngagement.showCommentsSheet(
+                    context: context,
+                    reelId: reel.reelId,
+                    userId: uid,
+                    firestore: _firestoreService,
+                    onSynced: _mergeReel,
+                  );
                 },
               ),
               const SizedBox(height: 20),
               _buildActionButton(
-                icon: Icons.bookmark_border_rounded,
-                label: 'Save',
-                onTap: () => _downloadReel(reel),
+                icon: Icons.share_rounded,
+                label: _formatNumber(reel.shares),
+                onTap: () {
+                  ReelEngagement.shareReel(
+                    context: context,
+                    reel: reel,
+                    firestore: _firestoreService,
+                    onSynced: _mergeReel,
+                  );
+                },
               ),
             ],
           ),
@@ -201,13 +268,8 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
               if (provider != null) ...[
                 GestureDetector(
                   onTap: () {
-                    context.push(
-                      AppRoutes.providerPortfolio,
-                      extra: {
-                        'provider': provider,
-                        'bookingData': {},
-                      },
-                    );
+                    if (reel.providerId.isEmpty) return;
+                    context.push('${AppRoutes.providerDetails}/${reel.providerId}');
                   },
                   child: Row(
                     children: [
@@ -629,75 +691,6 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showCommentSheet(String reelId) {
-    final controller = TextEditingController();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Add a comment',
-                style: AppTypography.titleMedium.copyWith(color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  hintText: 'Write something...',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    final text = controller.text.trim();
-                    if (text.isEmpty) return;
-
-                    setState(() {
-                      _commentIncrements[reelId] = (_commentIncrements[reelId] ?? 0) + 1;
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Post'),
-                ),
-              ),
-              const SizedBox(height: 4),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _downloadReel(FirebaseReelModel reel) {
-    // Simulate download
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Downloading "${reel.title}"...'),
-        backgroundColor: AppColors.success,
-        duration: const Duration(seconds: 2),
       ),
     );
   }

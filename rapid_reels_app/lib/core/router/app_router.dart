@@ -1,11 +1,16 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
+import '../admin/admin_route_cache.dart';
+import 'router_refresh_notifier.dart';
 
 // Auth screens
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/phone_login_screen.dart';
 import '../../features/auth/presentation/screens/otp_verification_screen.dart';
+import '../../features/auth/presentation/screens/unauthorized_screen.dart';
 import '../../features/auth/presentation/screens/profile_setup_screen.dart';
 import '../../features/auth/presentation/screens/city_selection_screen.dart';
 
@@ -16,6 +21,10 @@ import '../../features/booking/presentation/screens/event_details_form_screen.da
 import '../../features/booking/presentation/screens/venue_selection_screen.dart';
 import '../../features/booking/presentation/screens/provider_selection_screen.dart';
 import '../../features/booking/presentation/screens/provider_portfolio_screen.dart';
+import '../../features/providers/presentation/screens/provider_details_screen.dart';
+import '../../features/booking/presentation/screens/catalogue_selection_screen.dart';
+import '../../features/booking/presentation/screens/provider_package_pick_screen.dart';
+import '../../features/booking/data/models/service_provider_model.dart';
 import '../../features/booking/presentation/screens/package_customization_screen.dart';
 import '../../features/booking/presentation/screens/booking_summary_screen.dart';
 import '../../features/booking/presentation/screens/payment_screen.dart';
@@ -71,8 +80,11 @@ import '../../features/provider/presentation/screens/provider_service_areas_scre
 import '../../features/provider/presentation/screens/provider_document_upload_screen.dart';
 import '../../features/provider/presentation/screens/provider_availability_calendar_screen.dart';
 import '../../features/provider/presentation/screens/provider_verification_screen.dart';
+import '../../features/provider/presentation/screens/provider_catalogue_list_screen.dart';
+import '../../features/provider/presentation/screens/provider_catalogue_edit_screen.dart';
 
 // Admin screens
+import '../../features/admin/presentation/screens/admin_login_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/screens/admin_user_management_screen.dart';
 import '../../features/admin/presentation/screens/admin_booking_management_screen.dart';
@@ -80,7 +92,6 @@ import '../../features/admin/presentation/screens/admin_provider_verification_sc
 import '../../features/admin/presentation/screens/admin_content_moderation_screen.dart';
 import '../../features/admin/presentation/screens/admin_analytics_screen.dart';
 import '../../features/admin/presentation/screens/admin_payment_management_screen.dart';
-import '../../features/admin/presentation/screens/admin_support_tickets_screen.dart';
 import '../../features/admin/presentation/screens/admin_provider_earnings_screen.dart';
 import '../../features/admin/presentation/screens/admin_offers_management_screen.dart';
 import '../../features/admin/presentation/screens/admin_reviews_moderation_screen.dart';
@@ -92,10 +103,47 @@ import '../../shared/widgets/main_scaffold.dart';
 import '../constants/app_routes.dart';
 import '../firebase/models/firebase_reel_model.dart';
 
+bool _isProtectedAdminRoute(String location) {
+  return location.startsWith('/admin-') && location != AppRoutes.adminLogin;
+}
+
+Future<String?> _adminGuardRedirect(BuildContext context, GoRouterState state) async {
+  final loc = state.matchedLocation;
+  if (!_isProtectedAdminRoute(loc)) return null;
+  if (loc == AppRoutes.adminLogin || loc == AppRoutes.unauthorized) return null;
+
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return AppRoutes.adminLogin;
+
+  try {
+    final isAdmin = await AdminRouteCache.isCurrentUserAdmin();
+    if (!isAdmin) return AppRoutes.unauthorized;
+  } catch (_) {
+    return AppRoutes.unauthorized;
+  }
+  return null;
+}
+
+/// Web-safe: `state.extra` may be `LinkedMap<dynamic, dynamic>`, not `Map<String, dynamic>`.
+Map<String, dynamic> _extraMap(Object? extra) {
+  if (extra == null) return <String, dynamic>{};
+  if (extra is Map<String, dynamic>) return extra;
+  return Map<String, dynamic>.from(extra as Map);
+}
+
+/// Nested maps from `extra` (e.g. `bookingData`) may also be `LinkedMap` on web.
+Map<String, dynamic> _nestedStringMap(Object? value) {
+  if (value == null) return <String, dynamic>{};
+  if (value is Map<String, dynamic>) return value;
+  return Map<String, dynamic>.from(value as Map);
+}
+
 class AppRouter {
   static final GoRouter router = GoRouter(
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
+    refreshListenable: appRouterAuthRefresh,
+    redirect: _adminGuardRedirect,
     routes: [
       // ==================== Auth Routes ====================
       GoRoute(
@@ -129,16 +177,25 @@ class AppRouter {
         path: AppRoutes.otpVerification,
         name: 'otpVerification',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           return _buildPageWithSlideTransition(
             context,
             state,
             OTPVerificationScreen(
-              verificationId: extra?['verificationId'] ?? '',
-              phoneNumber: extra?['phoneNumber'] ?? '',
+              verificationId: extra['verificationId'] as String? ?? '',
+              phoneNumber: extra['phoneNumber'] as String? ?? '',
             ),
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.unauthorized,
+        name: 'unauthorized',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const UnauthorizedScreen(),
+        ),
       ),
       GoRoute(
         path: AppRoutes.profileSetup,
@@ -183,12 +240,12 @@ class AppRouter {
         path: AppRoutes.packageSelection,
         name: 'packageSelection',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           return _buildPageWithSlideTransition(
             context,
             state,
             PackageSelectionScreen(
-              eventType: extra?['eventType'] ?? 'wedding',
+              eventType: extra['eventType'] as String? ?? 'wedding',
             ),
           );
         },
@@ -197,14 +254,14 @@ class AppRouter {
         path: AppRoutes.eventDetails,
         name: 'eventDetails',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           return _buildPageWithSlideTransition(
             context,
             state,
             EventDetailsFormScreen(
-              eventType: extra?['eventType'] ?? 'wedding',
-              packageId: extra?['packageId'] ?? 'pkg_gold',
-              package: extra?['package'] as Map<String, dynamic>?,
+              eventType: extra['eventType'] as String? ?? 'wedding',
+              packageId: extra['packageId'] as String? ?? 'pkg_gold',
+              package: extra['package'] as Map<String, dynamic>?,
             ),
           );
         },
@@ -213,11 +270,11 @@ class AppRouter {
         path: AppRoutes.venueSelection,
         name: 'venueSelection',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           return _buildPageWithSlideTransition(
             context,
             state,
-            VenueSelectionScreen(bookingData: extra ?? {}),
+            VenueSelectionScreen(bookingData: extra),
           );
         },
       ),
@@ -225,11 +282,11 @@ class AppRouter {
         path: AppRoutes.providerSelection,
         name: 'providerSelection',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderSelectionScreen(bookingData: extra ?? {}),
+            ProviderSelectionScreen(bookingData: extra),
           );
         },
       ),
@@ -237,14 +294,78 @@ class AppRouter {
         path: AppRoutes.providerPortfolio,
         name: 'providerPortfolio',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
+          final provider = extra['provider'] as ServiceProvider?;
+          if (provider == null) {
+            return _buildPageWithSlideTransition(
+              context,
+              state,
+              const Scaffold(
+                body: Center(child: Text('Provider not found')),
+              ),
+            );
+          }
           return _buildPageWithSlideTransition(
             context,
             state,
             ProviderPortfolioScreen(
-              provider: extra?['provider'],
-              bookingData: extra?['bookingData'] ?? {},
+              provider: provider,
+              bookingData: _nestedStringMap(extra['bookingData']),
             ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '${AppRoutes.providerDetails}/:providerId',
+        name: 'providerDetails',
+        pageBuilder: (context, state) {
+          final providerId = state.pathParameters['providerId'] ?? '';
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            ProviderDetailsScreen(providerId: providerId),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.catalogueSelection,
+        name: 'catalogueSelection',
+        pageBuilder: (context, state) {
+          final extra = _extraMap(state.extra);
+          final provider = extra['provider'] as ServiceProvider?;
+          if (provider == null) {
+            return _buildPageWithSlideTransition(
+              context,
+              state,
+              const Scaffold(body: Center(child: Text('Missing booking context'))),
+            );
+          }
+          final bookingData = _nestedStringMap(extra['bookingData']);
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            CatalogueSelectionScreen(provider: provider, bookingData: bookingData),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.providerPackagePick,
+        name: 'providerPackagePick',
+        pageBuilder: (context, state) {
+          final extra = _extraMap(state.extra);
+          final provider = extra['provider'] as ServiceProvider?;
+          if (provider == null) {
+            return _buildPageWithSlideTransition(
+              context,
+              state,
+              const Scaffold(body: Center(child: Text('Missing booking context'))),
+            );
+          }
+          final bookingData = _nestedStringMap(extra['bookingData']);
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            ProviderPackagePickScreen(provider: provider, bookingData: bookingData),
           );
         },
       ),
@@ -252,11 +373,11 @@ class AppRouter {
         path: AppRoutes.packageCustomization,
         name: 'packageCustomization',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           return _buildPageWithSlideTransition(
             context,
             state,
-            PackageCustomizationScreen(bookingData: extra ?? {}),
+            PackageCustomizationScreen(bookingData: extra),
           );
         },
       ),
@@ -264,11 +385,11 @@ class AppRouter {
         path: AppRoutes.bookingSummary,
         name: 'bookingSummary',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           return _buildPageWithSlideTransition(
             context,
             state,
-            BookingSummaryScreen(bookingData: extra ?? {}),
+            BookingSummaryScreen(bookingData: extra),
           );
         },
       ),
@@ -276,8 +397,8 @@ class AppRouter {
         path: AppRoutes.payment,
         name: 'payment',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          final booking = extra?['booking'];
+          final extra = _extraMap(state.extra);
+          final booking = extra['booking'];
           if (booking == null) {
             // Handle missing booking - redirect or show error
             return _buildPageWithSlideTransition(
@@ -293,7 +414,7 @@ class AppRouter {
             state,
             PaymentScreen(
               booking: booking,
-              isAdvancePayment: _parseBool(extra?['isAdvancePayment'], true),
+              isAdvancePayment: _parseBool(extra['isAdvancePayment'], true),
             ),
           );
         },
@@ -348,20 +469,23 @@ class AppRouter {
         path: AppRoutes.reelPlayer,
         name: 'reelPlayer',
         pageBuilder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
+          final extra = _extraMap(state.extra);
           List<FirebaseReelModel> reels = [];
-          if (extra?['reels'] != null) {
-            reels = (extra!['reels'] as List).cast<FirebaseReelModel>();
-          } else if (extra?['reel'] != null) {
-            reels = [extra!['reel'] as FirebaseReelModel];
+          if (extra['reels'] != null) {
+            reels = (extra['reels'] as List).cast<FirebaseReelModel>();
+          } else if (extra['reel'] != null) {
+            reels = [extra['reel'] as FirebaseReelModel];
           }
+          final reelIdFromExtra = extra['reelId'] as String?;
+          final resolvedReelId =
+              reelIdFromExtra ?? (reels.isNotEmpty ? reels.first.reelId : '');
           return _buildPageWithFadeTransition(
             context,
             state,
             ReelPlayerScreen(
-              reelId: extra?['reelId'] ?? reels.isNotEmpty ? reels.first.reelId : '',
+              reelId: resolvedReelId,
               reels: reels,
-              initialIndex: _parseInt(extra?['initialIndex'], 0).clamp(0, reels.isEmpty ? 0 : reels.length - 1),
+              initialIndex: _parseInt(extra['initialIndex'], 0).clamp(0, reels.isEmpty ? 0 : reels.length - 1),
             ),
           );
         },
@@ -579,6 +703,34 @@ class AppRouter {
         },
       ),
       GoRoute(
+        path: '${AppRoutes.providerCatalogue}/:providerId',
+        name: 'providerCatalogue',
+        pageBuilder: (context, state) {
+          final providerId = state.pathParameters['providerId'] ?? '';
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            ProviderCatalogueListScreen(providerId: providerId),
+          );
+        },
+      ),
+      GoRoute(
+        path: '${AppRoutes.providerCatalogueEdit}/:providerId/:catalogueEventId',
+        name: 'providerCatalogueEdit',
+        pageBuilder: (context, state) {
+          final providerId = state.pathParameters['providerId'] ?? '';
+          final catalogueEventId = state.pathParameters['catalogueEventId'] ?? 'new';
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            ProviderCatalogueEditScreen(
+              providerId: providerId,
+              catalogueEventId: catalogueEventId,
+            ),
+          );
+        },
+      ),
+      GoRoute(
         path: '${AppRoutes.providerBookingCalendar}/:providerId',
         name: 'providerBookingCalendar',
         pageBuilder: (context, state) {
@@ -747,6 +899,15 @@ class AppRouter {
 
       // ==================== Admin Routes ====================
       GoRoute(
+        path: AppRoutes.adminLogin,
+        name: 'adminLogin',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const AdminLoginScreen(),
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.adminDashboard,
         name: 'adminDashboard',
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
@@ -807,15 +968,6 @@ class AppRouter {
           context,
           state,
           const AdminPaymentManagementScreen(),
-        ),
-      ),
-      GoRoute(
-        path: AppRoutes.adminSupportTickets,
-        name: 'adminSupportTickets',
-        pageBuilder: (context, state) => _buildPageWithSlideTransition(
-          context,
-          state,
-          const AdminSupportTicketsScreen(),
         ),
       ),
       GoRoute(

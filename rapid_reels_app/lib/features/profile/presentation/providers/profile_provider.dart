@@ -8,8 +8,10 @@ final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   return FirestoreService();
 });
 
-// User Profile Provider
-final userProfileProvider = StreamProvider.family<FirebaseUserModel?, String>(
+// User Profile Provider (autoDispose: signed-out users cannot read their doc; avoid
+// retaining PERMISSION_DENIED on the provider when switching accounts.)
+final userProfileProvider =
+    StreamProvider.autoDispose.family<FirebaseUserModel?, String>(
   (ref, userId) {
     final service = ref.watch(firestoreServiceProvider);
     return service.streamUser(userId);
@@ -17,7 +19,8 @@ final userProfileProvider = StreamProvider.family<FirebaseUserModel?, String>(
 );
 
 // Recent Bookings Provider (limit 5)
-final recentBookingsProvider = FutureProvider.family<List<FirebaseBookingModel>, String>(
+final recentBookingsProvider =
+    FutureProvider.autoDispose.family<List<FirebaseBookingModel>, String>(
   (ref, userId) async {
     final service = ref.watch(firestoreServiceProvider);
     final bookings = await service.getUserBookings(userId);
@@ -26,7 +29,8 @@ final recentBookingsProvider = FutureProvider.family<List<FirebaseBookingModel>,
 );
 
 // Recent Reels Provider (limit 5)
-final recentReelsProvider = FutureProvider.family<List<FirebaseReelModel>, String>(
+final recentReelsProvider =
+    FutureProvider.autoDispose.family<List<FirebaseReelModel>, String>(
   (ref, userId) async {
     final service = ref.watch(firestoreServiceProvider);
     final reels = await service.getUserReels(userId);
@@ -35,7 +39,7 @@ final recentReelsProvider = FutureProvider.family<List<FirebaseReelModel>, Strin
 );
 
 // Wallet Balance Provider - Uses walletBalance from user model
-final walletBalanceProvider = Provider.family<double, String>(
+final walletBalanceProvider = Provider.autoDispose.family<double, String>(
   (ref, userId) {
     final userAsync = ref.watch(userProfileProvider(userId));
     return userAsync.when(
@@ -47,14 +51,15 @@ final walletBalanceProvider = Provider.family<double, String>(
 );
 
 // Real-time counts (avoid relying on stored totals in the user document)
-final userBookingsCountProvider = StreamProvider.family<int, String>(
+final userBookingsCountProvider =
+    StreamProvider.autoDispose.family<int, String>(
   (ref, userId) {
     final service = ref.watch(firestoreServiceProvider);
     return service.streamUserBookingsCount(userId);
   },
 );
 
-final userReelsCountProvider = StreamProvider.family<int, String>(
+final userReelsCountProvider = StreamProvider.autoDispose.family<int, String>(
   (ref, userId) {
     final service = ref.watch(firestoreServiceProvider);
     return service.streamUserReelsCount(userId);

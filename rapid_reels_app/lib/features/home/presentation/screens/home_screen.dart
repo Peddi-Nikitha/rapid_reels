@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:carousel_slider/carousel_slider.dart';
@@ -14,7 +15,7 @@ import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/theme/text_styles.dart';
-import '../../../../shared/widgets/reel_viewer_screen.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../providers/presentation/screens/provider_details_screen.dart';
 
@@ -26,6 +27,45 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  /// After showing onboarding or the offer popup, suppress again for this long.
+  static const Duration _homePromoCooldown = Duration(days: 7);
+  static const String _kOnboardingLastShownMs = 'home_onboarding_last_shown_ms';
+  static const String _kOfferLastShownMs = 'home_offer_last_shown_ms';
+  static const String _kLegacyOnboardingSeen = 'home_onboarding_seen';
+  static const String _kLegacyOfferSeen = 'home_offer_seen';
+
+  bool _isWithinHomePromoCooldown(int? lastShownMs) {
+    if (lastShownMs == null) return false;
+    return DateTime.now().difference(
+          DateTime.fromMillisecondsSinceEpoch(lastShownMs),
+        ) <
+        _homePromoCooldown;
+  }
+
+  Future<int?> _onboardingLastShownMs(SharedPreferences prefs) async {
+    final existing = prefs.getInt(_kOnboardingLastShownMs);
+    if (existing != null) return existing;
+    final legacy = prefs.getBool(_kLegacyOnboardingSeen) ?? false;
+    if (legacy) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await prefs.setInt(_kOnboardingLastShownMs, now);
+      return now;
+    }
+    return null;
+  }
+
+  Future<int?> _offerLastShownMs(SharedPreferences prefs) async {
+    final existing = prefs.getInt(_kOfferLastShownMs);
+    if (existing != null) return existing;
+    final legacy = prefs.getBool(_kLegacyOfferSeen) ?? false;
+    if (legacy) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await prefs.setInt(_kOfferLastShownMs, now);
+      return now;
+    }
+    return null;
+  }
+
   int _currentBannerIndex = 0;
   int _currentReviewIndex = 0;
   String _selectedCity = 'Detecting...';
@@ -47,6 +87,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<FirebaseProviderModel> _featuredProviders = [];
   bool _isLoadingProviders = false;
   List<FirebaseReelModel> _trendingReels = [];
+  final Map<String, bool> _likedReels = {};
 
   final List<String> _cities = [
     // Indian Cities
@@ -90,7 +131,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _loadTrendingReels() async {
     try {
       final reels = await _firestoreService.getDiscoverReels(limit: 10);
-      if (mounted) setState(() => _trendingReels = reels);
+      if (!mounted) return;
+      final uid = ref.read(currentUserProvider)?.uid;
+      setState(() {
+        _trendingReels = reels;
+        if (uid != null) {
+          final ids = reels.map((r) => r.reelId).toSet();
+          _likedReels.removeWhere((k, _) => !ids.contains(k));
+          for (final r in reels) {
+            _likedReels[r.reelId] = r.isLikedByUser(uid);
+          }
+        }
+      });
     } catch (_) {}
   }
 
@@ -141,14 +193,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _checkOnboardingStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final hasSeenOnboarding = prefs.getBool('home_onboarding_seen') ?? false;
-      if (!hasSeenOnboarding) {
-        await Future.delayed(const Duration(seconds: 1));
-        if (mounted) {
-          setState(() {
-            _showOnboarding = true;
-          });
-        }
+      final lastShown = await _onboardingLastShownMs(prefs);
+      if (_isWithinHomePromoCooldown(lastShown)) return;
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) {
+        setState(() {
+          _showOnboarding = true;
+        });
       }
     } catch (e) {
       debugPrint('Error checking onboarding: $e');
@@ -158,14 +209,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _checkOfferPopup() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final hasSeenOffer = prefs.getBool('home_offer_seen') ?? false;
-      if (!hasSeenOffer) {
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          setState(() {
-            _showOfferPopup = true;
-          });
-        }
+      final lastShown = await _offerLastShownMs(prefs);
+      if (_isWithinHomePromoCooldown(lastShown)) return;
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        setState(() {
+          _showOfferPopup = true;
+        });
       }
     } catch (e) {
       debugPrint('Error checking offer: $e');
@@ -1187,25 +1237,187 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  void _viewReel(FirebaseReelModel reel) {
-    final videoUrl = reel.videoUrl.trim().isNotEmpty
-        ? reel.videoUrl.trim()
-        : (reel.thumbnailUrl.trim().isNotEmpty &&
-                (reel.thumbnailUrl.contains('firebasestorage') ||
-                    reel.thumbnailUrl.contains('.mp4') ||
-                    reel.thumbnailUrl.contains('.mov')))
-            ? reel.thumbnailUrl.trim()
-            : reel.videoUrl;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ReelViewerScreen(videoUrl: videoUrl, title: reel.title),
+  void _viewReel(FirebaseReelModel reel, int index) {
+    if (index < 0 || index >= _trendingReels.length) return;
+    context
+        .push(
+      AppRoutes.reelPlayer,
+      extra: {
+        'reelId': reel.reelId,
+        'reels': List<FirebaseReelModel>.from(_trendingReels),
+        'initialIndex': index,
+      },
+    )
+        .then((_) {
+      if (mounted) _loadTrendingReels();
+    });
+  }
+
+  void _mergeTrendingReel(FirebaseReelModel? fresh) {
+    if (fresh == null || !mounted) return;
+    final uid = ref.read(currentUserProvider)?.uid;
+    setState(() {
+      final i = _trendingReels.indexWhere((r) => r.reelId == fresh.reelId);
+      if (i >= 0) _trendingReels[i] = fresh;
+      if (uid != null) _likedReels[fresh.reelId] = fresh.isLikedByUser(uid);
+    });
+  }
+
+  Future<void> _handleReelLike(FirebaseReelModel reel) async {
+    final userId = ref.read(currentUserProvider)?.uid;
+    if (userId == null || userId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to like reels.')),
+      );
+      return;
+    }
+
+    final reelId = reel.reelId;
+    final previousLiked =
+        _likedReels[reelId] ?? reel.isLikedByUser(userId);
+    setState(() => _likedReels[reelId] = !previousLiked);
+
+    try {
+      final backendLiked = await _firestoreService.toggleReelLike(
+        reelId: reelId,
+        userId: userId,
+      );
+      if (!mounted) return;
+      final fresh = await _firestoreService.getReel(reelId);
+      setState(() {
+        _likedReels[reelId] = backendLiked;
+        if (fresh != null) {
+          final i = _trendingReels.indexWhere((r) => r.reelId == reelId);
+          if (i >= 0) _trendingReels[i] = fresh;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _likedReels[reelId] = previousLiked);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update like right now.')),
+      );
+    }
+  }
+
+  Future<void> _showCommentBottomSheet(FirebaseReelModel reel) async {
+    final userId = ref.read(currentUserProvider)?.uid;
+    if (userId == null || userId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to comment on reels.')),
+      );
+      return;
+    }
+
+    final controller = TextEditingController();
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 12,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add a comment',
+                style: AppTypography.titleMedium.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Write your comment...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final commentText = controller.text.trim();
+                    if (commentText.isEmpty) return;
+
+                    try {
+                      await _firestoreService.addReelComment(
+                        reelId: reel.reelId,
+                        userId: userId,
+                        commentText: commentText,
+                      );
+                      if (!mounted) return;
+                      final fresh = await _firestoreService.getReel(reel.reelId);
+                      _mergeTrendingReel(fresh);
+                      Navigator.of(sheetContext).pop();
+                    } catch (_) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Could not post comment right now.'),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Post'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+  }
+
+  Future<void> _handleReelShare(FirebaseReelModel reel) async {
+    final deepLink = 'https://rapidreels.app/reel/${reel.reelId}';
+    await Clipboard.setData(ClipboardData(text: deepLink));
+
+    try {
+      await _firestoreService.incrementReelShares(reel.reelId);
+      if (!mounted) return;
+      final fresh = await _firestoreService.getReel(reel.reelId);
+      _mergeTrendingReel(fresh);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update share count right now.')),
+      );
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Reel link copied. Share it with others.')),
     );
   }
 
   Widget _buildTrendingReelCard(FirebaseReelModel reel, int index) {
+    final reelId = reel.reelId;
+    final uid = ref.read(currentUserProvider)?.uid;
+    final isLiked = _likedReels.containsKey(reelId)
+        ? _likedReels[reelId]!
+        : (uid != null && reel.isLikedByUser(uid));
+    final localLikes = reel.likes;
+    final localComments = reel.analytics.comments;
+    final localShares = reel.shares;
+
     return GestureDetector(
-      onTap: () => _viewReel(reel),
+      onTap: () => _viewReel(reel, index),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
@@ -1359,12 +1571,76 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _buildReelActionChip(
+                          icon: isLiked
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          count: localLikes,
+                          onTap: () => _handleReelLike(reel),
+                          iconColor: isLiked ? Colors.redAccent : AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 6),
+                        _buildReelActionChip(
+                          icon: Icons.comment_outlined,
+                          count: localComments,
+                          onTap: () => _showCommentBottomSheet(reel),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildReelActionChip(
+                          icon: Icons.share_outlined,
+                          count: localShares,
+                          onTap: () => _handleReelShare(reel),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
           ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReelActionChip({
+    required IconData icon,
+    required int count,
+    required VoidCallback onTap,
+    Color? iconColor,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 11,
+                color: iconColor ?? AppColors.textSecondary,
+              ),
+              const SizedBox(width: 2),
+              Flexible(
+                child: Text(
+                  _formatViews(count),
+                  style: AppTypography.captionSmall.copyWith(
+                    color: AppColors.textSecondary,
+                    fontSize: 8.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2356,7 +2632,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _completeOnboarding() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('home_onboarding_seen', true);
+      await prefs.setInt(
+        _kOnboardingLastShownMs,
+        DateTime.now().millisecondsSinceEpoch,
+      );
       if (mounted) {
         setState(() {
           _showOnboarding = false;
@@ -2374,6 +2653,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         setState(() {
           _showOfferPopup = false;
         });
+        _saveOfferSeen();
       },
       child: Container(
         color: Colors.black.withValues(alpha: 0.7),
@@ -2494,7 +2774,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _saveOfferSeen() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('home_offer_seen', true);
+      await prefs.setInt(
+        _kOfferLastShownMs,
+        DateTime.now().millisecondsSinceEpoch,
+      );
     } catch (e) {
       debugPrint('Error saving offer seen: $e');
     }
