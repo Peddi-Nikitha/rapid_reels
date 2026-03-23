@@ -398,9 +398,18 @@ class _ProviderMyReelsScreenState extends State<ProviderMyReelsScreen> {
   }
 
   void _viewReel(FirebaseReelModel reel) {
+    final videoUrl = reel.videoUrl.trim().isNotEmpty
+        ? reel.videoUrl.trim()
+        : (reel.thumbnailUrl.trim().isNotEmpty &&
+                (reel.thumbnailUrl.contains('firebasestorage') ||
+                    reel.thumbnailUrl.contains('.mp4') ||
+                    reel.thumbnailUrl.contains('.mov') ||
+                    reel.thumbnailUrl.startsWith('gs://')))
+            ? reel.thumbnailUrl.trim()
+            : reel.videoUrl;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => ReelViewerScreen(videoUrl: reel.videoUrl, title: reel.title),
+        builder: (context) => ReelViewerScreen(videoUrl: videoUrl, title: reel.title),
       ),
     );
   }

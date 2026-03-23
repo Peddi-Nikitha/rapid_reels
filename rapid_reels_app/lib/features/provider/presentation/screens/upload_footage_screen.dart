@@ -379,6 +379,17 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
     if (picked == null) return;
 
     final name = picked.name;
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+    if (ext != 'mp4') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only MP4 videos are supported for reliable playback.'),
+          ),
+        );
+      }
+      return;
+    }
     VideoPlayerController? controller;
     try {
       controller = video_helper.createVideoController(picked);

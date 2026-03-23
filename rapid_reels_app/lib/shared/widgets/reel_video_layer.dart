@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/firebase/models/firebase_reel_model.dart';
+import '../utils/reel_video_url_resolver.dart';
 
 /// Video layer for a reel - plays when active, shows thumbnail while loading.
 /// Use in vertical feed (Discover, ReelPlayer) for inline autoplay.
@@ -26,18 +27,30 @@ class ReelVideoLayer extends StatefulWidget {
 class _ReelVideoLayerState extends State<ReelVideoLayer> {
   VideoPlayerController? _controller;
   bool _loadError = false;
+  bool _isInitializing = false;
 
-  String get _videoUrl {
+  List<String> get _videoCandidates {
+    final candidates = <String>[];
     final video = widget.reel.videoUrl.trim();
-    if (video.isNotEmpty) return video;
+    if (video.isNotEmpty) candidates.add(video);
     final thumb = widget.reel.thumbnailUrl.trim();
     if (thumb.isNotEmpty &&
         (thumb.contains('firebasestorage') ||
             thumb.contains('.mp4') ||
-            thumb.contains('.mov'))) {
-      return thumb;
+            thumb.contains('.mov') ||
+            thumb.startsWith('gs://'))) {
+      candidates.add(thumb);
     }
-    return '';
+    return candidates.toSet().toList();
+  }
+
+  bool get _hasImageThumbnail {
+    final thumb = widget.reel.thumbnailUrl.trim().toLowerCase();
+    if (thumb.isEmpty) return false;
+    return thumb.contains('.jpg') ||
+        thumb.contains('.jpeg') ||
+        thumb.contains('.png') ||
+        thumb.contains('.webp');
   }
 
   void _playIfActive() {
@@ -49,30 +62,116 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
     }
   }
 
+  Future<void> _tryAutoPlay() async {
+    if (!mounted || !widget.isActive || _controller == null) return;
+    if (!_controller!.value.isInitialized) return;
+    if (!_controller!.value.isPlaying) {
+      try {
+        await _controller!.play();
+      } catch (_) {}
+    }
+  }
+
+  VideoFormat? _inferFormatHint(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('.m3u8')) return VideoFormat.hls;
+    if (lower.contains('.mpd')) return VideoFormat.dash;
+    if (lower.contains('.ism') || lower.contains('manifest')) return VideoFormat.ss;
+    if (lower.contains('.mp4') || lower.contains('.mov') || lower.contains('alt=media')) {
+      return VideoFormat.other;
+    }
+    return null;
+  }
+
+  VideoPlayerController _buildController(String url) {
+    return VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      formatHint: _inferFormatHint(url),
+      httpHeaders: const {'Cache-Control': 'no-cache'},
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    final url = _videoUrl;
-    if (url.isEmpty) return;
-    _controller = VideoPlayerController.networkUrl(Uri.parse(url))
-      ..setLooping(true)
-      ..setVolume(1.0)
-      ..initialize().then((_) {
+    _initializeController();
+  }
+
+  Future<void> _initializeController() async {
+    final rawCandidates = _videoCandidates;
+    if (rawCandidates.isEmpty) return;
+
+    setState(() {
+      _isInitializing = true;
+      _loadError = false;
+    });
+
+    try {
+      VideoPlayerController? initializedController;
+      for (final rawUrl in rawCandidates) {
+        final playableUrl = await resolvePlayableVideoUrl(rawUrl);
+        if (!mounted || playableUrl == null || playableUrl.isEmpty) continue;
+        try {
+          var controller = _buildController(playableUrl);
+          try {
+            await controller.initialize();
+          } catch (_) {
+            // Fallback constructor for edge URL/platform cases.
+            await controller.dispose();
+            controller = VideoPlayerController.network(playableUrl);
+            await controller.initialize();
+          }
+          await controller.setLooping(true);
+          await controller.setVolume(1.0);
+          initializedController = controller;
+          break;
+        } catch (e) {
+          debugPrint('ReelVideoLayer playback init failed for $playableUrl: $e');
+          // Try next candidate URL
+        }
+      }
+
+      if (!mounted || initializedController == null) {
         if (mounted) {
-          setState(() {});
-          _playIfActive();
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _playIfActive();
+          setState(() {
+            _loadError = true;
+            _isInitializing = false;
           });
         }
-      }).catchError((e) {
-        if (mounted) setState(() => _loadError = true);
+        return;
+      }
+
+      _controller?.dispose();
+      _controller = initializedController;
+      setState(() => _isInitializing = false);
+      _playIfActive();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _playIfActive();
       });
+      // Retry autoplay to handle Android timing cases where first play call is ignored.
+      Future<void>.delayed(const Duration(milliseconds: 180), _tryAutoPlay);
+      Future<void>.delayed(const Duration(milliseconds: 420), _tryAutoPlay);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadError = true;
+          _isInitializing = false;
+        });
+      }
+    }
   }
 
   @override
   void didUpdateWidget(covariant ReelVideoLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.reel.reelId != widget.reel.reelId ||
+        oldWidget.reel.videoUrl != widget.reel.videoUrl ||
+        oldWidget.reel.thumbnailUrl != widget.reel.thumbnailUrl) {
+      _controller?.dispose();
+      _controller = null;
+      _initializeController();
+      return;
+    }
     if (_controller != null &&
         _controller!.value.isInitialized &&
         oldWidget.isActive != widget.isActive) {
@@ -96,23 +195,25 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        CachedNetworkImage(
-          imageUrl: widget.reel.thumbnailUrl,
-          fit: BoxFit.cover,
-          placeholder: (context, url) => Container(
-            color: AppColors.surface,
-            child: const Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+        if (_hasImageThumbnail)
+          CachedNetworkImage(
+            imageUrl: widget.reel.thumbnailUrl,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: AppColors.surface,
+              child: const Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
               ),
             ),
+            errorWidget: (context, url, error) => Container(
+              color: AppColors.surface,
+              child: const Icon(Icons.error_outline, color: AppColors.textSecondary),
+            ),
           ),
-          errorWidget: (context, url, error) => Container(
-            color: AppColors.surface,
-            child: const Icon(Icons.error_outline, color: AppColors.textSecondary),
-          ),
-        ),
+        if (!_hasImageThumbnail) Container(color: Colors.black),
         if (isVideoReady && _controller != null)
           Positioned.fill(
             child: GestureDetector(
@@ -158,6 +259,15 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
                     color: Colors.white,
                   ),
                 ),
+              ),
+            ),
+          ),
+        if (_isInitializing)
+          const Positioned.fill(
+            child: Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
               ),
             ),
           ),

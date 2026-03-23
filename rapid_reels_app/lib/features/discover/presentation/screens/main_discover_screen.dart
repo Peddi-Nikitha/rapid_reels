@@ -250,6 +250,14 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                                               size: 22,
                                             ),
                                           ),
+                                          errorWidget: (context, url, error) => Container(
+                                            color: AppColors.primary,
+                                            child: const Icon(
+                                              Icons.person_rounded,
+                                              color: Colors.white,
+                                              size: 22,
+                                            ),
+                                          ),
                                         )
                                       : Container(
                                           color: AppColors.primary,

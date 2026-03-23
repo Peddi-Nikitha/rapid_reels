@@ -67,7 +67,8 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
         : (reel.thumbnailUrl.trim().isNotEmpty &&
                 (reel.thumbnailUrl.contains('firebasestorage') ||
                     reel.thumbnailUrl.contains('.mp4') ||
-                    reel.thumbnailUrl.contains('.mov')))
+                    reel.thumbnailUrl.contains('.mov') ||
+                    reel.thumbnailUrl.startsWith('gs://')))
             ? reel.thumbnailUrl.trim()
             : reel.videoUrl;
     Navigator.of(context).push(

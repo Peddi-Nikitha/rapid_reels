@@ -942,7 +942,8 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
           // Nearby Venues List (if map view)
           if (_showMapView && _nearbyVenues.isNotEmpty)
             Container(
-              height: 200,
+              // Header (~48) + card height; 200 was shorter than cards (220) and caused clipping.
+              height: 288,
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 boxShadow: [
@@ -984,7 +985,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                       itemCount: _nearbyVenues.length,
                       itemBuilder: (context, index) {
                         final venue = _nearbyVenues[index];
@@ -1129,12 +1130,15 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
 
   Widget _buildVenueCard(Venue venue) {
     final isSelected = _selectedVenue?.venueId == venue.venueId;
-    
+    final screenW = MediaQuery.sizeOf(context).width;
+    // Use most of the viewport so cards (and image banners) are not a thin strip on wide screens.
+    final cardWidth = (screenW - 40).clamp(260.0, 560.0);
+
     return GestureDetector(
       onTap: () => _selectVenue(venue),
       child: Container(
-        width: 280,
-        height: 220, // Fixed height to prevent overflow
+        width: cardWidth,
+        height: 232,
         margin: const EdgeInsets.only(right: 12),
         decoration: BoxDecoration(
           color: AppColors.surface,
@@ -1157,54 +1161,62 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
           mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Venue Image with overlay
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: venue.imageUrl != null
-                      ? Image.network(
-                          venue.imageUrl!,
-                          width: double.infinity,
-                          height: 120, // Reduced from 140
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              height: 120,
-                              color: AppColors.cardBackground,
-                              child: const Icon(Icons.camera_alt, size: 40, color: AppColors.textSecondary),
-                            );
-                          },
-                        )
-                      : Container(
-                          height: 120,
-                          color: AppColors.cardBackground,
-                          child: const Icon(Icons.camera_alt, size: 40, color: AppColors.textSecondary),
+            // Venue image: bounded Stack + expand so width is never collapsed (fixes narrow strip on web).
+            SizedBox(
+              height: 112,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                    child: venue.imageUrl != null
+                        ? Image.network(
+                            venue.imageUrl!,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            alignment: Alignment.center,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: double.infinity,
+                                height: double.infinity,
+                                color: AppColors.cardBackground,
+                                alignment: Alignment.center,
+                                child: const Icon(Icons.camera_alt, size: 40, color: AppColors.textSecondary),
+                              );
+                            },
+                          )
+                        : Container(
+                            width: double.infinity,
+                            height: double.infinity,
+                            color: AppColors.cardBackground,
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.camera_alt, size: 40, color: AppColors.textSecondary),
+                          ),
+                  ),
+                  if (isSelected)
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppColors.primary.withValues(alpha: 0.3),
+                            Colors.transparent,
+                          ],
                         ),
-                ),
-                // Gradient overlay for better text visibility if needed
-                if (isSelected)
-                  Container(
-                    height: 120,
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.primary.withValues(alpha: 0.3),
-                          Colors.transparent,
-                        ],
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             // Venue Details with solid background
             Expanded(
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), // Reduced padding
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? AppColors.primary.withValues(alpha: 0.1)
@@ -1213,75 +1225,77 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
                     bottom: Radius.circular(12),
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Text(
-                      venue.name,
-                      style: TextStyle(
-                        fontSize: 14, // Slightly reduced
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        venue.name,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4), // Reduced spacing
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_on,
-                          size: 12, // Reduced icon size
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            venue.address,
-                            style: TextStyle(
-                              fontSize: 11, // Slightly reduced
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (venue.rating != null) ...[
-                      const SizedBox(height: 6), // Reduced spacing
+                      const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 14), // Reduced icon size
+                          Icon(
+                            Icons.location_on,
+                            size: 12,
+                            color: AppColors.textSecondary,
+                          ),
                           const SizedBox(width: 4),
-                          Text(
-                            '${venue.rating}',
-                            style: TextStyle(
-                              fontSize: 12, // Reduced
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                          Expanded(
+                            child: Text(
+                              venue.address,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (venue.reviewCount != null) ...[
-                            const SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                '(${venue.reviewCount})',
-                                style: TextStyle(
-                                  fontSize: 11, // Reduced
-                                  color: AppColors.textSecondary,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
+                      if (venue.rating != null) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.star, color: Colors.amber, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${venue.rating}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            if (venue.reviewCount != null) ...[
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  '(${venue.reviewCount})',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
