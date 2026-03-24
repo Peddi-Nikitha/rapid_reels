@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/user_model.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart' as fb;
@@ -10,12 +11,15 @@ import '../../../../core/firebase/services/firestore_service.dart';
 class AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirestoreService _firestore;
+  final GoogleSignIn _googleSignIn;
+  bool _googleSignInInitialized = false;
 
   AuthRepository({
     FirebaseAuth? firebaseAuth,
     FirestoreService? firestore,
   })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirestoreService();
+        _firestore = firestore ?? FirestoreService(),
+        _googleSignIn = GoogleSignIn.instance;
   
   /// Firebase auth state stream
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
@@ -185,11 +189,45 @@ class AuthRepository {
     return credential;
   }
 
-  // Google Sign-In (placeholder - requires additional setup)
+  // Google Sign-In
   Future<UserCredential> signInWithGoogle() async {
-    throw UnimplementedError(
-      'Google Sign-In is not implemented yet. Configure OAuth and implement using GoogleSignIn/FirebaseAuth.',
-    );
+    try {
+      await _initializeGoogleSignInIfNeeded();
+      final googleUser = await _googleSignIn.authenticate();
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _firebaseAuth.signInWithCredential(
+        credential,
+      );
+
+      if (userCredential.user != null) {
+        await _ensureUserDocument(userCredential.user!);
+      }
+
+      return userCredential;
+    } on FirebaseAuthException {
+      rethrow;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        throw FirebaseAuthException(
+          code: 'sign_in_canceled',
+          message: 'Google sign-in was canceled.',
+        );
+      }
+      throw FirebaseAuthException(
+        code: 'google-signin-failed',
+        message: 'Google Sign-In failed: ${e.description}',
+      );
+    } catch (e) {
+      throw FirebaseAuthException(
+        code: 'google-signin-failed',
+        message: 'Google Sign-In failed: ${e.toString()}',
+      );
+    }
   }
 
   // Facebook Sign-In (placeholder)
@@ -201,7 +239,16 @@ class AuthRepository {
 
   // Sign Out
   Future<void> signOut() async {
+    if (_googleSignInInitialized) {
+      await _googleSignIn.signOut();
+    }
     await _firebaseAuth.signOut();
+  }
+
+  Future<void> _initializeGoogleSignInIfNeeded() async {
+    if (_googleSignInInitialized) return;
+    await _googleSignIn.initialize();
+    _googleSignInInitialized = true;
   }
 
   // Create or Update User Profile in Firestore (users collection)

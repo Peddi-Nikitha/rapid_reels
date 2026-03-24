@@ -12,20 +12,7 @@
           "package_name": "com.rapidreel.app"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "583858856130-iocq0lgthe9kkdm1du692sl0moc8ki5b.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.rapidreel.app",
-            "certificate_hash": "1f7e5ccc968a4b44ef01311adda8e2009580a424"
-          }
-        },
-        {
-          "client_id": "583858856130-po97lmlu5b9skscg0j5gti31kb0amb54.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
           "current_key": "AIzaSyAAuzYnTH6DhyFewO57ITLXa2CJB7B1IX4"
@@ -33,12 +20,7 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "583858856130-po97lmlu5b9skscg0j5gti31kb0amb54.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       },
       "certificate_hash": [
