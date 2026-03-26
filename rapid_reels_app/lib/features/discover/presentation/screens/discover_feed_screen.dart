@@ -337,7 +337,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                                           width: 16,
                                           height: 16,
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF1DA1F2),
+                                            color: AppColors.verifiedBadge,
                                             shape: BoxShape.circle,
                                             border: Border.all(
                                               color: Colors.white,
@@ -382,7 +382,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                                             const SizedBox(width: 4),
                                             const Icon(
                                               Icons.verified_rounded,
-                                              color: Color(0xFF1DA1F2),
+                                              color: AppColors.verifiedBadge,
                                               size: 16,
                                             ),
                                           ],
@@ -398,7 +398,7 @@ class _DiscoverFeedScreenState extends State<DiscoverFeedScreen> {
                                               const Icon(
                                                 Icons.star_rounded,
                                                 size: 12,
-                                                color: Color(0xFFFFB800),
+                                                color: AppColors.warning,
                                               ),
                                               const SizedBox(width: 3),
                                               Text(

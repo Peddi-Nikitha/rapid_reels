@@ -554,11 +554,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [
-            Colors.blue.shade800,
-            Colors.blue.shade700,
-            Colors.blue.shade600,
+            AppColors.primary,
+            AppColors.secondary,
+            AppColors.accent,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

@@ -222,7 +222,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
                     onSynced: _mergeReel,
                   );
                 },
-                color: isLiked ? const Color(0xFFFF3040) : Colors.white,
+                color: isLiked ? AppColors.reelLike : Colors.white,
               ),
               const SizedBox(height: 20),
               _buildActionButton(
@@ -334,7 +334,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
                                 width: 16,
                                 height: 16,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1DA1F2),
+                                  color: AppColors.verifiedBadge,
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: Colors.white,
@@ -379,7 +379,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
                                   const SizedBox(width: 4),
                                   const Icon(
                                     Icons.verified_rounded,
-                                    color: Color(0xFF1DA1F2),
+                                    color: AppColors.verifiedBadge,
                                     size: 16,
                                   ),
                                 ],
@@ -395,7 +395,7 @@ class _ReelPlayerScreenState extends State<ReelPlayerScreen> {
                                     const Icon(
                                       Icons.star_rounded,
                                       size: 12,
-                                      color: Color(0xFFFFB800),
+                                      color: AppColors.warning,
                                     ),
                                     const SizedBox(width: 3),
                                     Text(

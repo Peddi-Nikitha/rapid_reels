@@ -278,7 +278,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                                     width: 16,
                                     height: 16,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF1DA1F2),
+                                      color: AppColors.verifiedBadge,
                                       shape: BoxShape.circle,
                                       border: Border.all(
                                         color: Colors.white,
@@ -326,7 +326,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                                       const SizedBox(width: 4),
                                       const Icon(
                                         Icons.verified_rounded,
-                                        color: Color(0xFF1DA1F2),
+                                        color: AppColors.verifiedBadge,
                                         size: 16,
                                       ),
                                     ],
@@ -342,7 +342,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
                                         const Icon(
                                           Icons.star_rounded,
                                           size: 12,
-                                          color: Color(0xFFFFB800),
+                                          color: AppColors.warning,
                                         ),
                                         const SizedBox(width: 3),
                                         Text(
@@ -510,7 +510,7 @@ class _MainDiscoverScreenState extends ConsumerState<MainDiscoverScreen>
               _buildActionButton(
                 icon: isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                 label: _formatCount(reel.likes),
-                iconColor: isLiked ? const Color(0xFFFF3040) : Colors.white,
+                iconColor: isLiked ? AppColors.reelLike : Colors.white,
                 onTap: () {
                   ReelEngagement.toggleLike(
                     context: context,
