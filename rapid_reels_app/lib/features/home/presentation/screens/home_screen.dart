@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +17,8 @@ import '../../../../core/theme/text_styles.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../providers/presentation/screens/provider_details_screen.dart';
+import '../../../../shared/widgets/glass_surface_card.dart';
+import '../../../../shared/widgets/premium_home_background.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -524,6 +525,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
+          const Positioned.fill(child: PremiumHomeBackground()),
           SafeArea(
             child: CustomScrollView(
           slivers: [
@@ -570,19 +572,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 child: InkWell(
                                   onTap: () => _showCityPicker(),
                                   borderRadius: BorderRadius.circular(12),
-                                  child: Container(
+                                  child: GlassSurfaceCard(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 8,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surface,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: AppColors.cardBackground.withValues(alpha: 0.5),
-                                        width: 0.5,
-                                      ),
-                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    blurSigma: 8,
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -619,42 +615,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               );
                             },
                             borderRadius: BorderRadius.circular(20),
-                            child: Container(
+                            child: SizedBox(
                               width: 44,
                               height: 44,
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: AppColors.cardBackground.withValues(alpha: 0.5),
-                                  width: 0.5,
-                                ),
-                              ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_outlined,
-                                    size: 22,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                  Positioned(
-                                    right: 8,
-                                    top: 8,
-                                    child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: AppColors.surface,
-                                          width: 1.5,
+                              child: GlassSurfaceCard(
+                                borderRadius: BorderRadius.circular(22),
+                                blurSigma: 8,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.notifications_outlined,
+                                      size: 22,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                    Positioned(
+                                      right: 8,
+                                      top: 8,
+                                      child: Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: AppColors.surface,
+                                            width: 1.5,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -1082,73 +1074,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: ClipRRect(
+        child: GlassSurfaceCard(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              height: 88,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: isPrimary
-                    ? AppColors.primaryGradient
-                    : LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.surface.withValues(alpha: 0.7),
-                          AppColors.surface.withValues(alpha: 0.5),
-                        ],
-                      ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isPrimary
-                      ? Colors.white.withValues(alpha: 0.2)
-                      : AppColors.cardBackground.withValues(alpha: 0.3),
-                  width: 1.5,
+          gradient: isPrimary
+              ? AppColors.primaryGradient
+              : AppColors.homeGlassGradient,
+          borderColor: isPrimary
+              ? AppColors.homeGlowCyan.withValues(alpha: 0.45)
+              : AppColors.homeGlassBorder,
+          boxShadow: [
+            BoxShadow(
+              color: isPrimary
+                  ? AppColors.homeGlowCyan.withValues(alpha: 0.28)
+                  : AppColors.homeGlassShadow,
+              blurRadius: isPrimary ? 18 : 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+          child: SizedBox(
+            height: 64,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: isPrimary ? AppColors.onPrimary : AppColors.primary,
+                  size: 24,
                 ),
-                boxShadow: isPrimary
-                    ? [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: isPrimary
+                      ? AppTypography.labelMedium.copyWith(
+                          color: AppColors.onPrimary,
+                          fontWeight: FontWeight.w700,
+                        )
+                      : AppTypography.labelSmall.copyWith(
+                          color: AppColors.textPrimary,
                         ),
-                      ]
-                    : [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    icon,
-                    color: isPrimary ? Colors.white : AppColors.primary,
-                    size: 24,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    label,
-                    style: isPrimary
-                        ? AppTypography.labelMedium.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          )
-                        : AppTypography.labelSmall.copyWith(
-                            color: AppColors.textPrimary,
-                          ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ),
@@ -1163,9 +1133,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: AppColors.homeGlowMagenta.withValues(alpha: 0.16),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -1203,9 +1173,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.3),
-                    Colors.black.withValues(alpha: 0.7),
+                    AppColors.homeGlowCyan.withValues(alpha: 0.06),
+                    Colors.black.withValues(alpha: 0.45),
+                    Colors.black.withValues(alpha: 0.78),
                   ],
                   stops: const [0.0, 0.5, 1.0],
                 ),
@@ -1418,69 +1388,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return GestureDetector(
       onTap: () => _viewReel(reel, index),
-      child: ClipRRect(
+      child: GlassSurfaceCard(
+        margin: const EdgeInsets.only(right: 12),
         borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 140,
-            constraints: const BoxConstraints(
-              minHeight: 179,
-              maxHeight: 179,
-            ),
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.surface.withValues(alpha: 0.7),
-                  AppColors.surface.withValues(alpha: 0.5),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppColors.cardBackground.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Video thumbnail - Reduced height to fit
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Container(
-                height: 108, // Reduced from 112 to 108
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      _getEventColorForType(reel.eventType).withValues(alpha: 0.5),
-                      _getEventColorForType(reel.eventType),
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    // Thumbnail image if available
-                    if (reel.thumbnailUrl.isNotEmpty)
-                      CachedNetworkImage(
-                        imageUrl: reel.thumbnailUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        errorWidget: (context, url, error) => Container(
+        padding: EdgeInsets.zero,
+        child: SizedBox(
+          width: 140,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 179, maxHeight: 179),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: SizedBox(
+                    height: 108,
+                    width: double.infinity,
+                    child: Stack(
+                      children: [
+                        Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
@@ -1492,115 +1418,117 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                         ),
-                      ),
-                    // Overlay
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            _getEventColorForType(reel.eventType).withValues(alpha: 0.6),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Play Icon
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            width: 2,
+                        if (reel.thumbnailUrl.isNotEmpty)
+                          CachedNetworkImage(
+                            imageUrl: reel.thumbnailUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                          ),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                _getEventColorForType(reel.eventType).withValues(alpha: 0.6),
+                              ],
+                            ),
                           ),
                         ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          size: 22, // Reduced from 24 to 22
-                          color: Colors.white,
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.3),
+                                width: 2,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              size: 22,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            // Content - Ultra compact to prevent overflow
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(7, 6, 7, 6), // Reduced padding
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        reel.title.isNotEmpty ? reel.title : '${reel.eventType} Reel',
-                        style: AppTypography.captionLarge.copyWith( // Changed from titleSmall to captionLarge
-                          color: AppColors.textPrimary,
-                          fontSize: 11, // Explicit smaller size
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(height: 3), // Reduced from 4 to 3
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.visibility_outlined,
-                          size: 9, // Reduced from 10 to 9
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 2), // Reduced from 3 to 2
                         Flexible(
                           child: Text(
-                            _formatViews(reel.views),
-                            style: AppTypography.captionSmall.copyWith(
-                              color: AppColors.textSecondary,
-                              fontSize: 9, // Explicit smaller size
+                            reel.title.isNotEmpty ? reel.title : '${reel.eventType} Reel',
+                            style: AppTypography.captionLarge.copyWith(
+                              color: AppColors.textPrimary,
+                              fontSize: 11,
                             ),
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(height: 3),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.visibility_outlined,
+                              size: 9,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 2),
+                            Flexible(
+                              child: Text(
+                                _formatViews(reel.views),
+                                style: AppTypography.captionSmall.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 9,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _buildReelActionChip(
+                              icon: isLiked
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              count: localLikes,
+                              onTap: () => _handleReelLike(reel),
+                              iconColor: isLiked ? Colors.redAccent : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            _buildReelActionChip(
+                              icon: Icons.comment_outlined,
+                              count: localComments,
+                              onTap: () => _showCommentBottomSheet(reel),
+                            ),
+                            const SizedBox(width: 6),
+                            _buildReelActionChip(
+                              icon: Icons.share_outlined,
+                              count: localShares,
+                              onTap: () => _handleReelShare(reel),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        _buildReelActionChip(
-                          icon: isLiked
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          count: localLikes,
-                          onTap: () => _handleReelLike(reel),
-                          iconColor: isLiked ? Colors.redAccent : AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 6),
-                        _buildReelActionChip(
-                          icon: Icons.comment_outlined,
-                          count: localComments,
-                          onTap: () => _showCommentBottomSheet(reel),
-                        ),
-                        const SizedBox(width: 6),
-                        _buildReelActionChip(
-                          icon: Icons.share_outlined,
-                          count: localShares,
-                          onTap: () => _handleReelShare(reel),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
             ),
           ),
         ),
@@ -1658,183 +1586,135 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ProviderDetailsScreen(
-                providerId: provider.providerId,
-              ),
+              builder: (context) => ProviderDetailsScreen(providerId: provider.providerId),
             ),
           );
         },
         borderRadius: BorderRadius.circular(16),
-        child: ClipRRect(
+        child: GlassSurfaceCard(
+          margin: const EdgeInsets.only(right: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              width: 280,
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.surface.withValues(alpha: 0.7),
-                    AppColors.surface.withValues(alpha: 0.5),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColors.cardBackground.withValues(alpha: 0.3),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Avatar - Refined
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: AppColors.primaryGradient,
-                  border: Border.all(
-                    color: AppColors.cardBackground.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: provider.profileImage.isNotEmpty
-                    ? ClipOval(
-                        child: CachedNetworkImage(
-                          imageUrl: provider.profileImage,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: AppColors.primary,
-                            child: Center(
-                              child: Text(
-                                initials,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: AppColors.primary,
-                            child: Center(
-                              child: Text(
-                                initials,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Text(
-                          initials,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-              ),
-              const SizedBox(width: 12),
-              // Content - Refined (Fixed overflow)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child:                                     Text(
-                                      provider.businessName,
-                                      style: AppTypography.titleMedium.copyWith(
-                                        color: AppColors.textPrimary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                        ),
-                        if (provider.isVerified)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.verified_rounded,
-                              size: 16,
-                              color: Color(0xFF1DA1F2),
-                            ),
-                          ),
-                      ],
+          child: SizedBox(
+            width: 280,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppColors.primaryGradient,
+                    border: Border.all(
+                      color: AppColors.cardBackground.withValues(alpha: 0.3),
+                      width: 1,
                     ),
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.star_rounded,
-                          size: 13,
-                          color: Color(0xFFFFB800),
-                        ),
-                        const SizedBox(width: 4),
-                                        Text(
-                                          provider.rating.toStringAsFixed(1),
-                                          style: AppTypography.labelSmall.copyWith(
-                                            color: AppColors.textPrimary,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Flexible(
-                                          child: Text(
-                                            '${provider.totalReviews} reviews',
-                                            style: AppTypography.captionSmall.copyWith(
-                                              color: AppColors.textSecondary,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      '${provider.totalEventsCompleted}+ events',
-                                      style: AppTypography.captionSmall.copyWith(
-                                        color: AppColors.textSecondary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                  ],
+                  ),
+                  child: provider.profileImage.isNotEmpty
+                      ? ClipOval(
+                          child: CachedNetworkImage(
+                            imageUrl: provider.profileImage,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => _providerInitialsFallback(initials),
+                            errorWidget: (context, url, error) =>
+                                _providerInitialsFallback(initials),
+                          ),
+                        )
+                      : _providerInitialsFallback(initials),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: AppColors.textTertiary,
-              ),
-            ],
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              provider.businessName,
+                              style: AppTypography.titleMedium.copyWith(
+                                color: AppColors.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (provider.isVerified)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4),
+                              child: Icon(
+                                Icons.verified_rounded,
+                                size: 16,
+                                color: Color(0xFF1DA1F2),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.star_rounded,
+                            size: 13,
+                            color: Color(0xFFFFB800),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            provider.rating.toStringAsFixed(1),
+                            style: AppTypography.labelSmall.copyWith(
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '${provider.totalReviews} reviews',
+                              style: AppTypography.captionSmall.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${provider.totalEventsCompleted}+ events',
+                        style: AppTypography.captionSmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: AppColors.primary.withValues(alpha: 0.8),
+                ),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _providerInitialsFallback(String initials) {
+    return Center(
+      child: Text(
+        initials,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 16,
         ),
       ),
     );
@@ -1976,7 +1856,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              color.withOpacity(0.3),
+              color.withValues(alpha: 0.3),
               color,
             ],
           ),
@@ -2258,34 +2138,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final review = _getCityReview(city, index);
     final rating = review['rating'] as double;
 
-    return ClipRRect(
+    return GlassSurfaceCard(
       borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.surface.withValues(alpha: 0.7),
-                AppColors.surface.withValues(alpha: 0.5),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: AppColors.cardBackground.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2295,13 +2150,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               if (index < rating.floor()) {
                 return const Icon(
                   Icons.star_rounded,
-                  color: AppColors.primary,
+                  color: AppColors.homeGlowLime,
                   size: 24,
                 );
               } else if (index < rating) {
                 return const Icon(
                   Icons.star_half_rounded,
-                  color: AppColors.primary,
+                  color: AppColors.homeGlowLime,
                   size: 24,
                 );
               } else {
@@ -2398,93 +2253,77 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
           ),
-        ),
-      ),
     );
   }
 
   // Build Branding Section with Illustration
   Widget _buildBrandingSection(String city) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-      ),
-      child: Column(
-        children: [
-          // Illustration Placeholder - City-based text
-          Container(
-            padding: const EdgeInsets.all(40),
-            child: Column(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: GlassSurfaceCard(
+        borderRadius: BorderRadius.circular(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+        child: Column(
+          children: [
+            Text(
+              'Serving $city with\nInstant Reels',
+              textAlign: TextAlign.center,
+              style: AppTypography.headlineSmall.copyWith(
+                color: AppColors.textPrimary.withValues(alpha: 0.75),
+                fontWeight: FontWeight.w500,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 30),
+            Wrap(
+              spacing: 20,
+              runSpacing: 20,
+              alignment: WrapAlignment.center,
               children: [
-                // City-based message
+                _buildIllustrationIcon(Icons.videocam_rounded),
+                _buildIllustrationIcon(Icons.camera_alt_rounded),
+                _buildIllustrationIcon(Icons.movie_creation_rounded),
+                _buildIllustrationIcon(Icons.play_circle_outline_rounded),
+                _buildIllustrationIcon(Icons.favorite_border_rounded),
+                _buildIllustrationIcon(Icons.share_rounded),
+                _buildIllustrationIcon(Icons.rocket_launch_rounded),
+                _buildIllustrationIcon(Icons.thumb_up_outlined),
+              ],
+            ),
+            const SizedBox(height: 28),
+            Text(
+              'Rapid Reels',
+              style: AppTypography.displaySmall.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
                 Text(
-                  'Serving $city with\nInstant Reels',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.headlineSmall.copyWith(
-                    color: AppColors.textPrimary.withValues(alpha: 0.3),
-                    fontWeight: FontWeight.w300,
-                    height: 1.4,
+                  'Crafted with ',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 40),
-                // Decorative Icons
-                Wrap(
-                  spacing: 20,
-                  runSpacing: 20,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    _buildIllustrationIcon(Icons.videocam_rounded),
-                    _buildIllustrationIcon(Icons.camera_alt_rounded),
-                    _buildIllustrationIcon(Icons.movie_creation_rounded),
-                    _buildIllustrationIcon(Icons.play_circle_outline_rounded),
-                    _buildIllustrationIcon(Icons.favorite_border_rounded),
-                    _buildIllustrationIcon(Icons.share_rounded),
-                    _buildIllustrationIcon(Icons.rocket_launch_rounded),
-                    _buildIllustrationIcon(Icons.thumb_up_outlined),
-                  ],
+                Icon(
+                  Icons.favorite,
+                  color: AppColors.homeGlowMagenta.withValues(alpha: 0.95),
+                  size: 18,
+                ),
+                Text(
+                  ' in India',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 20),
-          // Branding Text
-          Column(
-            children: [
-              Text(
-                'Rapid Reels',
-                style: AppTypography.displaySmall.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Crafted with ',
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const Icon(
-                    Icons.favorite,
-                    color: AppColors.primary,
-                    size: 18,
-                  ),
-                  Text(
-                    ' in India',
-                    style: AppTypography.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2493,7 +2332,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildIllustrationIcon(IconData icon) {
     return Icon(
       icon,
-      color: AppColors.textTertiary.withValues(alpha: 0.3),
+      color: AppColors.homeGlowCyan.withValues(alpha: 0.45),
       size: 32,
     );
   }

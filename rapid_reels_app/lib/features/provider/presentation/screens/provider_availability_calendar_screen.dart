@@ -212,7 +212,7 @@ class _ProviderAvailabilityCalendarScreenState extends State<ProviderAvailabilit
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
               primary: AppColors.primary,
-              onPrimary: Colors.white,
+              onPrimary: AppColors.onPrimary,
               surface: AppColors.surface,
               onSurface: Colors.white,
             ),

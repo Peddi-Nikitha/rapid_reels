@@ -6,6 +6,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 
 import 'app.dart';
 import 'core/config/stripe_config.dart';
+import 'core/constants/app_colors.dart';
 import 'core/firebase/services/firebase_init_service.dart';
 
 Future<void> main() async {
@@ -36,7 +37,7 @@ Future<void> main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF0A0A0A),
+      systemNavigationBarColor: AppColors.background,
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );

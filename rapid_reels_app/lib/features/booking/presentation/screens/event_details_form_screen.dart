@@ -491,6 +491,8 @@ class _EventDetailsFormScreenState extends State<EventDetailsFormScreen> {
             colorScheme: const ColorScheme.dark(
               primary: AppColors.primary,
               surface: AppColors.surface,
+              onPrimary: AppColors.onPrimary,
+              onSurface: AppColors.textPrimary,
             ),
           ),
           child: child!,
@@ -514,6 +516,8 @@ class _EventDetailsFormScreenState extends State<EventDetailsFormScreen> {
             colorScheme: const ColorScheme.dark(
               primary: AppColors.primary,
               surface: AppColors.surface,
+              onPrimary: AppColors.onPrimary,
+              onSurface: AppColors.textPrimary,
             ),
           ),
           child: child!,

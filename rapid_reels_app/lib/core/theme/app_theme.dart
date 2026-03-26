@@ -16,8 +16,8 @@ class AppTheme {
         secondary: AppColors.secondary,
         surface: AppColors.surface,
         error: AppColors.error,
-        onPrimary: Colors.white,
-        onSecondary: Colors.white,
+        onPrimary: AppColors.onPrimary,
+        onSecondary: AppColors.onSecondary,
         onSurface: AppColors.textPrimary,
         onError: Colors.white,
       ),
@@ -60,7 +60,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: AppColors.onPrimary,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -140,6 +140,7 @@ class AppTheme {
         backgroundColor: AppColors.surface,
         selectedColor: AppColors.primary,
         labelStyle: AppTypography.labelSmall.copyWith(color: AppColors.textPrimary),
+        secondaryLabelStyle: AppTypography.labelSmall.copyWith(color: AppColors.onPrimary),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -165,6 +166,24 @@ class AppTheme {
       dividerTheme: const DividerThemeData(
         color: AppColors.surface,
         thickness: 1,
+      ),
+
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
+      ),
+
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return AppColors.primary;
+          return AppColors.textTertiary;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppColors.primary.withValues(alpha: 0.35);
+          }
+          return AppColors.surfaceElevated;
+        }),
       ),
     );
   }
