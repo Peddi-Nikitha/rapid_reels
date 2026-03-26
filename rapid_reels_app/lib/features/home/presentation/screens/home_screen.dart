@@ -1643,12 +1643,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                           if (provider.isVerified)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.only(left: 4),
                               child: Icon(
                                 Icons.verified_rounded,
                                 size: 16,
-                                color: Color(0xFF1DA1F2),
+                                color: AppColors.primary,
                               ),
                             ),
                         ],
@@ -1659,7 +1659,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const Icon(
                             Icons.star_rounded,
                             size: 13,
-                            color: Color(0xFFFFB800),
+                            color: AppColors.warning,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -2150,13 +2150,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               if (index < rating.floor()) {
                 return const Icon(
                   Icons.star_rounded,
-                  color: AppColors.homeGlowLime,
+                  color: AppColors.warning,
                   size: 24,
                 );
               } else if (index < rating) {
                 return const Icon(
                   Icons.star_half_rounded,
-                  color: AppColors.homeGlowLime,
+                  color: AppColors.warning,
                   size: 24,
                 );
               } else {

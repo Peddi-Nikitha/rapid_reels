@@ -14,11 +14,13 @@ class AppTheme {
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primary,
         secondary: AppColors.secondary,
+        tertiary: AppColors.accent,
         surface: AppColors.surface,
         error: AppColors.error,
         onPrimary: AppColors.onPrimary,
         onSecondary: AppColors.onSecondary,
         onSurface: AppColors.textPrimary,
+        outline: AppColors.surfaceElevated,
         onError: Colors.white,
       ),
       
@@ -127,7 +129,7 @@ class AppTheme {
       ),
       
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.background,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textSecondary,
         type: BottomNavigationBarType.fixed,
@@ -164,7 +166,7 @@ class AppTheme {
       ),
       
       dividerTheme: const DividerThemeData(
-        color: AppColors.surface,
+        color: AppColors.surfaceElevated,
         thickness: 1,
       ),
 
