@@ -36,6 +36,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
   Set<Marker> _markers = {};
   Set<Circle> _circles = {};
   Venue? _selectedVenue;
+  List<Venue> _allDisplayVenues = [];
   List<Venue> _nearbyVenues = [];
   bool _isLoadingLocation = false;
   bool _showMapView = true; // Show map by default
@@ -50,6 +51,14 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
   @override
   void initState() {
     super.initState();
+    _allDisplayVenues = List<Venue>.from(MockVenues.allVenues);
+    _nearbyVenues = List<Venue>.from(_allDisplayVenues);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateMarkers();
+      _updateCircles();
+    });
+
     // Get location in background, don't block UI
     _getCurrentLocation();
     
@@ -146,7 +155,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
     _lastSyncedUserId = userId;
     _lastSyncedSavedAddressesCount = savedAddresses.length;
 
-    final venues = savedAddresses.map((a) {
+    final savedVenueEntries = savedAddresses.map((a) {
       return Venue(
         venueId: a.addressId,
         name: a.label.isNotEmpty ? a.label : 'Saved Address',
@@ -163,13 +172,44 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
       );
     }).toList();
 
-    setState(() {
-      _nearbyVenues = venues;
-      if (_nearbyVenues.isEmpty) _showManualEntry = true;
-    });
+    final venues = savedVenueEntries.isNotEmpty
+        ? savedVenueEntries
+        : List<Venue>.from(MockVenues.allVenues);
+
+    _allDisplayVenues = venues;
+    _applySearchFilter(_searchController.text);
+
+    if (_nearbyVenues.isEmpty) {
+      setState(() {
+        _showManualEntry = true;
+      });
+    }
 
     _updateMarkers();
     _updateCircles();
+  }
+
+  void _applySearchFilter(String rawQuery) {
+    final query = rawQuery.trim().toLowerCase();
+    final source = _allDisplayVenues;
+
+    final filteredVenues = query.isEmpty
+        ? List<Venue>.from(source)
+        : source.where((venue) {
+            final name = venue.name.toLowerCase();
+            final address = venue.address.toLowerCase();
+            final city = venue.city.toLowerCase();
+            final pincode = venue.pincode.toLowerCase();
+
+            return name.contains(query) ||
+                address.contains(query) ||
+                city.contains(query) ||
+                pincode.contains(query);
+          }).toList();
+
+    setState(() {
+      _nearbyVenues = filteredVenues;
+    });
   }
 
   void _updateMarkers() {
@@ -754,33 +794,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
                       ),
                     ),
                     onChanged: (value) {
-                      // Filter venues based on search (name, address, city, pincode)
-                      final query = value.trim().toLowerCase();
-
-                      setState(() {
-                        if (query.isEmpty) {
-                          // Reset to saved addresses (dynamic)
-                          final currentUser = ref.read(currentUserProvider);
-                          final userId = currentUser?.uid ?? '';
-                          final profile = ref.read(userProfileProvider(userId)).valueOrNull;
-                          final saved = profile?.savedAddresses ?? const <SavedAddress>[];
-                          if (userId.isNotEmpty) {
-                            _syncVenuesFromProfile(userId: userId, savedAddresses: saved);
-                          }
-                        } else {
-                          _nearbyVenues = _nearbyVenues.where((venue) {
-                            final name = venue.name.toLowerCase();
-                            final address = venue.address.toLowerCase();
-                            final city = venue.city.toLowerCase();
-                            final pincode = venue.pincode.toLowerCase();
-
-                            return name.contains(query) ||
-                                address.contains(query) ||
-                                city.contains(query) ||
-                                pincode.contains(query);
-                          }).toList();
-                        }
-                      });
+                      _applySearchFilter(value);
                       _updateMarkers();
                     },
                   ),
@@ -964,7 +978,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Nearby Photography Studios',
+                          'Available Venues',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -1469,7 +1483,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'No venues found nearby',
+                'No venues found',
                 style: TextStyle(
                   fontSize: 18,
                   color: AppColors.textSecondary,
@@ -1477,7 +1491,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Use the manual entry form above to enter your venue details',
+                'Try a different search or use the manual entry form above to continue booking',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textTertiary,

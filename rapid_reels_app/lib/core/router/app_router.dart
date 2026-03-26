@@ -28,6 +28,9 @@ import '../../features/booking/data/models/service_provider_model.dart';
 import '../../features/booking/presentation/screens/package_customization_screen.dart';
 import '../../features/booking/presentation/screens/booking_summary_screen.dart';
 import '../../features/booking/presentation/screens/payment_screen.dart';
+import '../../features/booking/presentation/screens/payment_success_screen.dart';
+import '../../features/booking/presentation/screens/payment_failure_screen.dart';
+import '../../features/booking/presentation/screens/my_transactions_screen.dart';
 
 // My Events screens
 import '../../features/my_events/presentation/screens/dynamic_my_events_screen.dart';
@@ -107,7 +110,10 @@ bool _isProtectedAdminRoute(String location) {
   return location.startsWith('/admin-') && location != AppRoutes.adminLogin;
 }
 
-Future<String?> _adminGuardRedirect(BuildContext context, GoRouterState state) async {
+Future<String?> _adminGuardRedirect(
+  BuildContext context,
+  GoRouterState state,
+) async {
   final loc = state.matchedLocation;
   if (!_isProtectedAdminRoute(loc)) return null;
   if (loc == AppRoutes.adminLogin || loc == AppRoutes.unauthorized) return null;
@@ -149,11 +155,8 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.splash,
         name: 'splash',
-        pageBuilder: (context, state) => _buildPageWithFadeTransition(
-          context,
-          state,
-          const SplashScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildPageWithFadeTransition(context, state, const SplashScreen()),
       ),
       GoRoute(
         path: AppRoutes.onboarding,
@@ -300,9 +303,7 @@ class AppRouter {
             return _buildPageWithSlideTransition(
               context,
               state,
-              const Scaffold(
-                body: Center(child: Text('Provider not found')),
-              ),
+              const Scaffold(body: Center(child: Text('Provider not found'))),
             );
           }
           return _buildPageWithSlideTransition(
@@ -337,14 +338,19 @@ class AppRouter {
             return _buildPageWithSlideTransition(
               context,
               state,
-              const Scaffold(body: Center(child: Text('Missing booking context'))),
+              const Scaffold(
+                body: Center(child: Text('Missing booking context')),
+              ),
             );
           }
           final bookingData = _nestedStringMap(extra['bookingData']);
           return _buildPageWithSlideTransition(
             context,
             state,
-            CatalogueSelectionScreen(provider: provider, bookingData: bookingData),
+            CatalogueSelectionScreen(
+              provider: provider,
+              bookingData: bookingData,
+            ),
           );
         },
       ),
@@ -358,14 +364,19 @@ class AppRouter {
             return _buildPageWithSlideTransition(
               context,
               state,
-              const Scaffold(body: Center(child: Text('Missing booking context'))),
+              const Scaffold(
+                body: Center(child: Text('Missing booking context')),
+              ),
             );
           }
           final bookingData = _nestedStringMap(extra['bookingData']);
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderPackagePickScreen(provider: provider, bookingData: bookingData),
+            ProviderPackagePickScreen(
+              provider: provider,
+              bookingData: bookingData,
+            ),
           );
         },
       ),
@@ -418,6 +429,46 @@ class AppRouter {
             ),
           );
         },
+      ),
+      GoRoute(
+        path: AppRoutes.paymentSuccess,
+        name: 'paymentSuccess',
+        pageBuilder: (context, state) {
+          final extra = _extraMap(state.extra);
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            PaymentSuccessScreen(
+              bookingId: extra['bookingId']?.toString() ?? '',
+              paymentId: extra['paymentId']?.toString() ?? '',
+              amount: (extra['amount'] as num?)?.toDouble() ?? 0,
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.paymentFailure,
+        name: 'paymentFailure',
+        pageBuilder: (context, state) {
+          final extra = _extraMap(state.extra);
+          return _buildPageWithSlideTransition(
+            context,
+            state,
+            PaymentFailureScreen(
+              message: extra['message']?.toString() ?? 'Payment failed',
+              bookingData: _nestedStringMap(extra['bookingData']),
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.myTransactions,
+        name: 'myTransactions',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const MyTransactionsScreen(),
+        ),
       ),
 
       // ==================== My Events Routes ====================
@@ -485,7 +536,10 @@ class AppRouter {
             ReelPlayerScreen(
               reelId: resolvedReelId,
               reels: reels,
-              initialIndex: _parseInt(extra['initialIndex'], 0).clamp(0, reels.isEmpty ? 0 : reels.length - 1),
+              initialIndex: _parseInt(
+                extra['initialIndex'],
+                0,
+              ).clamp(0, reels.isEmpty ? 0 : reels.length - 1),
             ),
           );
         },
@@ -536,11 +590,8 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.wallet,
         name: 'wallet',
-        pageBuilder: (context, state) => _buildPageWithSlideTransition(
-          context,
-          state,
-          const WalletScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildPageWithSlideTransition(context, state, const WalletScreen()),
       ),
       GoRoute(
         path: AppRoutes.referralHistory,
@@ -565,11 +616,8 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.profile,
         name: 'profile',
-        pageBuilder: (context, state) => _buildPageWithFadeTransition(
-          context,
-          state,
-          const ProfileScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildPageWithFadeTransition(context, state, const ProfileScreen()),
       ),
       GoRoute(
         path: AppRoutes.editProfile,
@@ -583,11 +631,8 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.savedVenues,
         name: 'savedVenues',
-        pageBuilder: (context, state) => _buildPageWithSlideTransition(
-          context,
-          state,
-          SavedVenuesScreen(),
-        ),
+        pageBuilder: (context, state) =>
+            _buildPageWithSlideTransition(context, state, SavedVenuesScreen()),
       ),
       GoRoute(
         path: AppRoutes.paymentMethods,
@@ -715,11 +760,13 @@ class AppRouter {
         },
       ),
       GoRoute(
-        path: '${AppRoutes.providerCatalogueEdit}/:providerId/:catalogueEventId',
+        path:
+            '${AppRoutes.providerCatalogueEdit}/:providerId/:catalogueEventId',
         name: 'providerCatalogueEdit',
         pageBuilder: (context, state) {
           final providerId = state.pathParameters['providerId'] ?? '';
-          final catalogueEventId = state.pathParameters['catalogueEventId'] ?? 'new';
+          final catalogueEventId =
+              state.pathParameters['catalogueEventId'] ?? 'new';
           return _buildPageWithSlideTransition(
             context,
             state,
@@ -998,7 +1045,7 @@ class AppRouter {
         ),
       ),
     ],
-    
+
     // Error handler
     errorBuilder: (context, state) => Scaffold(
       body: Center(
@@ -1043,14 +1090,12 @@ class AppRouter {
         const end = Offset.zero;
         const curve = Curves.easeInOutCubic;
 
-        var tween = Tween(begin: begin, end: end).chain(
-          CurveTween(curve: curve),
-        );
+        var tween = Tween(
+          begin: begin,
+          end: end,
+        ).chain(CurveTween(curve: curve));
 
-        return SlideTransition(
-          position: animation.drive(tween),
-          child: child,
-        );
+        return SlideTransition(position: animation.drive(tween), child: child);
       },
     );
   }
@@ -1078,13 +1123,8 @@ class AppRouter {
       key: state.pageKey,
       child: child,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        return FadeTransition(
-          opacity: animation,
-          child: child,
-        );
+        return FadeTransition(opacity: animation, child: child);
       },
     );
   }
-
 }
-

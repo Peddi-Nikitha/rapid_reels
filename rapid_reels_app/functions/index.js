@@ -1,10 +1,22 @@
-const {onRequest} = require("firebase-functions/v2/https");
+const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+require("dotenv").config();
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
+const Stripe = require("stripe");
 
 admin.initializeApp();
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+
+function setCorsHeaders(response) {
+  response.set("Access-Control-Allow-Origin", "*");
+  response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  response.set("Access-Control-Allow-Headers", "Content-Type, stripe-signature");
+}
 
 // Send notification when booking is created
 exports.onBookingCreated = onDocumentCreated(
@@ -292,6 +304,159 @@ exports.verifyRazorpayPayment = onRequest(async (request, response) => {
       error: "Failed to verify payment",
       message: error.message,
     });
+  }
+});
+
+// Create Stripe PaymentIntent (callable — Flutter SDK resolves correct URL/region)
+exports.createStripePaymentIntent = onCall(
+    {
+      // Must match Flutter `FirebaseFunctions.instanceFor(region: ...)` (default us-central1).
+      region: "us-central1",
+    },
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Sign in required");
+      }
+      const uid = request.auth.uid;
+
+      if (!stripe) {
+        logger.error("Stripe is not configured. STRIPE_SECRET_KEY is missing.");
+        throw new HttpsError(
+            "failed-precondition",
+            "Stripe is not configured on the server",
+        );
+      }
+
+      const {amount, currency = "inr", bookingId, userId} = request.data || {};
+
+      if (!amount || !bookingId || !userId) {
+        throw new HttpsError(
+            "invalid-argument",
+            "Missing amount, bookingId, or userId",
+        );
+      }
+
+      if (String(userId) !== uid) {
+        throw new HttpsError("permission-denied", "User does not match caller");
+      }
+
+      const amountInSmallestUnit = Math.round(Number(amount) * 100);
+      if (!Number.isFinite(amountInSmallestUnit) || amountInSmallestUnit <= 0) {
+        throw new HttpsError("invalid-argument", "Invalid amount");
+      }
+
+      try {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amountInSmallestUnit,
+          currency: String(currency).toLowerCase(),
+          automatic_payment_methods: {enabled: true},
+          metadata: {
+            bookingId: String(bookingId),
+            userId: String(userId),
+          },
+        });
+
+        await admin.firestore().collection("bookings").doc(String(bookingId)).update({
+          "payment.stripePaymentIntentId": paymentIntent.id,
+          "payment.paymentStatus": "pending",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return {
+          success: true,
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+        };
+      } catch (error) {
+        logger.error("Error creating Stripe PaymentIntent:", error);
+        throw new HttpsError(
+            "internal",
+            error.message || "Failed to create payment intent",
+        );
+      }
+    },
+);
+
+// Stripe webhook for authoritative payment status updates
+exports.stripeWebhook = onRequest(async (request, response) => {
+  if (request.method !== "POST") {
+    response.status(405).send("Method not allowed");
+    return;
+  }
+
+  if (!stripe || !stripeWebhookSecret) {
+    logger.error("Stripe webhook not configured");
+    response.status(500).send("Stripe webhook not configured");
+    return;
+  }
+
+  const signature = request.headers["stripe-signature"];
+  if (!signature) {
+    response.status(400).send("Missing stripe-signature header");
+    return;
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(
+        request.rawBody,
+        signature,
+        stripeWebhookSecret
+    );
+  } catch (err) {
+    logger.error("Stripe webhook signature verification failed:", err.message);
+    response.status(400).send(`Webhook Error: ${err.message}`);
+    return;
+  }
+
+  try {
+    if (event.type === "payment_intent.succeeded") {
+      const paymentIntent = event.data.object;
+      const bookingId = paymentIntent.metadata?.bookingId;
+      if (bookingId) {
+        await admin.firestore().collection("bookings").doc(String(bookingId)).update({
+          status: "confirmed",
+          "payment.paymentStatus": "advance_paid",
+          "eventStatus.bookingConfirmed": admin.firestore.FieldValue.serverTimestamp(),
+          "payment.transactions": admin.firestore.FieldValue.arrayUnion({
+            paymentId: paymentIntent.id,
+            amount: (paymentIntent.amount_received || paymentIntent.amount || 0) / 100,
+            method: "stripe",
+            transactionId: paymentIntent.id,
+            status: "success",
+            paidAt: admin.firestore.FieldValue.serverTimestamp(),
+          }),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    if (event.type === "payment_intent.payment_failed" ||
+        event.type === "payment_intent.canceled") {
+      const paymentIntent = event.data.object;
+      const bookingId = paymentIntent.metadata?.bookingId;
+      if (bookingId) {
+        const failureMessage = paymentIntent.last_payment_error?.message || "Payment failed";
+        await admin.firestore().collection("bookings").doc(String(bookingId)).update({
+          "payment.paymentStatus": "failed",
+          "payment.failureReason": failureMessage,
+          "payment.transactions": admin.firestore.FieldValue.arrayUnion({
+            paymentId: paymentIntent.id,
+            amount: (paymentIntent.amount || 0) / 100,
+            method: "stripe",
+            transactionId: paymentIntent.id,
+            status: "failed",
+            paidAt: admin.firestore.FieldValue.serverTimestamp(),
+          }),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    response.status(200).send({received: true});
+  } catch (error) {
+    logger.error("Error handling Stripe webhook event:", error);
+    response.status(500).send("Webhook handler failed");
   }
 });
 

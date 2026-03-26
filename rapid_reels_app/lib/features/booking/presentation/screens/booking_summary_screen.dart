@@ -1,5 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -9,14 +12,12 @@ import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../data/adapters/booking_firebase_adapter.dart';
+import '../../data/services/stripe_payment_service.dart';
 
 class BookingSummaryScreen extends StatefulWidget {
   final Map<String, dynamic> bookingData;
 
-  const BookingSummaryScreen({
-    super.key,
-    required this.bookingData,
-  });
+  const BookingSummaryScreen({super.key, required this.bookingData});
 
   @override
   State<BookingSummaryScreen> createState() => _BookingSummaryScreenState();
@@ -26,6 +27,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   bool _acceptedTerms = false;
   bool _isProcessing = false;
   final _firestoreService = FirestoreService();
+  final _stripePaymentService = StripePaymentService();
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +67,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   const Center(
                     child: Text(
                       'Review Your Booking',
@@ -87,112 +89,131 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                     ),
                   ),
                   const SizedBox(height: 32),
-                  
+
                   // Event Details
-                  _buildSection(
-                    'Event Details',
-                    [
-                      if (widget.bookingData['catalogueTitle'] != null &&
-                          widget.bookingData['catalogueTitle'].toString().isNotEmpty)
-                        _buildDetailRow('Offering', widget.bookingData['catalogueTitle'].toString()),
-                      _buildDetailRow('Event Name', widget.bookingData['eventName']),
-                      _buildDetailRow('Event Type', _formatEventType(widget.bookingData['eventType'])),
+                  _buildSection('Event Details', [
+                    if (widget.bookingData['catalogueTitle'] != null &&
+                        widget.bookingData['catalogueTitle']
+                            .toString()
+                            .isNotEmpty)
                       _buildDetailRow(
-                        'Date',
-                        DateFormat('dd MMM yyyy').format(widget.bookingData['eventDate']),
+                        'Offering',
+                        widget.bookingData['catalogueTitle'].toString(),
                       ),
-                      _buildDetailRow('Time', widget.bookingData['eventTime'].format(context)),
-                      _buildDetailRow('Duration', '${widget.bookingData['duration']} hours'),
-                      _buildDetailRow('Guest Count', '${widget.bookingData['guestCount']} guests'),
-                    ],
-                  ),
-                  
+                    _buildDetailRow(
+                      'Event Name',
+                      widget.bookingData['eventName'],
+                    ),
+                    _buildDetailRow(
+                      'Event Type',
+                      _formatEventType(widget.bookingData['eventType']),
+                    ),
+                    _buildDetailRow(
+                      'Date',
+                      DateFormat(
+                        'dd MMM yyyy',
+                      ).format(widget.bookingData['eventDate']),
+                    ),
+                    _buildDetailRow(
+                      'Time',
+                      widget.bookingData['eventTime'].format(context),
+                    ),
+                    _buildDetailRow(
+                      'Duration',
+                      '${widget.bookingData['duration']} hours',
+                    ),
+                    _buildDetailRow(
+                      'Guest Count',
+                      '${widget.bookingData['guestCount']} guests',
+                    ),
+                  ]),
+
                   // Venue Details
-                  _buildSection(
-                    'Venue',
-                    [
-                      _buildDetailRow('Name', widget.bookingData['venueName']),
-                      _buildDetailRow('Address', widget.bookingData['venueAddress']),
-                      _buildDetailRow('City', widget.bookingData['venueCity']),
-                    ],
-                  ),
-                  
+                  _buildSection('Venue', [
+                    _buildDetailRow('Name', widget.bookingData['venueName']),
+                    _buildDetailRow(
+                      'Address',
+                      widget.bookingData['venueAddress'],
+                    ),
+                    _buildDetailRow('City', widget.bookingData['venueCity']),
+                  ]),
+
                   // Provider Details
                   if (providerId.isNotEmpty)
                     FutureBuilder<FirebaseProviderModel?>(
                       future: _firestoreService.getProvider(providerId),
                       builder: (context, snapshot) {
                         final provider = snapshot.data;
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return _buildSection(
-                            'Service Provider',
-                            const [
-                              Text('Loading provider...'),
-                            ],
-                          );
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return _buildSection('Service Provider', const [
+                            Text('Loading provider...'),
+                          ]);
                         }
                         if (provider == null) return const SizedBox.shrink();
-                        return _buildSection(
-                          'Service Provider',
-                          [
-                            _buildDetailRow('Provider', provider.businessName),
-                            _buildDetailRow('Rating', '${provider.rating} ⭐'),
-                            _buildDetailRow('Contact', provider.phoneNumber),
-                          ],
-                        );
+                        return _buildSection('Service Provider', [
+                          _buildDetailRow('Provider', provider.businessName),
+                          _buildDetailRow('Rating', '${provider.rating} ⭐'),
+                          _buildDetailRow('Contact', provider.phoneNumber),
+                        ]);
                       },
                     ),
-                  
+
                   // Package Details
-                  _buildSection(
-                    'Package',
-                    [
-                      _buildDetailRow('Package', packageName),
-                      _buildDetailRow('Coverage', '${packageDurationMinutes ~/ 60} hours'),
+                  _buildSection('Package', [
+                    _buildDetailRow('Package', packageName),
+                    _buildDetailRow(
+                      'Coverage',
+                      '${packageDurationMinutes ~/ 60} hours',
+                    ),
+                    _buildDetailRow(
+                      'Reels',
+                      packageReelsCount == -1
+                          ? 'Unlimited'
+                          : '$packageReelsCount',
+                    ),
+                    _buildDetailRow(
+                      'Editing',
+                      widget.bookingData['editingStyle'],
+                    ),
+                    if (widget.bookingData['additionalReels'] > 0)
                       _buildDetailRow(
-                        'Reels',
-                        packageReelsCount == -1 ? 'Unlimited' : '$packageReelsCount',
+                        'Additional Reels',
+                        '+${widget.bookingData['additionalReels']} (₹${widget.bookingData['additionalReels'] * 1500})',
                       ),
-                      _buildDetailRow('Editing', widget.bookingData['editingStyle']),
-                      if (widget.bookingData['additionalReels'] > 0)
-                        _buildDetailRow(
-                          'Additional Reels',
-                          '+${widget.bookingData['additionalReels']} (₹${widget.bookingData['additionalReels'] * 1500})',
-                        ),
-                      if (widget.bookingData['includeDrone'])
-                        _buildDetailRow('Drone Footage', 'Included (₹3000)'),
-                    ],
-                  ),
-                  
+                    if (widget.bookingData['includeDrone'])
+                      _buildDetailRow('Drone Footage', 'Included (₹3000)'),
+                  ]),
+
                   // Payment Breakdown
-                  _buildSection(
-                    'Payment',
-                    [
-                      _buildDetailRow('Base Price', '₹${packagePrice.toStringAsFixed(0)}'),
-                      if (widget.bookingData['additionalCost'] > 0)
-                        _buildDetailRow(
-                          'Add-ons',
-                          '+₹${widget.bookingData['additionalCost'].toStringAsFixed(0)}',
-                        ),
-                      const Divider(height: 24),
+                  _buildSection('Payment', [
+                    _buildDetailRow(
+                      'Base Price',
+                      '₹${packagePrice.toStringAsFixed(0)}',
+                    ),
+                    if (widget.bookingData['additionalCost'] > 0)
                       _buildDetailRow(
-                        'Total Amount',
-                        '₹${totalAmount.toStringAsFixed(0)}',
-                        isTotal: true,
+                        'Add-ons',
+                        '+₹${widget.bookingData['additionalCost'].toStringAsFixed(0)}',
                       ),
-                      _buildDetailRow(
-                        'Advance (50%)',
-                        '₹${advanceAmount.toStringAsFixed(0)}',
-                        subtitle: 'To be paid now',
-                      ),
-                      _buildDetailRow(
-                        'Remaining',
-                        '₹${(totalAmount - advanceAmount).toStringAsFixed(0)}',
-                        subtitle: 'After event completion',
-                      ),
-                    ],
-                  ),
-                  
+                    const Divider(height: 24),
+                    _buildDetailRow(
+                      'Total Amount',
+                      '₹${totalAmount.toStringAsFixed(0)}',
+                      isTotal: true,
+                    ),
+                    _buildDetailRow(
+                      'Advance (50%)',
+                      '₹${advanceAmount.toStringAsFixed(0)}',
+                      subtitle: 'To be paid now',
+                    ),
+                    _buildDetailRow(
+                      'Remaining',
+                      '₹${(totalAmount - advanceAmount).toStringAsFixed(0)}',
+                      subtitle: 'After event completion',
+                    ),
+                  ]),
+
                   // Terms & Conditions
                   Container(
                     margin: const EdgeInsets.only(top: 24),
@@ -206,12 +227,15 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                       children: [
                         Checkbox(
                           value: _acceptedTerms,
-                          onChanged: (value) => setState(() => _acceptedTerms = value ?? false),
+                          onChanged: (value) =>
+                              setState(() => _acceptedTerms = value ?? false),
                           activeColor: AppColors.primary,
                         ),
                         Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() => _acceptedTerms = !_acceptedTerms),
+                            onTap: () => setState(
+                              () => _acceptedTerms = !_acceptedTerms,
+                            ),
                             child: const Padding(
                               padding: EdgeInsets.only(top: 12),
                               child: Text(
@@ -232,7 +256,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
               ),
             ),
           ),
-          
+
           // Bottom Button
           Container(
             padding: const EdgeInsets.all(20),
@@ -250,7 +274,9 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
               top: false,
               child: CustomButton(
                 text: 'Pay ₹${advanceAmount.toStringAsFixed(0)} & Confirm',
-                onPressed: _acceptedTerms && !_isProcessing ? _handleConfirmBooking : null,
+                onPressed: _acceptedTerms && !_isProcessing
+                    ? _handleConfirmBooking
+                    : null,
                 isLoading: _isProcessing,
                 icon: Icons.payment,
               ),
@@ -350,6 +376,32 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
       return;
     }
 
+    final supportsStripeMobile =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    if (!supportsStripeMobile) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stripe payment is available on Android/iOS app only.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (Stripe.publishableKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Stripe publishable key missing. Set it in lib/core/config/stripe_config.dart.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isProcessing = true);
 
     try {
@@ -357,32 +409,65 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         widget.bookingData,
         user.uid,
       );
-      await _firestoreService.createBooking(booking);
+      final bookingId = await _firestoreService.createBooking(booking);
+      final paymentIntent = await _stripePaymentService.createPaymentIntent(
+        bookingId: bookingId,
+        userId: user.uid,
+        amount: booking.payment.advanceAmount,
+      );
+      await _stripePaymentService.presentPaymentSheet(
+        clientSecret: paymentIntent.clientSecret,
+        merchantDisplayName: 'Rapid Reels',
+      );
+
+      await _firestoreService.updateBooking(bookingId, {
+        'status': 'confirmed',
+        'payment.paymentStatus': 'advance_paid',
+        'eventStatus.bookingConfirmed': Timestamp.now(),
+        'payment.transactions': FieldValue.arrayUnion([
+          {
+            'paymentId': paymentIntent.paymentIntentId,
+            'amount': booking.payment.advanceAmount,
+            'method': 'stripe',
+            'transactionId': paymentIntent.paymentIntentId,
+            'status': 'success',
+            'paidAt': Timestamp.now(),
+          },
+        ]),
+      });
 
       if (!mounted) return;
 
       setState(() => _isProcessing = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Booking confirmed! View your booking in the My tab.'),
-          backgroundColor: AppColors.primary,
-        ),
+      context.go(
+        AppRoutes.paymentSuccess,
+        extra: {
+          'bookingId': bookingId,
+          'paymentId': paymentIntent.paymentIntentId,
+          'amount': booking.payment.advanceAmount,
+        },
       );
-
-      context.go(AppRoutes.home, extra: 2);
+    } on StripeException catch (e) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      context.go(
+        AppRoutes.paymentFailure,
+        extra: {
+          'message': e.error.localizedMessage ?? 'Payment was cancelled',
+          'bookingData': widget.bookingData,
+        },
+      );
     } catch (e) {
       if (!mounted) return;
 
       setState(() => _isProcessing = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to confirm booking: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
+      context.go(
+        AppRoutes.paymentFailure,
+        extra: {
+          'message': 'Failed to confirm payment: ${e.toString()}',
+          'bookingData': widget.bookingData,
+        },
       );
     }
   }
 }
-
