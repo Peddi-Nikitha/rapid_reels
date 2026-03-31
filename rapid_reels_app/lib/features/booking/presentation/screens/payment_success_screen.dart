@@ -42,7 +42,7 @@ class PaymentSuccessScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Your advance payment of ₹${amount.toStringAsFixed(0)} is received.',
+              'Your payment of £${amount.toStringAsFixed(2)} is received.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textSecondary),
             ),

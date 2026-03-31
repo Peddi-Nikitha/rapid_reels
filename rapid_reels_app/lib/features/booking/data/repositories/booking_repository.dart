@@ -208,6 +208,7 @@ class BookingRepository {
         totalAmount: e.totalAmount,
         advanceAmount: e.advanceAmount,
         remainingAmount: e.remainingAmount,
+        currency: 'inr',
         paymentStatus: e.paymentStatus,
         transactions: e.payments.isEmpty
             ? null

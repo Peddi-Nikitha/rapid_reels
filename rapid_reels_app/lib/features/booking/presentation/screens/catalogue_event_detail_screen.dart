@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/config/stripe_test_package.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/models/firebase_catalogue_event_model.dart';
@@ -22,7 +23,8 @@ class CatalogueEventDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final packages = packagesForCatalogue(provider, catalogueEvent);
+    final packages =
+        packagesWithStripeTest(packagesForCatalogue(provider, catalogueEvent));
     final images = <String>[
       if (catalogueEvent.heroImageUrl.isNotEmpty) catalogueEvent.heroImageUrl,
       ...catalogueEvent.galleryImageUrls,
@@ -185,7 +187,7 @@ class CatalogueEventDetailScreen extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    '₹${p.price.toStringAsFixed(0)}',
+                                    StripeTestPackage.formatListedPrice(p),
                                     style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,

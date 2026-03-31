@@ -402,6 +402,8 @@ class PaymentData {
   final double totalAmount;
   final double advanceAmount;
   final double remainingAmount;
+  /// ISO 4217 lowercase, e.g. `inr`, `gbp`. Defaults to `inr` for existing documents.
+  final String currency;
   final String paymentStatus; // pending, advance_paid, fully_paid, refunded
   final List<PaymentTransaction>? transactions;
 
@@ -409,6 +411,7 @@ class PaymentData {
     required this.totalAmount,
     required this.advanceAmount,
     required this.remainingAmount,
+    this.currency = 'inr',
     required this.paymentStatus,
     this.transactions,
   });
@@ -418,6 +421,7 @@ class PaymentData {
       totalAmount: (map['totalAmount'] ?? 0.0).toDouble(),
       advanceAmount: (map['advanceAmount'] ?? 0.0).toDouble(),
       remainingAmount: (map['remainingAmount'] ?? 0.0).toDouble(),
+      currency: (map['currency'] ?? 'inr').toString().toLowerCase(),
       paymentStatus: map['paymentStatus'] ?? 'pending',
       transactions: map['transactions'] != null
           ? (map['transactions'] as List)
@@ -432,6 +436,7 @@ class PaymentData {
       'totalAmount': totalAmount,
       'advanceAmount': advanceAmount,
       'remainingAmount': remainingAmount,
+      'currency': currency,
       'paymentStatus': paymentStatus,
       'transactions': transactions?.map((t) => t.toMap()).toList(),
     };

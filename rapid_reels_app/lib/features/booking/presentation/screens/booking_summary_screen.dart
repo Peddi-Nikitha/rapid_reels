@@ -1,10 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/config/stripe_config.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
@@ -24,6 +24,9 @@ class BookingSummaryScreen extends StatefulWidget {
 }
 
 class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
+  // Temporary live-payment micro test amount in INR.
+  // Set to `null` to use normal advance calculation.
+  static const double? _forceInrTestAmount = 2.0;
   bool _acceptedTerms = false;
   bool _isProcessing = false;
   final _firestoreService = FirestoreService();
@@ -37,8 +40,25 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
     final packageDurationMinutes = (pkg?['duration'] as num?)?.toInt() ?? 0;
     final packageReelsCount = (pkg?['reelsCount'] as num?)?.toInt() ?? 0;
     final providerId = widget.bookingData['providerId']?.toString() ?? '';
-    final totalAmount = widget.bookingData['totalAmount'];
-    final advanceAmount = totalAmount * 0.5;
+    final currency =
+        (widget.bookingData['paymentCurrency']?.toString().trim().toLowerCase().isNotEmpty ??
+                false)
+            ? widget.bookingData['paymentCurrency'].toString().trim().toLowerCase()
+            : 'inr';
+    final currencySymbol = currency == 'gbp' ? '£' : '₹';
+    final totalAmountNum =
+        (widget.bookingData['totalAmount'] is num)
+            ? (widget.bookingData['totalAmount'] as num).toDouble()
+            : 0.0;
+    final configuredAdvance =
+        (widget.bookingData['advanceAmount'] is num)
+            ? (widget.bookingData['advanceAmount'] as num).toDouble()
+            : 0.0;
+    final payableAmount = _resolvePayableAmount(
+      currency: currency,
+      configuredAdvance: configuredAdvance,
+      totalAmount: totalAmountNum,
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -179,38 +199,28 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                     if (widget.bookingData['additionalReels'] > 0)
                       _buildDetailRow(
                         'Additional Reels',
-                        '+${widget.bookingData['additionalReels']} (₹${widget.bookingData['additionalReels'] * 1500})',
+                        '+${widget.bookingData['additionalReels']}',
                       ),
                     if (widget.bookingData['includeDrone'])
-                      _buildDetailRow('Drone Footage', 'Included (₹3000)'),
+                      _buildDetailRow('Drone Footage', 'Included'),
                   ]),
 
                   // Payment Breakdown
                   _buildSection('Payment', [
                     _buildDetailRow(
                       'Base Price',
-                      '₹${packagePrice.toStringAsFixed(0)}',
+                      _formatMoney(packagePrice, currency),
                     ),
-                    if (widget.bookingData['additionalCost'] > 0)
-                      _buildDetailRow(
-                        'Add-ons',
-                        '+₹${widget.bookingData['additionalCost'].toStringAsFixed(0)}',
-                      ),
                     const Divider(height: 24),
                     _buildDetailRow(
                       'Total Amount',
-                      '₹${totalAmount.toStringAsFixed(0)}',
+                      _formatMoney(totalAmountNum, currency),
                       isTotal: true,
                     ),
                     _buildDetailRow(
-                      'Advance (50%)',
-                      '₹${advanceAmount.toStringAsFixed(0)}',
-                      subtitle: 'To be paid now',
-                    ),
-                    _buildDetailRow(
-                      'Remaining',
-                      '₹${(totalAmount - advanceAmount).toStringAsFixed(0)}',
-                      subtitle: 'After event completion',
+                      'Payable Now',
+                      _formatMoney(payableAmount, currency),
+                      subtitle: 'One-time payment',
                     ),
                   ]),
 
@@ -273,10 +283,8 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
             child: SafeArea(
               top: false,
               child: CustomButton(
-                text: 'Pay ₹${advanceAmount.toStringAsFixed(0)} & Confirm',
-                onPressed: _acceptedTerms && !_isProcessing
-                    ? _handleConfirmBooking
-                    : null,
+                text: 'Pay $currencySymbol${_formatAmount(payableAmount, currency)} & Confirm',
+                onPressed: !_isProcessing ? _handleConfirmBooking : null,
                 isLoading: _isProcessing,
                 icon: Icons.payment,
               ),
@@ -364,13 +372,50 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
     return type[0].toUpperCase() + type.substring(1);
   }
 
+  String _formatAmount(double amount, String currency) {
+    if (currency == 'gbp') return amount.toStringAsFixed(2);
+    return amount.toStringAsFixed(0);
+  }
+
+  String _formatMoney(double amount, String currency) {
+    final symbol = currency == 'gbp' ? '£' : '₹';
+    return '$symbol${_formatAmount(amount, currency)}';
+  }
+
+  double _resolvePayableAmount({
+    required String currency,
+    required double configuredAdvance,
+    required double totalAmount,
+  }) {
+    if (currency == 'inr' && _forceInrTestAmount != null) {
+      return _forceInrTestAmount!;
+    }
+    if (configuredAdvance > 0) return configuredAdvance;
+    return totalAmount * 0.5;
+  }
+
   Future<void> _handleConfirmBooking() async {
+    if (!_acceptedTerms) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please accept the Terms & Conditions to continue.',
+          ),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please sign in to confirm your booking.'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
         ),
       );
       return;
@@ -385,18 +430,66 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         const SnackBar(
           content: Text('Stripe payment is available on Android/iOS app only.'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
         ),
       );
       return;
     }
 
-    if (Stripe.publishableKey.isEmpty) {
+    const stripePublishableFromDefine = String.fromEnvironment(
+      'STRIPE_PUBLISHABLE_KEY',
+    );
+    final hasPublishableKey = stripePublishableFromDefine.isNotEmpty ||
+        StripeConfig.publishableKey.isNotEmpty ||
+        Stripe.publishableKey.isNotEmpty;
+
+    if (!hasPublishableKey) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Stripe publishable key missing. Set it in lib/core/config/stripe_config.dart.',
+            'Stripe publishable key missing. Add pk_live to '
+            'lib/core/config/stripe_config.dart or build with '
+            '--dart-define=STRIPE_PUBLISHABLE_KEY=pk_live_...',
           ),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 8),
+        ),
+      );
+      return;
+    }
+
+    final currency =
+        (widget.bookingData['paymentCurrency']?.toString().trim().toLowerCase().isNotEmpty ??
+                false)
+            ? widget.bookingData['paymentCurrency'].toString().trim().toLowerCase()
+            : 'inr';
+    final totalAmountNum =
+        (widget.bookingData['totalAmount'] is num)
+            ? (widget.bookingData['totalAmount'] as num).toDouble()
+            : 0.0;
+    final configuredAdvance =
+        (widget.bookingData['advanceAmount'] is num)
+            ? (widget.bookingData['advanceAmount'] as num).toDouble()
+            : 0.0;
+    final payableAmount = _resolvePayableAmount(
+      currency: currency,
+      configuredAdvance: configuredAdvance,
+      totalAmount: totalAmountNum,
+    );
+    const minAdvance = 0.30;
+
+    if (payableAmount < minAdvance) {
+      if (!mounted) return;
+      final minLabel = currency == 'gbp' ? '£0.30' : '₹30';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Payment amount is too low for Stripe. Minimum is $minLabel. '
+            'Please choose a higher-value package.',
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
       return;
@@ -405,36 +498,21 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
     setState(() => _isProcessing = true);
 
     try {
+      final bookingData = Map<String, dynamic>.from(widget.bookingData);
+      bookingData['paymentCurrency'] = currency;
+      bookingData['advanceAmount'] = payableAmount;
       final booking = BookingFirebaseAdapter.fromBookingData(
-        widget.bookingData,
+        bookingData,
         user.uid,
       );
       final bookingId = await _firestoreService.createBooking(booking);
       final paymentIntent = await _stripePaymentService.createPaymentIntent(
         bookingId: bookingId,
-        userId: user.uid,
-        amount: booking.payment.advanceAmount,
       );
       await _stripePaymentService.presentPaymentSheet(
         clientSecret: paymentIntent.clientSecret,
         merchantDisplayName: 'Rapid Reels',
       );
-
-      await _firestoreService.updateBooking(bookingId, {
-        'status': 'confirmed',
-        'payment.paymentStatus': 'advance_paid',
-        'eventStatus.bookingConfirmed': Timestamp.now(),
-        'payment.transactions': FieldValue.arrayUnion([
-          {
-            'paymentId': paymentIntent.paymentIntentId,
-            'amount': booking.payment.advanceAmount,
-            'method': 'stripe',
-            'transactionId': paymentIntent.paymentIntentId,
-            'status': 'success',
-            'paidAt': Timestamp.now(),
-          },
-        ]),
-      });
 
       if (!mounted) return;
 
@@ -444,16 +522,19 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         extra: {
           'bookingId': bookingId,
           'paymentId': paymentIntent.paymentIntentId,
-          'amount': booking.payment.advanceAmount,
+          'amount': payableAmount,
         },
       );
     } on StripeException catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
+      final reason = e.error.localizedMessage ?? e.error.message;
       context.go(
         AppRoutes.paymentFailure,
         extra: {
-          'message': e.error.localizedMessage ?? 'Payment was cancelled',
+          'message': reason?.isNotEmpty == true
+              ? 'Stripe error: $reason'
+              : 'Payment was cancelled',
           'bookingData': widget.bookingData,
         },
       );

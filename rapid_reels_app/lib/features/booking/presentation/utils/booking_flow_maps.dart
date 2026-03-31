@@ -26,3 +26,8 @@ List<PackageOffering> packagesForCatalogue(
       provider.packages.where((x) => catalogue.packageIds.contains(x.packageId)).toList();
   return filtered.isNotEmpty ? filtered : provider.packages;
 }
+
+/// Returns selectable packages as-is from provider/catalogue filters.
+List<PackageOffering> packagesWithStripeTest(List<PackageOffering> packages) {
+  return packages;
+}

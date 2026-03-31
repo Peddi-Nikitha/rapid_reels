@@ -7,15 +7,31 @@ class BookingFirebaseAdapter {
   /// Maps bookingData from the booking flow to FirebaseBookingModel.
   /// [data] - Map from event details, venue, provider selection, package customization
   /// [customerId] - Current user's Firebase UID
+  static Map<String, dynamic>? _packageMap(Map<String, dynamic> data) {
+    final raw = data['package'];
+    if (raw == null) return null;
+    if (raw is Map<String, dynamic>) return raw;
+    return Map<String, dynamic>.from(raw as Map);
+  }
+
   static FirebaseBookingModel fromBookingData(
     Map<String, dynamic> data,
     String customerId,
   ) {
-    final packageId = data['packageId'] as String? ?? '';
+    final pkgMap = _packageMap(data);
+    final topId = data['packageId']?.toString().trim() ?? '';
+    final nestedId = pkgMap?['packageId']?.toString().trim() ?? '';
+    final String packageId = nestedId.isNotEmpty ? nestedId : topId;
     final totalAmount = (data['totalAmount'] ?? 0.0) as num;
     final totalAmountDouble = totalAmount.toDouble();
-    final advanceAmount = totalAmountDouble * 0.5;
-    final remainingAmount = totalAmountDouble - advanceAmount;
+    final requestedAdvance = _toDouble(data['advanceAmount']);
+    final defaultAdvanceAmount = totalAmountDouble * 0.5;
+    final advanceAmount = requestedAdvance > 0 ? requestedAdvance : defaultAdvanceAmount;
+    final remainingAmount = (totalAmountDouble - advanceAmount).clamp(0.0, double.infinity);
+    final paymentCurrency = (data['paymentCurrency']?.toString().trim().toLowerCase().isNotEmpty ??
+            false)
+        ? data['paymentCurrency'].toString().trim().toLowerCase()
+        : 'inr';
     final durationHours = (data['duration'] ?? 4) as num;
     final durationMinutes = (durationHours.toInt() * 60);
 
@@ -30,9 +46,8 @@ class BookingFirebaseAdapter {
     );
 
     // Package - from bookingData (preferred)
-    final pkgMap = data['package'] as Map<String, dynamic>?;
     final pkg = PackageData(
-      packageId: pkgMap?['packageId']?.toString() ?? packageId,
+      packageId: packageId,
       name: pkgMap?['name']?.toString() ?? 'Custom',
       price: _toDouble(pkgMap?['price']) == 0.0 ? totalAmountDouble : _toDouble(pkgMap?['price']),
       duration: (pkgMap?['duration'] as num?)?.toInt() ?? durationMinutes,
@@ -107,6 +122,7 @@ class BookingFirebaseAdapter {
         totalAmount: totalAmountDouble,
         advanceAmount: advanceAmount,
         remainingAmount: remainingAmount,
+        currency: paymentCurrency,
         paymentStatus: 'pending',
         transactions: null,
       ),

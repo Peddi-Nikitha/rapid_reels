@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/config/stripe_test_package.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../data/models/service_provider_model.dart';
 import '../utils/booking_flow_maps.dart';
@@ -19,7 +20,7 @@ class ProviderPackagePickScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final packages = provider.packages;
+    final packages = packagesWithStripeTest(provider.packages);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -81,7 +82,7 @@ class ProviderPackagePickScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '₹${p.price.toStringAsFixed(0)}',
+                              StripeTestPackage.formatListedPrice(p),
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,

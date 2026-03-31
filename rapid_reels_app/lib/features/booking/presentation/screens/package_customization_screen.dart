@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/config/stripe_test_package.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
@@ -24,7 +25,23 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
   String _musicPreference = 'bollywood';
   String _colorGrading = 'warm';
 
+  String get _packageId {
+    final top = widget.bookingData['packageId']?.toString().trim() ?? '';
+    final raw = widget.bookingData['package'];
+    final nested = raw is Map
+        ? raw['packageId']?.toString().trim() ?? ''
+        : '';
+    if (StripeTestPackage.isStripeTestPackage(top) ||
+        StripeTestPackage.isStripeTestPackage(nested)) {
+      return StripeTestPackage.packageId;
+    }
+    return nested.isNotEmpty ? nested : top;
+  }
+
+  bool get _isStripeTest => StripeTestPackage.isStripeTestPackage(_packageId);
+
   double get _additionalCost {
+    if (_isStripeTest) return 0;
     double cost = 0;
     cost += _additionalReels * 1500; // ₹1500 per additional reel
     cost += _includeDrone ? 3000 : 0; // ₹3000 for drone
@@ -39,7 +56,8 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
     return 0;
   }
 
-  double get _totalPrice => _basePrice + _additionalCost;
+  double get _totalPrice =>
+      _isStripeTest ? StripeTestPackage.totalGbp : _basePrice + _additionalCost;
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +109,9 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                             ),
                             const Spacer(),
                             Text(
-                              '₹${_basePrice.toStringAsFixed(0)}',
+                              _isStripeTest
+                                  ? '£${_basePrice.toStringAsFixed(2)}'
+                                  : '₹${_basePrice.toStringAsFixed(0)}',
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
@@ -113,6 +133,27 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                   ),
                   const SizedBox(height: 24),
                   
+                  if (_isStripeTest) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+                      ),
+                      child: const Text(
+                        'Stripe test package: £2.00 GBP total (advance £1.00, not rupees). '
+                        'INR add-ons are disabled for this test.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ] else ...[
                   const Text(
                     'Add-ons',
                     style: TextStyle(
@@ -167,6 +208,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                       activeColor: AppColors.primary,
                     ),
                   ),
+                  ],
                   
                   const SizedBox(height: 24),
                   const Text(
@@ -224,7 +266,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
               top: false,
               child: Column(
                 children: [
-                  if (_additionalCost > 0) ...[
+                  if (!_isStripeTest && _additionalCost > 0) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -279,7 +321,9 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                         ),
                       ),
                       Text(
-                        '₹${_totalPrice.toStringAsFixed(0)}',
+                        _isStripeTest
+                            ? '£${_totalPrice.toStringAsFixed(2)}'
+                            : '₹${_totalPrice.toStringAsFixed(0)}',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -300,6 +344,16 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                       updatedData['colorGrading'] = _colorGrading;
                       updatedData['additionalCost'] = _additionalCost;
                       updatedData['totalAmount'] = _totalPrice;
+                      if (_isStripeTest) {
+                        updatedData['packageId'] = StripeTestPackage.packageId;
+                        updatedData['paymentCurrency'] = 'gbp';
+                        final pkgRaw = updatedData['package'];
+                        if (pkgRaw is Map) {
+                          final pkg = Map<String, dynamic>.from(pkgRaw);
+                          pkg['packageId'] = StripeTestPackage.packageId;
+                          updatedData['package'] = pkg;
+                        }
+                      }
                       
                       context.push(AppRoutes.bookingSummary, extra: updatedData);
                     },

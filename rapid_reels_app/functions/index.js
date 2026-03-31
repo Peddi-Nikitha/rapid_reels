@@ -1,6 +1,7 @@
 const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {defineSecret} = require("firebase-functions/params");
 require("dotenv").config();
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
@@ -8,9 +9,28 @@ const Stripe = require("stripe");
 
 admin.initializeApp();
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
+const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
+
+// Emulator: use `functions/.env`. Deployed: secrets bound via `secrets` on each function.
+function resolveStripeApiKey() {
+  if (process.env.STRIPE_SECRET_KEY) {
+    return process.env.STRIPE_SECRET_KEY;
+  }
+  return stripeSecretKey.value();
+}
+
+function resolveWebhookSecret() {
+  if (process.env.STRIPE_WEBHOOK_SECRET) {
+    return process.env.STRIPE_WEBHOOK_SECRET;
+  }
+  return stripeWebhookSecret.value();
+}
+
+function stripeClient() {
+  const key = resolveStripeApiKey();
+  return key ? new Stripe(key) : null;
+}
 
 function setCorsHeaders(response) {
   response.set("Access-Control-Allow-Origin", "*");
@@ -312,6 +332,7 @@ exports.createStripePaymentIntent = onCall(
     {
       // Must match Flutter `FirebaseFunctions.instanceFor(region: ...)` (default us-central1).
       region: "us-central1",
+      secrets: [stripeSecretKey],
     },
     async (request) => {
       if (!request.auth) {
@@ -319,6 +340,7 @@ exports.createStripePaymentIntent = onCall(
       }
       const uid = request.auth.uid;
 
+      const stripe = stripeClient();
       if (!stripe) {
         logger.error("Stripe is not configured. STRIPE_SECRET_KEY is missing.");
         throw new HttpsError(
@@ -327,36 +349,62 @@ exports.createStripePaymentIntent = onCall(
         );
       }
 
-      const {amount, currency = "inr", bookingId, userId} = request.data || {};
-
-      if (!amount || !bookingId || !userId) {
-        throw new HttpsError(
-            "invalid-argument",
-            "Missing amount, bookingId, or userId",
-        );
-      }
-
-      if (String(userId) !== uid) {
-        throw new HttpsError("permission-denied", "User does not match caller");
-      }
-
-      const amountInSmallestUnit = Math.round(Number(amount) * 100);
-      if (!Number.isFinite(amountInSmallestUnit) || amountInSmallestUnit <= 0) {
-        throw new HttpsError("invalid-argument", "Invalid amount");
+      const {bookingId} = request.data || {};
+      if (!bookingId) {
+        throw new HttpsError("invalid-argument", "Missing bookingId");
       }
 
       try {
+        const bookingRef = admin.firestore()
+            .collection("bookings")
+            .doc(String(bookingId));
+        const bookingSnap = await bookingRef.get();
+        if (!bookingSnap.exists) {
+          throw new HttpsError("not-found", "Booking not found");
+        }
+        const booking = bookingSnap.data() || {};
+        if (String(booking.customerId || "") !== uid) {
+          throw new HttpsError(
+              "permission-denied",
+              "Booking does not belong to caller",
+          );
+        }
+
+        const payment = booking.payment || {};
+        const advanceAmount = Number(payment.advanceAmount || 0);
+        const currency = String(payment.currency || "inr").toLowerCase();
+        const allowedCurrencies = new Set(["inr", "gbp"]);
+        if (!allowedCurrencies.has(currency)) {
+          throw new HttpsError(
+              "failed-precondition",
+              "Unsupported payment currency",
+          );
+        }
+        const amountInSmallestUnit = Math.round(advanceAmount * 100);
+        if (!Number.isFinite(amountInSmallestUnit) || amountInSmallestUnit <= 0) {
+          throw new HttpsError("failed-precondition", "Invalid booking amount");
+        }
+        if (currency === "gbp" && amountInSmallestUnit < 30) {
+          throw new HttpsError(
+              "failed-precondition",
+              "GBP amount must be at least £0.30",
+          );
+        }
+        const idempotencyKey = `booking_${String(bookingId)}_${currency}_advance_${amountInSmallestUnit}`;
+
+        // Always create a fresh PaymentIntent for each pay attempt.
+        // Reusing stale intents can skip payment sheet or fail immediately.
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amountInSmallestUnit,
-          currency: String(currency).toLowerCase(),
+          currency,
           automatic_payment_methods: {enabled: true},
           metadata: {
             bookingId: String(bookingId),
-            userId: String(userId),
+            userId: String(uid),
           },
-        });
+        }, {idempotencyKey});
 
-        await admin.firestore().collection("bookings").doc(String(bookingId)).update({
+        await bookingRef.update({
           "payment.stripePaymentIntentId": paymentIntent.id,
           "payment.paymentStatus": "pending",
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -368,6 +416,9 @@ exports.createStripePaymentIntent = onCall(
           paymentIntentId: paymentIntent.id,
         };
       } catch (error) {
+        if (error instanceof HttpsError) {
+          throw error;
+        }
         logger.error("Error creating Stripe PaymentIntent:", error);
         throw new HttpsError(
             "internal",
@@ -378,13 +429,19 @@ exports.createStripePaymentIntent = onCall(
 );
 
 // Stripe webhook for authoritative payment status updates
-exports.stripeWebhook = onRequest(async (request, response) => {
+exports.stripeWebhook = onRequest(
+    {
+      secrets: [stripeSecretKey, stripeWebhookSecret],
+    },
+    async (request, response) => {
   if (request.method !== "POST") {
     response.status(405).send("Method not allowed");
     return;
   }
 
-  if (!stripe || !stripeWebhookSecret) {
+  const stripe = stripeClient();
+  const webhookSecret = resolveWebhookSecret();
+  if (!stripe || !webhookSecret) {
     logger.error("Stripe webhook not configured");
     response.status(500).send("Stripe webhook not configured");
     return;
@@ -401,7 +458,7 @@ exports.stripeWebhook = onRequest(async (request, response) => {
     event = stripe.webhooks.constructEvent(
         request.rawBody,
         signature,
-        stripeWebhookSecret
+        webhookSecret
     );
   } catch (err) {
     logger.error("Stripe webhook signature verification failed:", err.message);
@@ -410,13 +467,34 @@ exports.stripeWebhook = onRequest(async (request, response) => {
   }
 
   try {
+    const eventRef = admin.firestore()
+        .collection("stripe_webhook_events")
+        .doc(String(event.id));
+    const alreadyProcessed = await admin.firestore().runTransaction(
+        async (tx) => {
+          const processedSnap = await tx.get(eventRef);
+          if (processedSnap.exists) {
+            return true;
+          }
+          tx.set(eventRef, {
+            type: event.type,
+            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          return false;
+        },
+    );
+    if (alreadyProcessed) {
+      response.status(200).send({received: true, duplicate: true});
+      return;
+    }
+
     if (event.type === "payment_intent.succeeded") {
       const paymentIntent = event.data.object;
       const bookingId = paymentIntent.metadata?.bookingId;
       if (bookingId) {
         await admin.firestore().collection("bookings").doc(String(bookingId)).update({
           status: "confirmed",
-          "payment.paymentStatus": "advance_paid",
+          "payment.paymentStatus": "fully_paid",
           "eventStatus.bookingConfirmed": admin.firestore.FieldValue.serverTimestamp(),
           "payment.transactions": admin.firestore.FieldValue.arrayUnion({
             paymentId: paymentIntent.id,
