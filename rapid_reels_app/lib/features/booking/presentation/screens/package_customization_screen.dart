@@ -43,8 +43,8 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
   double get _additionalCost {
     if (_isStripeTest) return 0;
     double cost = 0;
-    cost += _additionalReels * 1500; // ₹1500 per additional reel
-    cost += _includeDrone ? 3000 : 0; // ₹3000 for drone
+    cost += _additionalReels * 1500; // £1500 per additional reel
+    cost += _includeDrone ? 3000 : 0; // £3000 for drone
     return cost;
   }
 
@@ -111,7 +111,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                             Text(
                               _isStripeTest
                                   ? '£${_basePrice.toStringAsFixed(2)}'
-                                  : '₹${_basePrice.toStringAsFixed(0)}',
+                                  : '£${_basePrice.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
@@ -144,7 +144,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                       ),
                       child: const Text(
                         'Stripe test package: £2.00 GBP total (advance £1.00, not rupees). '
-                        'INR add-ons are disabled for this test.',
+                        'Non-GBP add-ons are disabled for this test.',
                         style: TextStyle(
                           fontSize: 14,
                           color: AppColors.textSecondary,
@@ -278,7 +278,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                           ),
                         ),
                         Text(
-                          '₹${_basePrice.toStringAsFixed(0)}',
+                          '£${_basePrice.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 14,
                             color: AppColors.textSecondary,
@@ -297,7 +297,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                           ),
                         ),
                         Text(
-                          '+₹${_additionalCost.toStringAsFixed(0)}',
+                          '+£${_additionalCost.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 14,
                             color: AppColors.success,
@@ -323,7 +323,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                       Text(
                         _isStripeTest
                             ? '£${_totalPrice.toStringAsFixed(2)}'
-                            : '₹${_totalPrice.toStringAsFixed(0)}',
+                            : '£${_totalPrice.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -415,7 +415,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '+₹${price.toStringAsFixed(0)}',
+                  '+£${price.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,

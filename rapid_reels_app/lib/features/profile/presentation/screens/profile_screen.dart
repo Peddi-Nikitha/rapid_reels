@@ -266,6 +266,13 @@ class ProfileScreen extends ConsumerWidget {
                             onTap: () => context.push(AppRoutes.support),
                           ),
                           _buildMenuItem(
+                            icon: Icons.policy_outlined,
+                            title: 'Refund & Cancellation Policy',
+                            subtitle: 'Read refund and cancellation clauses',
+                            onTap: () =>
+                                context.push(AppRoutes.refundCancellationPolicy),
+                          ),
+                          _buildMenuItem(
                             icon: Icons.info,
                             title: 'About',
                             subtitle: 'Version 1.0.0',

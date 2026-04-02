@@ -92,7 +92,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
                   ),
                   const SizedBox(height: 16),
                   const Text(
-                    'Earn ₹200 per referral',
+                    'Earn £200 per referral',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -101,7 +101,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Invite friends and get ₹200 when they book their first event',
+                    'Invite friends and get £200 when they book their first event',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white70,
@@ -183,7 +183,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
                   Expanded(
                     child: _buildStatCard(
                       title: 'Total Earned',
-                      value: '₹${totalEarned.toStringAsFixed(0)}',
+                      value: '£${totalEarned.toStringAsFixed(2)}',
                       icon: Icons.account_balance_wallet,
                       color: Colors.green,
                     ),
@@ -192,7 +192,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
                   Expanded(
                     child: _buildStatCard(
                       title: 'Pending',
-                      value: '₹${pendingEarnings.toStringAsFixed(0)}',
+                      value: '£${pendingEarnings.toStringAsFixed(2)}',
                       icon: Icons.hourglass_empty,
                       color: Colors.orange,
                     ),
@@ -230,7 +230,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
                         child: _buildActionCard(
                           icon: Icons.wallet,
                           title: 'Wallet',
-                          subtitle: '₹${(userProfile?.walletBalance ?? 0).toStringAsFixed(0)}',
+                          subtitle: '£${(userProfile?.walletBalance ?? 0).toStringAsFixed(2)}',
                           onTap: () => context.push(AppRoutes.wallet),
                         ),
                       ),
@@ -348,7 +348,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
                     _buildStep(
                       number: '3',
                       title: 'You Both Earn',
-                      description: 'Get ₹200 credited to your wallet instantly',
+                      description: 'Get £200 credited to your wallet instantly',
                     ),
                   ],
                 ),
@@ -505,7 +505,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₹${referral.reward.referrerReward.toStringAsFixed(0)}',
+                '£${referral.reward.referrerReward.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -590,7 +590,7 @@ class _ReferralDashboardScreenState extends ConsumerState<ReferralDashboardScree
   }
 
   void _shareReferralCode(String referralCode) {
-    final message = 'Join Rapid Reels using my code $referralCode and get ₹200 off on your first booking! Download now: https://rapidreels.app';
+    final message = 'Join Rapid Reels using my code $referralCode and get £200 off on your first booking! Download now: https://rapidreels.app';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Sharing: $message'),

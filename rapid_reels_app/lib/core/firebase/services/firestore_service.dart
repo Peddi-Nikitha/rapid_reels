@@ -11,6 +11,7 @@ import '../models/firebase_offer_model.dart';
 import '../models/firebase_live_event_model.dart';
 import '../models/firebase_admin_model.dart';
 import '../models/firebase_catalogue_event_model.dart';
+import '../models/firebase_payment_transaction_model.dart';
 
 /// Comprehensive Firestore Service
 /// Handles all database operations for Rapid Reels
@@ -485,6 +486,84 @@ class FirestoreService {
         .orderBy('eventDate', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => FirebaseBookingModel.fromFirestore(doc)).toList());
+  }
+
+  // ==================== PAYMENT TRANSACTIONS ====================
+
+  Stream<List<FirebasePaymentTransactionModel>> streamPaymentTransactionsByBooking(String bookingId) {
+    return _firestore
+        .collection('payment_transactions')
+        .where('bookingId', isEqualTo: bookingId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FirebasePaymentTransactionModel.fromFirestore(doc))
+              .toList(),
+        );
+  }
+
+  Stream<List<FirebasePaymentTransactionModel>> streamPaymentTransactionsForProvider(String providerId) {
+    return _firestore
+        .collection('payment_transactions')
+        .where('providerUserId', isEqualTo: providerId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FirebasePaymentTransactionModel.fromFirestore(doc))
+              .toList(),
+        );
+  }
+
+  Stream<List<FirebasePaymentTransactionModel>> streamPaymentTransactionsForCustomer(String customerUserId) {
+    return _firestore
+        .collection('payment_transactions')
+        .where('customerUserId', isEqualTo: customerUserId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => FirebasePaymentTransactionModel.fromFirestore(doc))
+              .toList(),
+        );
+  }
+
+  Stream<List<FirebasePaymentTransactionModel>> streamPaymentTransactionsForAdmin({
+    String? status,
+    String? bookingId,
+    String? providerUserId,
+  }) {
+    Query<Map<String, dynamic>> query = _firestore.collection('payment_transactions');
+    if (status != null && status.isNotEmpty) {
+      query = query.where('status', isEqualTo: status);
+    }
+    if (bookingId != null && bookingId.isNotEmpty) {
+      query = query.where('bookingId', isEqualTo: bookingId);
+    }
+    if (providerUserId != null && providerUserId.isNotEmpty) {
+      query = query.where('providerUserId', isEqualTo: providerUserId);
+    }
+    query = query.orderBy('createdAt', descending: true);
+    return query.snapshots().map(
+      (snapshot) => snapshot.docs
+          .map((doc) => FirebasePaymentTransactionModel.fromFirestore(doc))
+          .toList(),
+    );
+  }
+
+  Future<FirebasePaymentTransactionModel?> getPaymentTransactionByTransactionId(String transactionId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('payment_transactions')
+          .where('transactionId', isEqualTo: transactionId)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      return FirebasePaymentTransactionModel.fromFirestore(snapshot.docs.first);
+    } catch (e) {
+      throw Exception('Error getting payment transaction: $e');
+    }
   }
 
   /// Stream user bookings count (updates in real-time).

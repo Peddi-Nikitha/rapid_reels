@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/firebase/models/firebase_payment_transaction_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/services/mock_data_service.dart';
 
 class ProviderEarningsScreen extends StatefulWidget {
@@ -14,6 +16,7 @@ class ProviderEarningsScreen extends StatefulWidget {
 class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with SingleTickerProviderStateMixin {
   String _selectedPeriod = 'This Month';
   late TabController _tabController;
+  final _firestoreService = FirestoreService();
   
   @override
   void initState() {
@@ -88,7 +91,7 @@ class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with Si
                 const Text('Total Earnings', style: TextStyle(fontSize: 14, color: Colors.white70)),
                 const SizedBox(height: 8),
                 Text(
-                  '₹${totalEarnings.toStringAsFixed(2)}',
+                  '£${totalEarnings.toStringAsFixed(2)}',
                   style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 const SizedBox(height: 16),
@@ -246,7 +249,7 @@ class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with Si
               ),
             ),
             Text(
-              '₹${(t['amount'] as double).toStringAsFixed(0)}',
+              '£${(t['amount'] as double).toStringAsFixed(2)}',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
             ),
           ],
@@ -279,44 +282,50 @@ class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with Si
   }
 
   Widget _buildPaymentsTab() {
-    final pendingPayments = [
-      {'event': 'Wedding - Amit & Sneha', 'amount': 25000.0, 'date': 'Dec 20, 2025'},
-      {'event': 'Birthday Party', 'amount': 8000.0, 'date': 'Dec 22, 2025'},
-    ];
+    return StreamBuilder<List<FirebasePaymentTransactionModel>>(
+      stream: _firestoreService.streamPaymentTransactionsForProvider(widget.providerId),
+      builder: (context, snapshot) {
+        final transactions = snapshot.data ?? const <FirebasePaymentTransactionModel>[];
+        final pending = transactions.where((t) => t.status == 'processing').toList();
+        final history = transactions.where((t) => t.status != 'processing').toList();
 
-    final paymentHistory = [
-      {'event': 'Engagement', 'amount': 15000.0, 'date': 'Dec 15, 2025', 'status': 'paid'},
-      {'event': 'Corporate Event', 'amount': 20000.0, 'date': 'Dec 10, 2025', 'status': 'paid'},
-    ];
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Text('Pending Payments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        ...pendingPayments.map((payment) => _buildPaymentCard(payment, isPending: true)),
-        const SizedBox(height: 24),
-        const Text('Commission Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        Container(
+        return ListView(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
-          child: Column(
-            children: [
-              _buildCommissionRow('Platform Commission', '15%', '₹7,500'),
-              const Divider(),
-              _buildCommissionRow('Your Earnings', '85%', '₹42,500'),
-              const Divider(),
-              _buildCommissionRow('Total Amount', '100%', '₹50,000', isTotal: true),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        const Text('Payment History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        ...paymentHistory.map((payment) => _buildPaymentCard(payment, isPending: false)),
-      ],
+          children: [
+            const Text('Pending Payments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            if (pending.isEmpty)
+              _buildEmptyMessage('No pending payments')
+            else
+              ...pending.map((t) => _buildPaymentTxCard(t)),
+            const SizedBox(height: 24),
+            const Text('Payment History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            if (history.isEmpty)
+              _buildEmptyMessage('No payment history yet')
+            else
+              ...history.map((t) => _buildPaymentTxCard(t)),
+          ],
+        );
+      },
     );
+  }
+
+  Widget _buildEmptyMessage(String message) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
+      child: Text(message),
+    );
+  }
+
+  Widget _buildPaymentTxCard(FirebasePaymentTransactionModel tx) {
+    final isPending = tx.status == 'processing';
+    return _buildPaymentCard({
+      'event': 'Booking ${tx.bookingId}',
+      'amount': tx.amount,
+      'date': '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}',
+    }, isPending: isPending);
   }
 
   Widget _buildAnalyticsTab(stats) {
@@ -352,7 +361,7 @@ class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with Si
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _buildMetricCard('Avg per Event', '₹25,000', Icons.trending_up, Colors.green)),
+            Expanded(child: _buildMetricCard('Avg per Event', '£25,000', Icons.trending_up, Colors.green)),
             const SizedBox(width: 12),
             Expanded(child: _buildMetricCard('Total Events', '${stats['totalBookings']}', Icons.event, Colors.blue)),
           ],
@@ -391,26 +400,7 @@ class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with Si
               ],
             ),
           ),
-          Text('₹${(payment['amount'] as double).toStringAsFixed(0)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommissionRow(String label, String percentage, String amount, {bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(fontSize: isTotal ? 16 : 14, fontWeight: isTotal ? FontWeight.bold : FontWeight.normal)),
-          Row(
-            children: [
-              Text(percentage, style: TextStyle(fontSize: isTotal ? 16 : 14, fontWeight: isTotal ? FontWeight.bold : FontWeight.normal, color: Colors.grey[600])),
-              const SizedBox(width: 16),
-              Text(amount, style: TextStyle(fontSize: isTotal ? 18 : 16, fontWeight: FontWeight.bold, color: isTotal ? AppColors.primary : null)),
-            ],
-          ),
+          Text('£${(payment['amount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         ],
       ),
     );

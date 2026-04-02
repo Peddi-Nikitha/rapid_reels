@@ -60,6 +60,7 @@ import '../../features/profile/presentation/screens/payment_methods_screen.dart'
 import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/support_screen.dart';
 import '../../features/profile/presentation/screens/my_tickets_screen.dart';
+import '../../features/profile/presentation/screens/refund_cancellation_policy_screen.dart';
 
 // Provider screens
 import '../../features/provider/presentation/screens/provider_login_screen.dart';
@@ -668,6 +669,15 @@ class AppRouter {
           context,
           state,
           const MyTicketsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.refundCancellationPolicy,
+        name: 'refundCancellationPolicy',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const RefundCancellationPolicyScreen(),
         ),
       ),
 

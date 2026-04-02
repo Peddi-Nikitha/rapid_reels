@@ -672,7 +672,7 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '₹${package.price.toStringAsFixed(0)}',
+                  '£${package.price.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,

@@ -127,7 +127,7 @@ class _SupportScreenState extends State<SupportScreen> {
                   _buildFAQCard(
                     question: 'How does the referral program work?',
                     answer:
-                        'Share your referral code. When friends book, both get ₹200 credits.',
+                        'Share your referral code. When friends book, both get £200 credits.',
                   ),
                 ],
               ),

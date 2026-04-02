@@ -70,7 +70,7 @@ class _RedemptionScreenState extends ConsumerState<RedemptionScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              '₹${balance.toStringAsFixed(2)}',
+                              '£${balance.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontSize: 40,
                                 fontWeight: FontWeight.bold,
@@ -105,7 +105,7 @@ class _RedemptionScreenState extends ConsumerState<RedemptionScreen> {
                             _buildRedemptionOption(
                               value: 'bank',
                               title: 'Transfer to Bank',
-                              description: 'Transfer to your bank account (₹500 minimum)',
+                              description: 'Transfer to your bank account (£500 minimum)',
                               icon: Icons.account_balance,
                               isDisabled: balance < 500,
                             ),
@@ -113,7 +113,7 @@ class _RedemptionScreenState extends ConsumerState<RedemptionScreen> {
                             _buildRedemptionOption(
                               value: 'upi',
                               title: 'UPI Transfer',
-                              description: 'Instant transfer to UPI ID (₹100 minimum)',
+                              description: 'Instant transfer to UPI ID (£100 minimum)',
                               icon: Icons.qr_code_scanner,
                               isDisabled: balance < 100,
                             ),
@@ -142,8 +142,8 @@ class _RedemptionScreenState extends ConsumerState<RedemptionScreen> {
                               ),
                               const SizedBox(height: 12),
                               _buildTerm('Wallet balance can be used for event bookings'),
-                              _buildTerm('Minimum ₹500 required for bank transfer'),
-                              _buildTerm('Minimum ₹100 required for UPI transfer'),
+                              _buildTerm('Minimum £500 required for bank transfer'),
+                              _buildTerm('Minimum £100 required for UPI transfer'),
                               _buildTerm('Bank transfer takes 2-3 business days'),
                               _buildTerm('UPI transfer is instant'),
                               _buildTerm('Balance expires after 1 year of inactivity'),

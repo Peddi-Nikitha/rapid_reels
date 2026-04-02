@@ -49,7 +49,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   title: const Text('Privacy Policy'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push(AppRoutes.termsAndPrivacy),
+                  onTap: () => context.push(AppRoutes.refundCancellationPolicy),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  title: const Text('Refund & Cancellation Policy'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push(AppRoutes.refundCancellationPolicy),
                 ),
                 const Divider(height: 1),
               ],

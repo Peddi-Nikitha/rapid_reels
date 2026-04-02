@@ -341,7 +341,7 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '₹${booking.payment.totalAmount.toStringAsFixed(0)}',
+                          '£${booking.payment.totalAmount.toStringAsFixed(2)}',
                           style: AppTypography.titleMedium.copyWith(
                             color: AppColors.primary,
                           ),

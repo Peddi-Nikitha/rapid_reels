@@ -8,7 +8,7 @@ class FirebaseWalletTransactionModel {
   final String userId; // Reference to users collection
   final String type; // credit, debit, refund, referral_reward, booking_payment, withdrawal
   final double amount;
-  final String currency; // INR
+  final String currency; // GBP
   final String status; // pending, completed, failed, cancelled
   final String? description;
   final WalletTransactionReference? reference; // Links to booking, referral, etc.
@@ -22,7 +22,7 @@ class FirebaseWalletTransactionModel {
     required this.userId,
     required this.type,
     required this.amount,
-    this.currency = 'INR',
+    this.currency = 'GBP',
     required this.status,
     this.description,
     this.reference,
@@ -39,7 +39,7 @@ class FirebaseWalletTransactionModel {
       userId: data['userId'] ?? '',
       type: data['type'] ?? '',
       amount: (data['amount'] ?? 0.0).toDouble(),
-      currency: data['currency'] ?? 'INR',
+      currency: data['currency'] ?? 'GBP',
       status: data['status'] ?? 'pending',
       description: data['description'],
       reference: data['reference'] != null

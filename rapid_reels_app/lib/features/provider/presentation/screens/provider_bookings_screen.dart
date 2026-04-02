@@ -167,7 +167,7 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
           const SizedBox(height: 6),
           _buildInfoRow(Icons.location_on, booking.venue.address),
           const SizedBox(height: 6),
-          _buildInfoRow(Icons.currency_rupee, '₹${booking.payment.totalAmount.toStringAsFixed(0)}'),
+          _buildInfoRow(Icons.currency_pound, '£${booking.payment.totalAmount.toStringAsFixed(2)}'),
           const SizedBox(height: 12),
           Row(
             children: [

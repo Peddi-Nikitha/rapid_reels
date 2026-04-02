@@ -10,16 +10,16 @@ cd functions
 npm install
 ```
 
-2. Set up Razorpay credentials (for production):
+2. Set up Stripe credentials (for production):
 ```bash
-firebase functions:config:set razorpay.key_id="YOUR_KEY_ID"
-firebase functions:config:set razorpay.key_secret="YOUR_KEY_SECRET"
+firebase functions:secrets:set STRIPE_SECRET_KEY
+firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
 ```
 
-Alternatively, set environment variables:
+Alternatively, set local environment variables:
 ```bash
-export RAZORPAY_KEY_ID="YOUR_KEY_ID"
-export RAZORPAY_KEY_SECRET="YOUR_KEY_SECRET"
+export STRIPE_SECRET_KEY="sk_test_xxx"
+export STRIPE_WEBHOOK_SECRET="whsec_xxx"
 ```
 
 3. Deploy functions:
@@ -36,8 +36,8 @@ npm run deploy
 
 ### Payment Functions
 
-- `createRazorpayOrder`: Creates a Razorpay payment order
-- `verifyRazorpayPayment`: Verifies Razorpay payment signature and updates booking
+- `createStripePaymentIntent`: Creates GBP-only Stripe PaymentIntent for booking
+- `stripeWebhook`: Handles Stripe payment lifecycle and updates transactions
 
 ### Referral Functions
 

@@ -279,7 +279,7 @@ class _DynamicProfileScreenState extends ConsumerState<DynamicProfileScreen> {
                 _buildStatItem(
                   icon: Icons.account_balance_wallet,
                   label: 'Wallet',
-                  value: '₹${walletBalance.toStringAsFixed(0)}',
+                  value: '£${walletBalance.toStringAsFixed(2)}',
                 ),
               ],
             ),

@@ -98,7 +98,7 @@ class CatalogueEventCard extends StatelessWidget {
                         const Spacer(),
                         if (event.startingPrice != null)
                           Text(
-                            'from ₹${event.startingPrice!.toStringAsFixed(0)}',
+                            'from £${event.startingPrice!.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,

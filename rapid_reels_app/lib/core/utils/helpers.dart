@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class Helpers {
-  // Format currency in Indian Rupee
+  // Format currency in UK Pound Sterling
   static String formatCurrency(double amount) {
     final formatter = NumberFormat.currency(
-      locale: 'en_IN',
-      symbol: '₹',
-      decimalDigits: 0,
+      locale: 'en_GB',
+      symbol: '£',
+      decimalDigits: 2,
     );
     return formatter.format(amount);
   }

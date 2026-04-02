@@ -30,9 +30,9 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
     {
       'id': 'offer_002',
       'title': 'Wedding Special',
-      'description': 'Flat ₹3000 OFF on wedding event bookings',
+      'description': 'Flat £3000 OFF on wedding event bookings',
       'code': 'WEDDING3K',
-      'discount': '₹3000 OFF',
+      'discount': '£3000 OFF',
       'minAmount': 20000,
       'maxDiscount': 3000,
       'validUntil': DateTime.now().add(const Duration(days: 45)),
@@ -43,9 +43,9 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
     {
       'id': 'offer_003',
       'title': 'Referral Bonus',
-      'description': 'Get ₹100 for every successful referral',
+      'description': 'Get £100 for every successful referral',
       'code': 'REFER100',
-      'discount': '₹100',
+      'discount': '£100',
       'minAmount': 0,
       'maxDiscount': 100,
       'validUntil': DateTime.now().add(const Duration(days: 90)),
@@ -82,9 +82,9 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
     {
       'id': 'offer_006',
       'title': 'Corporate Deal',
-      'description': 'Flat ₹5000 OFF on corporate event bookings above ₹30K',
+      'description': 'Flat £5000 OFF on corporate event bookings above £30K',
       'code': 'CORP5K',
-      'discount': '₹5000 OFF',
+      'discount': '£5000 OFF',
       'minAmount': 30000,
       'maxDiscount': 5000,
       'validUntil': DateTime.now().add(const Duration(days: 60)),
@@ -108,9 +108,9 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
     {
       'id': 'offer_008',
       'title': 'Monsoon Offer',
-      'description': 'Flat ₹2000 OFF on all bookings this month',
+      'description': 'Flat £2000 OFF on all bookings this month',
       'code': 'MONSOON2K',
-      'discount': '₹2000 OFF',
+      'discount': '£2000 OFF',
       'minAmount': 15000,
       'maxDiscount': 2000,
       'validUntil': DateTime.now().subtract(const Duration(days: 5)),
@@ -479,7 +479,7 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Min. booking ₹${offer['minAmount']} • Max discount ₹${offer['maxDiscount']}',
+                          'Min. booking £${offer['minAmount']} • Max discount £${offer['maxDiscount']}',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.white.withOpacity(0.8),
@@ -633,8 +633,8 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildTermItem('Minimum booking amount: ₹${offer['minAmount']}'),
-                  _buildTermItem('Maximum discount: ₹${offer['maxDiscount']}'),
+                  _buildTermItem('Minimum booking amount: £${offer['minAmount']}'),
+                  _buildTermItem('Maximum discount: £${offer['maxDiscount']}'),
                   _buildTermItem('Valid till ${_formatDate(offer['validUntil'] as DateTime)}'),
                   _buildTermItem('Applicable on ${_getOfferType(offer['type'] as String)}'),
                   _buildTermItem('Cannot be combined with other offers'),
@@ -730,9 +730,9 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildUsedOfferItem('FIRST25', '₹1,250', '15 Dec 2026'),
-              _buildUsedOfferItem('REFER100', '₹100', '10 Dec 2026'),
-              _buildUsedOfferItem('WEEKEND20', '₹800', '5 Dec 2026'),
+              _buildUsedOfferItem('FIRST25', '£1,250', '15 Dec 2026'),
+              _buildUsedOfferItem('REFER100', '£100', '10 Dec 2026'),
+              _buildUsedOfferItem('WEEKEND20', '£800', '5 Dec 2026'),
             ],
           ),
           actions: [

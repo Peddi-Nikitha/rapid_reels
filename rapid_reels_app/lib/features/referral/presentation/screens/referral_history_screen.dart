@@ -161,7 +161,7 @@ class _ReferralHistoryScreenState extends ConsumerState<ReferralHistoryScreen>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '₹${referral.reward.referrerReward.toStringAsFixed(0)}',
+                    '£${referral.reward.referrerReward.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

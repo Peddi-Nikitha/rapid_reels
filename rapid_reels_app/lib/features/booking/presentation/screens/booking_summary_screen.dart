@@ -24,9 +24,6 @@ class BookingSummaryScreen extends StatefulWidget {
 }
 
 class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
-  // Temporary live-payment micro test amount in INR.
-  // Set to `null` to use normal advance calculation.
-  static const double? _forceInrTestAmount = 2.0;
   bool _acceptedTerms = false;
   bool _isProcessing = false;
   final _firestoreService = FirestoreService();
@@ -44,8 +41,8 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         (widget.bookingData['paymentCurrency']?.toString().trim().toLowerCase().isNotEmpty ??
                 false)
             ? widget.bookingData['paymentCurrency'].toString().trim().toLowerCase()
-            : 'inr';
-    final currencySymbol = currency == 'gbp' ? '£' : '₹';
+            : 'gbp';
+    const currencySymbol = '£';
     final totalAmountNum =
         (widget.bookingData['totalAmount'] is num)
             ? (widget.bookingData['totalAmount'] as num).toDouble()
@@ -60,7 +57,9 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
       totalAmount: totalAmountNum,
     );
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isProcessing,
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomAppBar(title: 'Review Booking'),
       body: Column(
@@ -292,6 +291,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -373,13 +373,11 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   }
 
   String _formatAmount(double amount, String currency) {
-    if (currency == 'gbp') return amount.toStringAsFixed(2);
-    return amount.toStringAsFixed(0);
+    return amount.toStringAsFixed(2);
   }
 
   String _formatMoney(double amount, String currency) {
-    final symbol = currency == 'gbp' ? '£' : '₹';
-    return '$symbol${_formatAmount(amount, currency)}';
+    return '£${_formatAmount(amount, currency)}';
   }
 
   double _resolvePayableAmount({
@@ -387,9 +385,6 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
     required double configuredAdvance,
     required double totalAmount,
   }) {
-    if (currency == 'inr' && _forceInrTestAmount != null) {
-      return _forceInrTestAmount!;
-    }
     if (configuredAdvance > 0) return configuredAdvance;
     return totalAmount * 0.5;
   }
@@ -463,7 +458,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         (widget.bookingData['paymentCurrency']?.toString().trim().toLowerCase().isNotEmpty ??
                 false)
             ? widget.bookingData['paymentCurrency'].toString().trim().toLowerCase()
-            : 'inr';
+            : 'gbp';
     final totalAmountNum =
         (widget.bookingData['totalAmount'] is num)
             ? (widget.bookingData['totalAmount'] as num).toDouble()
@@ -481,7 +476,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
 
     if (payableAmount < minAdvance) {
       if (!mounted) return;
-      final minLabel = currency == 'gbp' ? '£0.30' : '₹30';
+      const minLabel = '£0.30';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -517,7 +512,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
       if (!mounted) return;
 
       setState(() => _isProcessing = false);
-      context.go(
+      context.pushReplacement(
         AppRoutes.paymentSuccess,
         extra: {
           'bookingId': bookingId,
@@ -529,7 +524,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
       if (!mounted) return;
       setState(() => _isProcessing = false);
       final reason = e.error.localizedMessage ?? e.error.message;
-      context.go(
+      context.pushReplacement(
         AppRoutes.paymentFailure,
         extra: {
           'message': reason?.isNotEmpty == true
@@ -542,7 +537,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
       if (!mounted) return;
 
       setState(() => _isProcessing = false);
-      context.go(
+      context.pushReplacement(
         AppRoutes.paymentFailure,
         extra: {
           'message': 'Failed to confirm payment: ${e.toString()}',

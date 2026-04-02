@@ -19,7 +19,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _autoPlayVideos = true;
   bool _dataSaver = false;
   String _selectedLanguage = 'English';
-  String _selectedCurrency = 'INR (₹)';
+  String _selectedCurrency = 'GBP (£)';
 
   @override
   Widget build(BuildContext context) {
@@ -484,7 +484,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildCurrencyOption('INR (₹)'),
+              _buildCurrencyOption('GBP (£)'),
               _buildCurrencyOption('USD (\$)'),
               _buildCurrencyOption('EUR (€)'),
               _buildCurrencyOption('GBP (£)'),

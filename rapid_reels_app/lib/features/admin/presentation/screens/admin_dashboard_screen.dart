@@ -12,6 +12,7 @@ import '../../../../core/firebase/seed/seed_sample_providers.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/router/router_refresh_notifier.dart';
 import '../../../../core/session/user_session_cleanup.dart';
+import '../../../notifications/presentation/screens/notifications_screen.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -55,14 +56,14 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     }
   }
 
-  static String _formatRevenueInr(double amount) {
+  static String _formatRevenueGbp(double amount) {
     if (amount >= 100000) {
-      return '₹${(amount / 100000).toStringAsFixed(1)}L';
+      return '£${(amount / 100000).toStringAsFixed(1)}L';
     }
     if (amount >= 1000) {
-      return '₹${(amount / 1000).toStringAsFixed(1)}K';
+      return '£${(amount / 1000).toStringAsFixed(1)}K';
     }
-    return '₹${amount.toStringAsFixed(0)}';
+    return '£${amount.toStringAsFixed(2)}';
   }
 
   @override
@@ -105,7 +106,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const NotificationsScreen(),
+                ),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.settings),
@@ -204,9 +211,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   child: _buildStatCard(
                     title: 'Revenue',
                     value: stats != null
-                        ? _formatRevenueInr(stats.totalRevenueInr)
+                        ? _formatRevenueGbp(stats.totalRevenueInr)
                         : '—',
-                    icon: Icons.currency_rupee,
+                    icon: Icons.currency_pound,
                     color: Colors.amber,
                     onTap: () => context.push(AppRoutes.adminPaymentManagement),
                   ),

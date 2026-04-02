@@ -22,7 +22,16 @@ class PaymentSuccessScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const CustomAppBar(title: 'Payment Success'),
+      appBar: CustomAppBar(
+        title: 'Payment Success',
+        onBackPressed: () {
+          if (context.canPop()) {
+            context.pop();
+            return;
+          }
+          context.go(AppRoutes.home, extra: 2);
+        },
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -53,7 +62,7 @@ class PaymentSuccessScreen extends StatelessWidget {
             const Spacer(),
             CustomButton(
               text: 'View My Transactions',
-              onPressed: () => context.go(AppRoutes.myTransactions),
+              onPressed: () => context.push(AppRoutes.myTransactions),
               icon: Icons.receipt_long,
             ),
             const SizedBox(height: 12),

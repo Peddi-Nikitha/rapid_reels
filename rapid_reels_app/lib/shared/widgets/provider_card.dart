@@ -176,7 +176,7 @@ class ProviderCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '₹${_getMinPrice()}',
+                        '£${_getMinPrice()}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

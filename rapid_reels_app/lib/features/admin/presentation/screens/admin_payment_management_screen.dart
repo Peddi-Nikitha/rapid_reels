@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/firebase/models/firebase_payment_transaction_model.dart';
+import '../../../../core/firebase/models/firebase_wallet_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 
 class AdminPaymentManagementScreen extends StatefulWidget {
   const AdminPaymentManagementScreen({super.key});
@@ -10,7 +13,8 @@ class AdminPaymentManagementScreen extends StatefulWidget {
 
 class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _selectedFilter = 'All';
+  final _firestoreService = FirestoreService();
+  String _selectedFilter = 'all';
 
   @override
   void initState() {
@@ -42,10 +46,11 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
               setState(() => _selectedFilter = value);
             },
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 'All', child: Text('All Payments')),
-              const PopupMenuItem(value: 'Today', child: Text('Today')),
-              const PopupMenuItem(value: 'This Week', child: Text('This Week')),
-              const PopupMenuItem(value: 'This Month', child: Text('This Month')),
+              const PopupMenuItem(value: 'all', child: Text('All Statuses')),
+              const PopupMenuItem(value: 'succeeded', child: Text('Succeeded')),
+              const PopupMenuItem(value: 'processing', child: Text('Processing')),
+              const PopupMenuItem(value: 'failed', child: Text('Failed')),
+              const PopupMenuItem(value: 'canceled', child: Text('Canceled')),
             ],
           ),
         ],
@@ -64,25 +69,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
       body: Column(
         children: [
           // Summary Cards
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: AppColors.surface,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildSummaryCard('Total Revenue', '₹25.0L', Colors.green),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSummaryCard('Pending Payouts', '₹2.5L', Colors.orange),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildSummaryCard('Refunds', '₹50K', Colors.red),
-                ),
-              ],
-            ),
-          ),
+          _buildSummarySection(),
           
           // Content
           Expanded(
@@ -97,6 +84,41 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSummarySection() {
+    return StreamBuilder<List<FirebasePaymentTransactionModel>>(
+      stream: _firestoreService.streamPaymentTransactionsForAdmin(),
+      builder: (context, snapshot) {
+        final txs = snapshot.data ?? const <FirebasePaymentTransactionModel>[];
+        final totalRevenue = txs
+            .where((t) => t.status == 'succeeded')
+            .fold<double>(0, (sum, t) => sum + t.amount);
+        final failedCount =
+            txs.where((t) => t.status == 'failed' || t.status == 'canceled').length;
+        final pendingCount = txs.where((t) => t.status == 'processing').length;
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          color: AppColors.surface,
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildSummaryCard('Revenue', '£${totalRevenue.toStringAsFixed(2)}', Colors.green),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryCard('Processing', '$pendingCount', Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSummaryCard('Failed', '$failedCount', Colors.red),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -130,57 +152,60 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
   }
 
   Widget _buildAllPaymentsTab() {
-    final payments = [
-      {'id': '1', 'type': 'Booking Payment', 'amount': 25000.0, 'status': 'completed', 'date': 'Dec 20, 2025', 'customer': 'Amit Kumar'},
-      {'id': '2', 'type': 'Booking Payment', 'amount': 15000.0, 'status': 'completed', 'date': 'Dec 19, 2025', 'customer': 'Priya Sharma'},
-      {'id': '3', 'type': 'Booking Payment', 'amount': 30000.0, 'status': 'pending', 'date': 'Dec 21, 2025', 'customer': 'Rohit Singh'},
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: payments.length,
-      itemBuilder: (context, index) {
-        final payment = payments[index];
-        return _buildPaymentCard(payment);
+    return StreamBuilder<List<FirebasePaymentTransactionModel>>(
+      stream: _firestoreService.streamPaymentTransactionsForAdmin(
+        status: _selectedFilter == 'all' ? null : _selectedFilter,
+      ),
+      builder: (context, snapshot) {
+        final payments = snapshot.data ?? const <FirebasePaymentTransactionModel>[];
+        if (payments.isEmpty) {
+          return const Center(child: Text('No payment transactions found'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: payments.length,
+          itemBuilder: (context, index) => _buildPaymentCard(payments[index]),
+        );
       },
     );
   }
 
   Widget _buildPayoutsTab() {
-    final payouts = [
-      {'id': '1', 'provider': 'Rapid Reels Studios', 'amount': 21250.0, 'status': 'pending', 'date': 'Dec 20, 2025'},
-      {'id': '2', 'provider': 'Cinematic Moments', 'amount': 18000.0, 'status': 'processing', 'date': 'Dec 19, 2025'},
-      {'id': '3', 'provider': 'Event Masters', 'amount': 15000.0, 'status': 'completed', 'date': 'Dec 18, 2025'},
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: payouts.length,
-      itemBuilder: (context, index) {
-        final payout = payouts[index];
-        return _buildPayoutCard(payout);
+    return FutureBuilder<List<FirebaseWalletTransactionModel>>(
+      future: _firestoreService.getAllProviderPayouts(),
+      builder: (context, snapshot) {
+        final payouts = snapshot.data ?? const <FirebaseWalletTransactionModel>[];
+        if (payouts.isEmpty) {
+          return const Center(child: Text('No payouts found'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: payouts.length,
+          itemBuilder: (context, index) => _buildPayoutCard(payouts[index]),
+        );
       },
     );
   }
 
   Widget _buildRefundsTab() {
-    final refunds = [
-      {'id': '1', 'booking': 'Wedding - Amit & Sneha', 'amount': 25000.0, 'status': 'pending', 'date': 'Dec 20, 2025'},
-      {'id': '2', 'booking': 'Birthday Party', 'amount': 8000.0, 'status': 'processing', 'date': 'Dec 19, 2025'},
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: refunds.length,
-      itemBuilder: (context, index) {
-        final refund = refunds[index];
-        return _buildRefundCard(refund);
+    return StreamBuilder<List<FirebasePaymentTransactionModel>>(
+      stream: _firestoreService.streamPaymentTransactionsForAdmin(status: 'failed'),
+      builder: (context, snapshot) {
+        final refunds = snapshot.data ?? const <FirebasePaymentTransactionModel>[];
+        if (refunds.isEmpty) {
+          return const Center(child: Text('No failed/refund records'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: refunds.length,
+          itemBuilder: (context, index) => _buildRefundCard(refunds[index]),
+        );
       },
     );
   }
 
-  Widget _buildPaymentCard(Map<String, dynamic> payment) {
-    final isCompleted = payment['status'] == 'completed';
+  Widget _buildPaymentCard(FirebasePaymentTransactionModel payment) {
+    final isCompleted = payment.status == 'succeeded';
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -209,7 +234,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  payment['type'] as String,
+                  'Booking Payment',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -217,12 +242,12 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  payment['customer'] as String,
+                  'Customer: ${payment.customerUserId}',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  payment['date'] as String,
+                  '${payment.createdAt.day}/${payment.createdAt.month}/${payment.createdAt.year}',
                   style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
               ],
@@ -232,7 +257,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₹${(payment['amount'] as double).toStringAsFixed(0)}',
+                '£${payment.amount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -246,7 +271,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  payment['status'] as String,
+                  payment.status,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -261,8 +286,8 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
     );
   }
 
-  Widget _buildPayoutCard(Map<String, dynamic> payout) {
-    final status = payout['status'] as String;
+  Widget _buildPayoutCard(FirebaseWalletTransactionModel payout) {
+    final status = payout.status;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -281,7 +306,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                payout['provider'] as String,
+                payout.userId,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -309,14 +334,14 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Amount: ₹${(payout['amount'] as double).toStringAsFixed(0)}',
+                'Amount: £${payout.amount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
-                payout['date'] as String,
+                '${payout.createdAt.day}/${payout.createdAt.month}/${payout.createdAt.year}',
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
             ],
@@ -359,8 +384,8 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
     );
   }
 
-  Widget _buildRefundCard(Map<String, dynamic> refund) {
-    final status = refund['status'] as String;
+  Widget _buildRefundCard(FirebasePaymentTransactionModel refund) {
+    final status = refund.status;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -380,7 +405,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
             children: [
               Expanded(
                 child: Text(
-                  refund['booking'] as String,
+                  'Booking ${refund.bookingId}',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -409,7 +434,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Refund Amount: ₹${(refund['amount'] as double).toStringAsFixed(0)}',
+                'Amount: £${refund.amount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -417,7 +442,7 @@ class _AdminPaymentManagementScreenState extends State<AdminPaymentManagementScr
                 ),
               ),
               Text(
-                refund['date'] as String,
+                '${refund.createdAt.day}/${refund.createdAt.month}/${refund.createdAt.year}',
                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
             ],

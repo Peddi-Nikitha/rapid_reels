@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../../core/firebase/models/firebase_payment_transaction_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 
 class ProviderBookingDetailsScreen extends StatelessWidget {
@@ -221,6 +221,33 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
+
+            const Text(
+              'Payment Transactions',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            StreamBuilder<List<FirebasePaymentTransactionModel>>(
+              stream: firestoreService.streamPaymentTransactionsByBooking(booking.bookingId),
+              builder: (context, txSnapshot) {
+                final transactions = txSnapshot.data ?? const <FirebasePaymentTransactionModel>[];
+                if (transactions.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text('No payment transactions yet.'),
+                  );
+                }
+                return Column(
+                  children: transactions.map(_buildTransactionCard).toList(),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
             
             // Action Buttons
             if (booking.status == 'pending')
@@ -260,25 +287,6 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
             else if (booking.status == 'confirmed' || booking.status == 'ongoing')
               Column(
                 children: [
-                  if (booking.status == 'confirmed')
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          context.push('/live-event-mode');
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Start Event Coverage'),
-                      ),
-                    ),
-                  if (booking.status == 'confirmed') const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -357,6 +365,50 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
       default:
         return Icons.cancel;
     }
+  }
+
+  Widget _buildTransactionCard(FirebasePaymentTransactionModel tx) {
+    final isSuccess = tx.status == 'succeeded';
+    final isFailure = tx.status == 'failed' || tx.status == 'canceled';
+    final color = isSuccess ? Colors.green : (isFailure ? Colors.red : Colors.orange);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.payment, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  tx.transactionId,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                tx.status.toUpperCase(),
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('Amount: £${tx.amount.toStringAsFixed(2)}'),
+          Text('Method: ${tx.paymentMethodType}'),
+          if (tx.failureMessage != null && tx.failureMessage!.isNotEmpty)
+            Text('Reason: ${tx.failureMessage}', style: const TextStyle(color: Colors.red)),
+        ],
+      ),
+    );
   }
 
   static Future<void> _acceptBooking(

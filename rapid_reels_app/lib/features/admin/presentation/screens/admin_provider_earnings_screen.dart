@@ -125,8 +125,8 @@ class AdminProviderEarningsScreen extends StatelessWidget {
         Expanded(
           child: _buildSummaryCard(
             'Total Revenue',
-            '₹${data.totalRevenue.toStringAsFixed(0)}',
-            Icons.currency_rupee,
+            '£${data.totalRevenue.toStringAsFixed(2)}',
+            Icons.currency_pound,
             Colors.green,
           ),
         ),
@@ -134,7 +134,7 @@ class AdminProviderEarningsScreen extends StatelessWidget {
         Expanded(
           child: _buildSummaryCard(
             'Commission',
-            '₹${data.totalCommission.toStringAsFixed(0)}',
+            '£${data.totalCommission.toStringAsFixed(2)}',
             Icons.account_balance,
             Colors.amber,
           ),
@@ -209,9 +209,9 @@ class AdminProviderEarningsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          _buildInfoRow('Revenue', '₹${summary.totalRevenue.toStringAsFixed(0)}'),
-          _buildInfoRow('Payouts', '₹${summary.payouts.toStringAsFixed(0)}'),
-          _buildInfoRow('Commission', '₹${summary.commissionRetained.toStringAsFixed(0)}'),
+          _buildInfoRow('Revenue', '£${summary.totalRevenue.toStringAsFixed(2)}'),
+          _buildInfoRow('Payouts', '£${summary.payouts.toStringAsFixed(2)}'),
+          _buildInfoRow('Commission', '£${summary.commissionRetained.toStringAsFixed(2)}'),
         ],
       ),
     );

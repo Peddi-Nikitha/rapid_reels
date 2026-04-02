@@ -78,7 +78,7 @@ class WalletScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '₹${balance.toStringAsFixed(2)}',
+                          '£${balance.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 40,
                             fontWeight: FontWeight.bold,
@@ -220,7 +220,7 @@ class WalletScreen extends ConsumerWidget {
             ),
           ),
           Text(
-            '${isCredit ? '+' : '-'} ₹${t.amount.toStringAsFixed(2)}',
+            '${isCredit ? '+' : '-'} £${t.amount.toStringAsFixed(2)}',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,

@@ -28,8 +28,8 @@ class _OffersCouponsScreenState extends ConsumerState<OffersCouponsScreen>
       type: OfferType.percentage,
       category: 'All Events',
       termsAndConditions: [
-        'Valid on minimum booking of ₹5,000',
-        'Maximum discount of ₹2,000',
+        'Valid on minimum booking of £5,000',
+        'Maximum discount of £2,000',
         'Cannot be combined with other offers',
         'Valid for first-time users only',
       ],
@@ -37,9 +37,9 @@ class _OffersCouponsScreenState extends ConsumerState<OffersCouponsScreen>
     Offer(
       id: '2',
       code: 'WEDDING500',
-      title: '₹500 Off on Weddings',
+      title: '£500 Off on Weddings',
       description: 'Special discount for wedding events',
-      discount: '₹500',
+      discount: '£500',
       minAmount: 10000,
       maxDiscount: 500,
       validTill: DateTime.now().add(const Duration(days: 15)),
@@ -47,7 +47,7 @@ class _OffersCouponsScreenState extends ConsumerState<OffersCouponsScreen>
       category: 'Wedding',
       termsAndConditions: [
         'Valid on wedding bookings only',
-        'Minimum booking amount ₹10,000',
+        'Minimum booking amount £10,000',
         'One-time use per user',
       ],
     ),
@@ -55,8 +55,8 @@ class _OffersCouponsScreenState extends ConsumerState<OffersCouponsScreen>
       id: '3',
       code: 'FIRST100',
       title: 'First Booking Bonus',
-      description: 'Get ₹100 cashback on your first booking',
-      discount: '₹100',
+      description: 'Get £100 cashback on your first booking',
+      discount: '£100',
       minAmount: 3000,
       maxDiscount: 100,
       validTill: DateTime.now().add(const Duration(days: 30)),
@@ -65,7 +65,7 @@ class _OffersCouponsScreenState extends ConsumerState<OffersCouponsScreen>
       termsAndConditions: [
         'Valid for first booking only',
         'Cashback credited within 24 hours',
-        'Minimum booking of ₹3,000',
+        'Minimum booking of £3,000',
       ],
     ),
   ];
@@ -88,8 +88,8 @@ class _OffersCouponsScreenState extends ConsumerState<OffersCouponsScreen>
       id: '5',
       code: 'BIRTHDAY50',
       title: 'Birthday Bash',
-      description: '₹50 off on birthday events',
-      discount: '₹50',
+      description: '£50 off on birthday events',
+      discount: '£50',
       minAmount: 2000,
       maxDiscount: 50,
       validTill: DateTime.now().subtract(const Duration(days: 10)),
@@ -465,13 +465,13 @@ class _OffersCouponsScreenState extends ConsumerState<OffersCouponsScreen>
                 _buildDetailRow(
                   Icons.shopping_bag,
                   'Min. Amount',
-                  '₹${offer.minAmount}',
+                  '£${offer.minAmount}',
                 ),
                 const SizedBox(height: 8),
                 _buildDetailRow(
                   Icons.discount,
                   'Max. Discount',
-                  '₹${offer.maxDiscount}',
+                  '£${offer.maxDiscount}',
                 ),
                 const SizedBox(height: 8),
                 _buildDetailRow(

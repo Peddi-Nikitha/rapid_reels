@@ -103,7 +103,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
         {
           'question': 'How does the referral program work?',
           'answer':
-              'Share your unique referral code with friends. When they sign up and make their first booking, you both get ₹100 in your wallet. There\'s no limit to how many friends you can refer!',
+              'Share your unique referral code with friends. When they sign up and make their first booking, you both get £100 in your wallet. There\'s no limit to how many friends you can refer!',
         },
         {
           'question': 'How can I use my wallet balance?',

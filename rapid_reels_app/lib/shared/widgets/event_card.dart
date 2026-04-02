@@ -141,7 +141,7 @@ class EventCard extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  '₹${event.totalAmount.toStringAsFixed(0)}',
+                  '£${event.totalAmount.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

@@ -191,7 +191,7 @@ class _TransactionHistoryScreenState
                 Expanded(
                   child: _buildSummaryCard(
                     'Money In',
-                    '₹${totalCredit.toInt()}',
+                    '£${totalCredit.toStringAsFixed(2)}',
                     Icons.arrow_downward,
                     Colors.green,
                   ),
@@ -200,7 +200,7 @@ class _TransactionHistoryScreenState
                 Expanded(
                   child: _buildSummaryCard(
                     'Money Out',
-                    '₹${totalDebit.toInt()}',
+                    '£${totalDebit.toStringAsFixed(2)}',
                     Icons.arrow_upward,
                     Colors.red,
                   ),
@@ -456,7 +456,7 @@ class _TransactionHistoryScreenState
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '${isCredit ? '+' : '-'}₹${transaction['amount']}',
+                      '${isCredit ? '+' : '-'}£${transaction['amount']}',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -597,7 +597,7 @@ class _TransactionHistoryScreenState
                   _buildDetailRow('Transaction ID', transaction['id']),
                   _buildDetailRow('Title', transaction['title']),
                   _buildDetailRow('Description', transaction['description']),
-                  _buildDetailRow('Amount', '₹${transaction['amount']}'),
+                  _buildDetailRow('Amount', '£${transaction['amount']}'),
                   _buildDetailRow('Payment Method', transaction['paymentMethod']),
                   _buildDetailRow('Status', transaction['status']),
                   _buildDetailRow(

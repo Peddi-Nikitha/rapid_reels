@@ -182,7 +182,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
               TextField(
                 controller: priceController,
                 decoration: const InputDecoration(
-                  labelText: 'Price (₹)',
+                  labelText: 'Price (£)',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
@@ -414,7 +414,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
                         (p) => DropdownMenuItem<String>(
                           value: p.packageId,
                           child: Text(
-                            '${p.name} — ₹${p.price.toStringAsFixed(0)}',
+                            '${p.name} — £${p.price.toStringAsFixed(2)}',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -453,7 +453,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
                   children: _selectedPackageIds.map((id) {
                     final pkg = _packageWithId(id);
                     final label = pkg != null
-                        ? '${pkg.name} (₹${pkg.price.toStringAsFixed(0)})'
+                        ? '${pkg.name} (£${pkg.price.toStringAsFixed(2)})'
                         : id;
                     return InputChip(
                       label: Text(label),
@@ -488,7 +488,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
                             }
                           });
                         },
-                  title: Text('${pkg.name} — ₹${pkg.price.toStringAsFixed(0)}'),
+                  title: Text('${pkg.name} — £${pkg.price.toStringAsFixed(2)}'),
                 );
               }),
             ],
@@ -618,7 +618,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
                   child: TextFormField(
                     controller: _startingPrice,
                     decoration: const InputDecoration(
-                      labelText: 'Starting price (₹)',
+                      labelText: 'Starting price (£)',
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,

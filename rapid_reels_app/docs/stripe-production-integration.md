@@ -7,6 +7,16 @@ Use a backend-first Stripe integration for production.
 - Flutter app uses only Stripe publishable key (`pk_live`).
 - Backend (Firebase Functions/Node.js) handles all Stripe secret-key operations.
 - Webhook is the source of truth for payment status in Firestore.
+- Runtime currency is locked to GBP (`gbp`) only.
+- Legacy Razorpay endpoints are disabled (HTTP 410).
+
+## UK-only currency lock
+
+- `createStripePaymentIntent` rejects non-GBP booking currencies.
+- `stripeWebhook` normalizes fallback currency values to `gbp`.
+- New migration utility for existing INR records:
+  - `npm run migrate:inr-gbp:dry`
+  - `npm run migrate:inr-gbp -- --fxRate=0.0095 --batchId=fx_2026_uk_rollout`
 
 ## Why this is mandatory
 
@@ -62,6 +72,37 @@ Use a backend-first Stripe integration for production.
 6. Run real low-value transaction test in live mode.
 7. Validate webhook-driven booking state transitions in Firestore.
 8. Rotate any test/possibly exposed secret keys and disable old keys.
+
+## Payment transaction tracking (canonical)
+
+Production writes each Stripe PaymentIntent lifecycle event into
+`payment_transactions/{transactionId}` as the source of truth.
+
+- `transactionId` = Stripe `payment_intent.id`
+- Linked fields: `bookingId`, `customerUserId`, `providerUserId`
+- Status lifecycle: `processing`, `succeeded`, `failed`, `canceled`
+- Failure metadata: `failureCode`, `failureMessage`
+- Audit metadata: `stripeEventId`, `isLiveMode`, timestamps
+
+Booking payment map remains as a compatibility summary:
+
+- `bookings.payment.paymentStatus`
+- `bookings.payment.lastTransactionRef`
+- `bookings.payment.transactions` (lightweight UI summary)
+
+## Provider/Admin visibility
+
+- Provider and Admin payment views read from `payment_transactions`.
+- Booking detail views show all transactions for a given `bookingId`.
+- Notifications are inserted into `notifications` on success/failure
+  for provider and admin users.
+
+## Failure and reconciliation checklist
+
+- Track failed/canceled events with exact Stripe error fields.
+- Use Stripe event id deduplication (`stripe_webhook_events`) to avoid duplicate processing.
+- Reconcile records where booking remains `pending` for too long by checking latest
+  payment status in `payment_transactions` and Stripe dashboard logs.
 
 ## Security checklist before go-live
 

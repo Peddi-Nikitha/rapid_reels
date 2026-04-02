@@ -18,24 +18,18 @@ abstract final class StripeTestPackage {
         deliveryTime: 60,
         features: const [
           'Integration test only — £2.00 GBP total (single payment)',
-          'Not INR — uses GBP so UK Stripe minimums apply correctly',
+          'GBP-only so UK Stripe minimums apply correctly',
         ],
       );
 
   static bool isStripeTestPackage(String? id) => id == packageId;
 
-  /// Display helper for package list rows (INR vs £1 test).
+  /// Display helper for package list rows in GBP.
   static String formatListedPrice(PackageOffering p) {
-    if (isStripeTestPackage(p.packageId)) {
-      return '£${p.price.toStringAsFixed(2)}';
-    }
-    return '₹${p.price.toStringAsFixed(0)}';
+    return '£${p.price.toStringAsFixed(2)}';
   }
 
   static String formatBookingMoney(double amount, {required bool isGbp}) {
-    if (isGbp) {
-      return '£${amount.toStringAsFixed(2)}';
-    }
-    return '₹${amount.toStringAsFixed(0)}';
+    return '£${amount.toStringAsFixed(2)}';
   }
 }

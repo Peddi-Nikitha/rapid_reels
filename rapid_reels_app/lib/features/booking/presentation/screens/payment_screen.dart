@@ -6,7 +6,7 @@ import '../../../../core/constants/app_routes.dart';
 import '../../data/models/event_booking_model.dart';
 
 /// Mock Payment Screen
-/// No Razorpay - Simulated payment flow
+/// Stripe-only simulated payment flow
 class PaymentScreen extends ConsumerStatefulWidget {
   final EventBooking booking;
   final bool isAdvancePayment;
@@ -102,23 +102,23 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         const Divider(height: 32),
                         _buildSummaryRow(
                           'Total Amount',
-                          '₹${widget.booking.totalAmount.toStringAsFixed(0)}',
+                          '£${widget.booking.totalAmount.toStringAsFixed(2)}',
                         ),
                         if (widget.isAdvancePayment) ...[
                           _buildSummaryRow(
                             'Advance (50%)',
-                            '₹${_paymentAmount.toStringAsFixed(0)}',
+                            '£${_paymentAmount.toStringAsFixed(2)}',
                             isHighlight: true,
                           ),
                           _buildSummaryRow(
                             'Remaining',
-                            '₹${(widget.booking.totalAmount - _paymentAmount).toStringAsFixed(0)}',
+                            '£${(widget.booking.totalAmount - _paymentAmount).toStringAsFixed(2)}',
                             isSubtle: true,
                           ),
                         ] else
                           _buildSummaryRow(
                             'Pay Now',
-                            '₹${_paymentAmount.toStringAsFixed(0)}',
+                            '£${_paymentAmount.toStringAsFixed(2)}',
                             isHighlight: true,
                           ),
                       ],
@@ -235,7 +235,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           ),
                         )
                       : Text(
-                          'Pay ₹${_paymentAmount.toStringAsFixed(0)}',
+                          'Pay £${_paymentAmount.toStringAsFixed(2)}',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,

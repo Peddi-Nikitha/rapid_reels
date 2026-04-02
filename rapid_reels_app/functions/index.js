@@ -38,6 +38,99 @@ function setCorsHeaders(response) {
   response.set("Access-Control-Allow-Headers", "Content-Type, stripe-signature");
 }
 
+function paymentStatusFromEventType(eventType) {
+  switch (eventType) {
+    case "payment_intent.succeeded":
+      return "succeeded";
+    case "payment_intent.payment_failed":
+      return "failed";
+    case "payment_intent.canceled":
+      return "canceled";
+    case "payment_intent.processing":
+      return "processing";
+    default:
+      return "processing";
+  }
+}
+
+function bookingPaymentStatusFromStripeStatus(status) {
+  switch (status) {
+    case "succeeded":
+      return "fully_paid";
+    case "failed":
+      return "failed";
+    case "canceled":
+      return "failed";
+    case "processing":
+      return "pending";
+    default:
+      return "pending";
+  }
+}
+
+async function createPaymentNotification({
+  userId,
+  bookingId,
+  paymentIntentId,
+  amountMajor,
+  status,
+  role,
+}) {
+  if (!userId) return;
+  const success = status === "succeeded";
+  const title = success ? "Payment received" : "Payment update";
+  const body = success ?
+    `Payment completed for booking ${bookingId}.` :
+    `Payment ${status} for booking ${bookingId}.`;
+
+  await admin.firestore().collection("notifications").add({
+    userId: String(userId),
+    type: success ? "payment_success" : "payment_failed",
+    title,
+    body,
+    data: {
+      bookingId: String(bookingId),
+      paymentId: String(paymentIntentId),
+      customData: {
+        role: String(role),
+        amount: amountMajor,
+        status,
+      },
+    },
+    isRead: false,
+    isDelivered: false,
+    priority: success ? "normal" : "high",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    metadata: {
+      source: "stripe_webhook",
+      role,
+      status,
+    },
+  });
+}
+
+async function createAdminPaymentNotifications({
+  bookingId,
+  paymentIntentId,
+  amountMajor,
+  status,
+}) {
+  const adminUsersSnap = await admin.firestore()
+      .collection("users")
+      .where("userType", "in", ["admin", "superadmin"])
+      .get();
+  if (adminUsersSnap.empty) return;
+
+  await Promise.all(adminUsersSnap.docs.map((doc) => createPaymentNotification({
+    userId: doc.id,
+    bookingId,
+    paymentIntentId,
+    amountMajor,
+    status,
+    role: "admin",
+  })));
+}
+
 // Send notification when booking is created
 exports.onBookingCreated = onDocumentCreated(
     "events/{eventId}",
@@ -162,7 +255,7 @@ exports.processReferral = onDocumentCreated(
         }
 
         const referrerId = referrerQuery.docs[0].id;
-        const rewardAmount = 200; // ₹200 reward
+        const rewardAmount = 2; // £2 reward
 
         // Create referral record
         await admin.firestore().collection("referrals").add({
@@ -186,7 +279,7 @@ exports.processReferral = onDocumentCreated(
           await admin.messaging().send({
             notification: {
               title: "New Referral! 🎁",
-              body: `Someone signed up using your code! Complete booking to earn ₹${rewardAmount}`,
+              body: `Someone signed up using your code! Complete booking to earn £${rewardAmount}`,
             },
             token: fcmToken,
           });
@@ -200,131 +293,20 @@ exports.processReferral = onDocumentCreated(
     }
 );
 
-// Create Razorpay order
+// Legacy Razorpay endpoint disabled for UK-only Stripe rollout.
 exports.createRazorpayOrder = onRequest(async (request, response) => {
-  // Enable CORS
-  response.set("Access-Control-Allow-Origin", "*");
-
-  if (request.method === "OPTIONS") {
-    response.set("Access-Control-Allow-Methods", "POST");
-    response.set("Access-Control-Allow-Headers", "Content-Type");
-    response.status(204).send("");
-    return;
-  }
-
-  try {
-    const {amount, bookingId, userId} = request.body;
-
-    if (!amount || !bookingId || !userId) {
-      response.status(400).send({error: "Missing required parameters"});
-      return;
-    }
-
-    // TODO: Replace with actual Razorpay credentials
-    // Set these using: firebase functions:config:set razorpay.key_id="YOUR_KEY"
-    const Razorpay = require("razorpay");
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID || "YOUR_KEY_ID",
-      key_secret: process.env.RAZORPAY_KEY_SECRET || "YOUR_KEY_SECRET",
-    });
-
-    const order = await razorpay.orders.create({
-      amount: amount * 100, // amount in paise
-      currency: "INR",
-      receipt: bookingId,
-      notes: {
-        userId: userId,
-        bookingId: bookingId,
-      },
-    });
-
-    logger.info("Razorpay order created:", order.id);
-
-    response.status(200).send({
-      success: true,
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-    });
-  } catch (error) {
-    logger.error("Error creating Razorpay order:", error);
-    response.status(500).send({
-      error: "Failed to create order",
-      message: error.message,
-    });
-  }
+  response.status(410).send({
+    error: "Deprecated",
+    message: "Razorpay is disabled. Use Stripe GBP checkout.",
+  });
 });
 
-// Verify Razorpay payment
+// Legacy Razorpay endpoint disabled for UK-only Stripe rollout.
 exports.verifyRazorpayPayment = onRequest(async (request, response) => {
-  // Enable CORS
-  response.set("Access-Control-Allow-Origin", "*");
-
-  if (request.method === "OPTIONS") {
-    response.set("Access-Control-Allow-Methods", "POST");
-    response.set("Access-Control-Allow-Headers", "Content-Type");
-    response.status(204).send("");
-    return;
-  }
-
-  try {
-    const {orderId, paymentId, signature, bookingId} = request.body;
-
-    if (!orderId || !paymentId || !signature || !bookingId) {
-      response.status(400).send({error: "Missing required parameters"});
-      return;
-    }
-
-    const crypto = require("crypto");
-
-    const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "YOUR_KEY_SECRET")
-        .update(`${orderId}|${paymentId}`)
-        .digest("hex");
-
-    if (expectedSignature === signature) {
-      // Update booking with payment details
-      await admin.firestore()
-          .collection("events")
-          .doc(bookingId)
-          .update({
-            payments: admin.firestore.FieldValue.arrayUnion({
-              paymentId: paymentId,
-              orderId: orderId,
-              amount: 0, // Will be updated by the app
-              method: "razorpay",
-              transactionId: orderId,
-              status: "success",
-              paidAt: admin.firestore.FieldValue.serverTimestamp(),
-            }),
-            paymentStatus: "advance_paid",
-            status: "confirmed",
-            "eventStatus.bookingConfirmed": admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-
-      logger.info("Payment verified and booking updated");
-
-      response.status(200).send({
-        success: true,
-        verified: true,
-        message: "Payment verified successfully",
-      });
-    } else {
-      logger.warn("Invalid payment signature");
-      response.status(400).send({
-        success: false,
-        verified: false,
-        error: "Invalid signature",
-      });
-    }
-  } catch (error) {
-    logger.error("Error verifying payment:", error);
-    response.status(500).send({
-      error: "Failed to verify payment",
-      message: error.message,
-    });
-  }
+  response.status(410).send({
+    error: "Deprecated",
+    message: "Razorpay verification is disabled. Use Stripe GBP webhook flow.",
+  });
 });
 
 // Create Stripe PaymentIntent (callable — Flutter SDK resolves correct URL/region)
@@ -372,12 +354,11 @@ exports.createStripePaymentIntent = onCall(
 
         const payment = booking.payment || {};
         const advanceAmount = Number(payment.advanceAmount || 0);
-        const currency = String(payment.currency || "inr").toLowerCase();
-        const allowedCurrencies = new Set(["inr", "gbp"]);
-        if (!allowedCurrencies.has(currency)) {
+        const currency = String(payment.currency || "gbp").toLowerCase();
+        if (currency !== "gbp") {
           throw new HttpsError(
               "failed-precondition",
-              "Unsupported payment currency",
+              "Only GBP payments are supported",
           );
         }
         const amountInSmallestUnit = Math.round(advanceAmount * 100);
@@ -400,7 +381,8 @@ exports.createStripePaymentIntent = onCall(
           automatic_payment_methods: {enabled: true},
           metadata: {
             bookingId: String(bookingId),
-            userId: String(uid),
+            customerUserId: String(uid),
+            providerUserId: String(booking.providerId || ""),
           },
         }, {idempotencyKey});
 
@@ -488,46 +470,106 @@ exports.stripeWebhook = onRequest(
       return;
     }
 
-    if (event.type === "payment_intent.succeeded") {
+    if (event.type === "payment_intent.succeeded" ||
+        event.type === "payment_intent.payment_failed" ||
+        event.type === "payment_intent.canceled" ||
+        event.type === "payment_intent.processing") {
       const paymentIntent = event.data.object;
-      const bookingId = paymentIntent.metadata?.bookingId;
-      if (bookingId) {
-        await admin.firestore().collection("bookings").doc(String(bookingId)).update({
-          status: "confirmed",
-          "payment.paymentStatus": "fully_paid",
-          "eventStatus.bookingConfirmed": admin.firestore.FieldValue.serverTimestamp(),
-          "payment.transactions": admin.firestore.FieldValue.arrayUnion({
-            paymentId: paymentIntent.id,
-            amount: (paymentIntent.amount_received || paymentIntent.amount || 0) / 100,
-            method: "stripe",
-            transactionId: paymentIntent.id,
-            status: "success",
-            paidAt: admin.firestore.FieldValue.serverTimestamp(),
-          }),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      const bookingId = String(paymentIntent.metadata?.bookingId || "");
+      const transactionId = String(paymentIntent.id || "");
+      if (!bookingId || !transactionId) {
+        logger.warn("Skipping payment webhook due to missing bookingId/transactionId", {
+          eventType: event.type,
+          eventId: event.id,
         });
-      }
-    }
+      } else {
+        const bookingRef = admin.firestore().collection("bookings").doc(bookingId);
+        const bookingSnap = await bookingRef.get();
+        if (!bookingSnap.exists) {
+          logger.warn("Booking not found for payment event", {bookingId, transactionId});
+        } else {
+          const booking = bookingSnap.data() || {};
+          const status = paymentStatusFromEventType(event.type);
+          const amountMajor = (paymentIntent.amount_received || paymentIntent.amount || 0) / 100;
+          const failureCode = paymentIntent.last_payment_error?.code || null;
+          const failureMessage = paymentIntent.last_payment_error?.message ||
+            (status === "failed" ? "Payment failed" : null);
+          const paymentMethodType = paymentIntent.payment_method_types &&
+            paymentIntent.payment_method_types.length > 0 ?
+            String(paymentIntent.payment_method_types[0]) :
+            "stripe";
 
-    if (event.type === "payment_intent.payment_failed" ||
-        event.type === "payment_intent.canceled") {
-      const paymentIntent = event.data.object;
-      const bookingId = paymentIntent.metadata?.bookingId;
-      if (bookingId) {
-        const failureMessage = paymentIntent.last_payment_error?.message || "Payment failed";
-        await admin.firestore().collection("bookings").doc(String(bookingId)).update({
-          "payment.paymentStatus": "failed",
-          "payment.failureReason": failureMessage,
-          "payment.transactions": admin.firestore.FieldValue.arrayUnion({
-            paymentId: paymentIntent.id,
-            amount: (paymentIntent.amount || 0) / 100,
-            method: "stripe",
-            transactionId: paymentIntent.id,
-            status: "failed",
-            paidAt: admin.firestore.FieldValue.serverTimestamp(),
-          }),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+          const canonicalDocRef = admin.firestore()
+              .collection("payment_transactions")
+              .doc(transactionId);
+
+          await canonicalDocRef.set({
+            transactionId,
+            bookingId,
+            customerUserId: String(
+                paymentIntent.metadata?.customerUserId ||
+                booking.customerId ||
+                ""
+            ),
+            providerUserId: String(
+                paymentIntent.metadata?.providerUserId ||
+                booking.providerId ||
+                ""
+            ),
+            stripeEventId: String(event.id),
+            amount: amountMajor,
+            currency: String(paymentIntent.currency || "gbp").toLowerCase(),
+            status,
+            failureCode,
+            failureMessage,
+            paymentMethodType,
+            isLiveMode: paymentIntent.livemode === true,
+            processedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            metadata: {
+              stripePaymentIntentStatus: String(paymentIntent.status || ""),
+            },
+          }, {merge: true});
+
+          const bookingUpdate = {
+            "payment.paymentStatus": bookingPaymentStatusFromStripeStatus(status),
+            "payment.stripePaymentIntentId": transactionId,
+            "payment.lastTransactionRef": transactionId,
+            "payment.transactions": admin.firestore.FieldValue.arrayUnion({
+              paymentId: transactionId,
+              amount: amountMajor,
+              method: "stripe",
+              transactionId: transactionId,
+              status: status === "succeeded" ? "success" : status,
+              paidAt: admin.firestore.FieldValue.serverTimestamp(),
+            }),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          };
+
+          if (status === "succeeded") {
+            bookingUpdate.status = "confirmed";
+            bookingUpdate["eventStatus.bookingConfirmed"] = admin.firestore.FieldValue.serverTimestamp();
+          } else if (failureMessage) {
+            bookingUpdate["payment.failureReason"] = failureMessage;
+          }
+          await bookingRef.update(bookingUpdate);
+
+          await createPaymentNotification({
+            userId: String(booking.providerId || paymentIntent.metadata?.providerUserId || ""),
+            bookingId,
+            paymentIntentId: transactionId,
+            amountMajor,
+            status,
+            role: "provider",
+          });
+          await createAdminPaymentNotifications({
+            bookingId,
+            paymentIntentId: transactionId,
+            amountMajor,
+            status,
+          });
+        }
       }
     }
 

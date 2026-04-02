@@ -174,6 +174,21 @@ service cloud.firestore {
       // Admin can read/write any transaction
       allow read, write: if isAdmin();
     }
+
+    // ==================== PAYMENT TRANSACTIONS COLLECTION ====================
+    match /payment_transactions/{transactionId} {
+      // Customer can read own booking transactions.
+      allow read: if isOwner(resource.data.customerUserId);
+
+      // Provider can read transactions where they are the provider.
+      allow read: if isOwner(resource.data.providerUserId);
+
+      // Only backend (Admin SDK / Cloud Functions) should write.
+      allow create, update, delete: if false;
+
+      // Admin can read all.
+      allow read: if isAdmin();
+    }
     
     // ==================== NOTIFICATIONS COLLECTION ====================
     match /notifications/{notificationId} {

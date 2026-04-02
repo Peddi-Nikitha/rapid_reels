@@ -25,21 +25,21 @@ class _SchedulePackagesScreenState extends State<SchedulePackagesScreen> {
       'description': 'Capture your all your special moments in a timeless memory',
       'image': 'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80',
       'duration': '2-4 hours',
-      'price': 'Starting at ₹8,000',
+      'price': 'Starting at £8,000',
     },
     {
       'title': 'One Day Package',
       'description': 'Get focused, high-quality coverage for any event or project, delivered with precision.',
       'image': 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
       'duration': 'Full Day',
-      'price': 'Starting at ₹25,000',
+      'price': 'Starting at £25,000',
     },
     {
       'title': 'Premium Package',
       'description': 'Unlimited reels with live station and cinematic editing for your most important events.',
       'image': 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800&q=80',
       'duration': '10+ hours',
-      'price': 'Starting at ₹45,000',
+      'price': 'Starting at £45,000',
     },
   ];
 

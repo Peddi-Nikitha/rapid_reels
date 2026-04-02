@@ -31,7 +31,7 @@ class BookingFirebaseAdapter {
     final paymentCurrency = (data['paymentCurrency']?.toString().trim().toLowerCase().isNotEmpty ??
             false)
         ? data['paymentCurrency'].toString().trim().toLowerCase()
-        : 'inr';
+        : 'gbp';
     final durationHours = (data['duration'] ?? 4) as num;
     final durationMinutes = (durationHours.toInt() * 60);
 

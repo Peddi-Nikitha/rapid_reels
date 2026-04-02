@@ -284,7 +284,7 @@ firestore/
 - `userId`: String (reference to users)
 - `type`: String (credit, debit, refund, referral_reward, booking_payment, withdrawal)
 - `amount`: double
-- `currency`: String (INR)
+- `currency`: String (GBP)
 - `status`: String (pending, completed, failed, cancelled)
 - `description`: String?
 - `reference`: WalletTransactionReference?

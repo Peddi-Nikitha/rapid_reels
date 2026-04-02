@@ -66,7 +66,7 @@ class FirebaseReferralModel {
 class ReferralReward {
   final double referrerReward; // Amount credited to referrer
   final double referredReward; // Amount credited to referred user
-  final String currency; // INR
+  final String currency; // GBP
   final String rewardType; // wallet_credit, discount_coupon
   final String? couponCode; // If rewardType is discount_coupon
   final bool isCredited;
@@ -74,7 +74,7 @@ class ReferralReward {
   ReferralReward({
     required this.referrerReward,
     required this.referredReward,
-    this.currency = 'INR',
+    this.currency = 'GBP',
     this.rewardType = 'wallet_credit',
     this.couponCode,
     this.isCredited = false,
@@ -84,7 +84,7 @@ class ReferralReward {
     return ReferralReward(
       referrerReward: (map['referrerReward'] ?? 0.0).toDouble(),
       referredReward: (map['referredReward'] ?? 0.0).toDouble(),
-      currency: map['currency'] ?? 'INR',
+      currency: map['currency'] ?? 'GBP',
       rewardType: map['rewardType'] ?? 'wallet_credit',
       couponCode: map['couponCode'],
       isCredited: map['isCredited'] ?? false,

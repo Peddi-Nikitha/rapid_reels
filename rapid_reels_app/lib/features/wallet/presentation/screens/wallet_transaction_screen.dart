@@ -221,7 +221,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            '₹${_walletBalance.toStringAsFixed(0)}',
+                            '£${_walletBalance.toStringAsFixed(2)}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 40,
@@ -286,7 +286,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
                   Expanded(
                     child: _buildQuickStat(
                       'Total Earned',
-                      '₹4,050',
+                      '£4,050',
                       Icons.trending_up,
                       Colors.green,
                     ),
@@ -295,7 +295,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
                   Expanded(
                     child: _buildQuickStat(
                       'Total Spent',
-                      '₹18,000',
+                      '£18,000',
                       Icons.trending_down,
                       Colors.red,
                     ),
@@ -467,7 +467,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${isCredit ? '+' : '-'}₹${transaction.amount}',
+                '${isCredit ? '+' : '-'}£${transaction.amount}',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -574,7 +574,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: 'Amount',
-                  prefixText: '₹',
+                  prefixText: '£',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -585,7 +585,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
                 spacing: 8,
                 children: [100, 500, 1000, 2000].map((amount) {
                   return ActionChip(
-                    label: Text('₹$amount'),
+                    label: Text('£$amount'),
                     onPressed: () {},
                   );
                 }).toList(),
@@ -630,7 +630,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Available Balance: ₹${_walletBalance.toStringAsFixed(0)}',
+                'Available Balance: £${_walletBalance.toStringAsFixed(2)}',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 14,
@@ -641,7 +641,7 @@ class _WalletTransactionScreenState extends ConsumerState<WalletTransactionScree
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: 'Amount',
-                  prefixText: '₹',
+                  prefixText: '£',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

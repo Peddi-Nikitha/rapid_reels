@@ -59,7 +59,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
       'id': 'notif_003',
       'type': 'payment_success',
       'title': 'Payment Successful ✅',
-      'message': 'Your payment of ₹15,000 has been processed successfully',
+      'message': 'Your payment of £15,000 has been processed successfully',
       'time': DateTime.now().subtract(const Duration(hours: 5)),
       'isRead': true,
       'icon': Icons.payment,
@@ -69,7 +69,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
     {
       'id': 'notif_004',
       'type': 'referral_earned',
-      'title': 'You Earned ₹100! 💰',
+      'title': 'You Earned £100! 💰',
       'message': 'Your friend Rajesh signed up using your referral code',
       'time': DateTime.now().subtract(const Duration(days: 1)),
       'isRead': true,
@@ -146,6 +146,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
           'booking_confirmed',
           'event_reminder',
           'payment_success',
+          'payment_failed',
           'booking_request',
         };
 
@@ -253,6 +254,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
         icon = Icons.payment;
         color = Colors.blue;
         actionText = 'View Receipt';
+        break;
+      case 'payment_failed':
+        icon = Icons.error_outline;
+        color = Colors.red;
+        actionText = 'View Details';
         break;
       case 'referral_earned':
         icon = Icons.card_giftcard;
@@ -489,6 +495,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
         break;
       case 'payment_success':
         message = 'Opening payment receipt...';
+        break;
+      case 'payment_failed':
+        message = 'Opening failed payment details...';
         break;
       case 'referral_earned':
         message = 'Opening wallet...';

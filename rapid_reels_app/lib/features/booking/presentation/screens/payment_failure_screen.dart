@@ -20,7 +20,16 @@ class PaymentFailureScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const CustomAppBar(title: 'Payment Failed'),
+      appBar: CustomAppBar(
+        title: 'Payment Failed',
+        onBackPressed: () {
+          if (context.canPop()) {
+            context.pop();
+            return;
+          }
+          context.go(AppRoutes.bookingSummary, extra: bookingData);
+        },
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -48,7 +57,10 @@ class PaymentFailureScreen extends StatelessWidget {
             CustomButton(
               text: 'Retry Payment',
               onPressed: () =>
-                  context.go(AppRoutes.bookingSummary, extra: bookingData),
+                  context.pushReplacement(
+                    AppRoutes.bookingSummary,
+                    extra: bookingData,
+                  ),
               icon: Icons.refresh,
             ),
             const SizedBox(height: 12),

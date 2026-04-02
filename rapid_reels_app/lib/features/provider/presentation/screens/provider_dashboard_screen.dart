@@ -5,6 +5,7 @@ import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../notifications/presentation/screens/notifications_screen.dart';
 
 bool isSameDay(DateTime? a, DateTime? b) {
   if (a == null || b == null) return false;
@@ -107,7 +108,13 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined),
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ],
                 bottom: TabBar(
@@ -309,6 +316,17 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
             colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
           ),
           onTap: () => context.push(AppRoutes.providerBusinessProfile),
+        ),
+        const SizedBox(height: 12),
+        _buildActionCard(
+          context: context,
+          icon: Icons.policy_outlined,
+          title: 'Refund & Cancellation Policy',
+          subtitle: 'View payment cancellation and refund clauses',
+          gradient: const LinearGradient(
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+          ),
+          onTap: () => context.push(AppRoutes.refundCancellationPolicy),
         ),
         const SizedBox(height: 12),
         _buildActionCard(

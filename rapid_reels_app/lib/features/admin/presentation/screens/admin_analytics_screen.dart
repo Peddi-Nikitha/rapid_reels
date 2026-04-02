@@ -59,7 +59,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(child: _buildMetricCard('Total Revenue', '₹25.0L', Icons.currency_rupee, Colors.green, '+15%')),
+                Expanded(child: _buildMetricCard('Total Revenue', '£25.0L', Icons.currency_pound, Colors.green, '+15%')),
                 const SizedBox(width: 12),
                 Expanded(child: _buildMetricCard('Total Users', '1,250', Icons.people, Colors.blue, '+8%')),
               ],
@@ -318,7 +318,7 @@ class _AdminAnalyticsScreenState extends State<AdminAnalyticsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${provider['bookings']} bookings • ₹${((provider['revenue'] as int) / 1000).toStringAsFixed(0)}K',
+                        '${provider['bookings']} bookings • £${((provider['revenue'] as int) / 1000).toStringAsFixed(0)}K',
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                     ],

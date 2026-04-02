@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../../core/firebase/models/firebase_payment_transaction_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 
 class AdminBookingManagementScreen extends StatefulWidget {
@@ -12,7 +13,6 @@ class AdminBookingManagementScreen extends StatefulWidget {
 
 class _AdminBookingManagementScreenState extends State<AdminBookingManagementScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _selectedFilter = 'All';
   final _firestoreService = FirestoreService();
 
   @override
@@ -57,9 +57,7 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.filter_list),
-            onSelected: (value) {
-              setState(() => _selectedFilter = value);
-            },
+            onSelected: (_) {},
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'All', child: Text('All Bookings')),
               const PopupMenuItem(value: 'Today', child: Text('Today')),
@@ -184,14 +182,14 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
           const SizedBox(height: 6),
           _buildInfoRow(Icons.location_on, booking.venue.address),
           const SizedBox(height: 6),
-          _buildInfoRow(Icons.currency_rupee, '₹${booking.payment.totalAmount.toStringAsFixed(0)}'),
+          _buildInfoRow(Icons.currency_pound, '£${booking.payment.totalAmount.toStringAsFixed(2)}'),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: () {
-                    // View details
+                    _showBookingPaymentDetails(booking);
                   },
                   child: const Text('View Details'),
                 ),
@@ -249,6 +247,60 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
       default:
         return Colors.grey;
     }
+  }
+
+  void _showBookingPaymentDetails(FirebaseBookingModel booking) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return SizedBox(
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Booking ${booking.bookingId}',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text('Customer: ${booking.customerId}'),
+                Text('Provider: ${booking.providerId}'),
+                const SizedBox(height: 12),
+                const Text(
+                  'Payment Transactions',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: StreamBuilder<List<FirebasePaymentTransactionModel>>(
+                    stream: _firestoreService.streamPaymentTransactionsByBooking(booking.bookingId),
+                    builder: (context, snapshot) {
+                      final txs = snapshot.data ?? const <FirebasePaymentTransactionModel>[];
+                      if (txs.isEmpty) return const Center(child: Text('No transactions found'));
+                      return ListView.builder(
+                        itemCount: txs.length,
+                        itemBuilder: (context, index) {
+                          final tx = txs[index];
+                          return ListTile(
+                            leading: const Icon(Icons.payment),
+                            title: Text(tx.transactionId, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text('£${tx.amount.toStringAsFixed(2)} • ${tx.status}'),
+                            trailing: Text(tx.currency.toUpperCase()),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

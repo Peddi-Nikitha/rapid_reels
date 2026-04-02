@@ -58,6 +58,7 @@ class AppRoutes {
   static const String support = '/support';
   static const String myTickets = '/my-tickets';
   static const String termsAndPrivacy = '/terms-privacy';
+  static const String refundCancellationPolicy = '/refund-cancellation-policy';
 
   // Provider Routes
   static const String providerDashboard = '/provider-dashboard';
