@@ -62,6 +62,11 @@ service cloud.firestore {
         allow read: if resource.data.isPublished == true || isOwner(providerId) || isAdmin();
         allow create, update, delete: if isOwner(providerId) || isAdmin();
       }
+
+      // Day locks for booking (written only by Cloud Functions Admin SDK)
+      match /schedule/{dateKey} {
+        allow read, write: if false;
+      }
     }
     
     // ==================== BOOKINGS COLLECTION ====================

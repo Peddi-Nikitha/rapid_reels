@@ -33,7 +33,27 @@ class AppStrings {
   static const String trendingReels = 'Trending Reels';
   static const String discoverWithVibe = 'Discover with Vibe';
   static const String viewAll = 'View all';
-  
+  /// Promo banner block on home (carousel + dots + Book Now).
+  static const String homeBannerSectionTitle = 'Spotlight';
+
+  // Main tab bar (customer shell)
+  static const String navHome = 'Home';
+  static const String navReels = 'Reels';
+  static const String navMyEvents = 'My Events';
+  static const String navProfile = 'Profile';
+
+  /// Shown where provider phone is withheld from customers (booking summary, etc.).
+  static const String providerContactViaApp =
+      'Coordinated through Rapid Reels — not shown here for privacy.';
+
+  /// Customer-facing when provider is not yet admin-approved.
+  static const String providerPendingApprovalCustomer =
+      'This profile is still being verified by Rapid Reels. You can browse details; booking opens once approved.';
+
+  /// Provider dashboard when account is pending approval.
+  static const String providerPendingApprovalProvider =
+      'Your profile is pending admin approval. Reels upload and full visibility unlock after you’re approved.';
+
   // Event Types
   static const String wedding = 'Wedding';
   static const String birthday = 'Birthday Party';

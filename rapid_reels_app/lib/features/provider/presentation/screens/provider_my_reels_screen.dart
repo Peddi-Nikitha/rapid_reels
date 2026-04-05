@@ -5,6 +5,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../shared/widgets/reel_viewer_screen.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 
@@ -60,52 +61,112 @@ class _ProviderMyReelsScreenState extends State<ProviderMyReelsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text(
-          'My Reels',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.upload_rounded),
-            tooltip: 'Upload Reels',
-            onPressed: () => context.push(AppRoutes.uploadFootage),
-          ),
-          IconButton(
-            icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
-            onPressed: () => setState(() => _isGridView = !_isGridView),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _isLoading ? null : _loadReels,
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _reels.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: _loadReels,
-                  color: AppColors.primary,
-                  child: CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(child: _buildStatsRow()),
-                      SliverPadding(
-                        padding: const EdgeInsets.all(16),
-                        sliver: _isGridView ? _buildGrid() : _buildList(),
-                      ),
-                    ],
-                  ),
+    return StreamBuilder<FirebaseProviderModel?>(
+      stream: _firestoreService.streamProviderDoc(widget.providerId),
+      builder: (context, provSnap) {
+        if (provSnap.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.pop(),
+              ),
+              title: const Text(
+                'My Reels',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            body: const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          );
+        }
+        final provider = provSnap.data;
+        final approved = provider?.verificationStatus == 'approved';
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: AppColors.surface,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => context.pop(),
+            ),
+            title: const Text(
+              'My Reels',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            actions: [
+              if (approved) ...[
+                IconButton(
+                  icon: const Icon(Icons.upload_rounded),
+                  tooltip: 'Upload Reels',
+                  onPressed: () => context.push(AppRoutes.uploadFootage),
                 ),
+                IconButton(
+                  icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
+                  onPressed: () => setState(() => _isGridView = !_isGridView),
+                ),
+              ],
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _isLoading ? null : _loadReels,
+              ),
+            ],
+          ),
+          body: !approved
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lock_outline, size: 56, color: Colors.grey[500]),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Reels unlock after admin approval',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          AppStrings.providerPendingApprovalProvider,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 14, height: 1.4, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    )
+                  : _reels.isEmpty
+                      ? _buildEmptyState()
+                      : RefreshIndicator(
+                          onRefresh: _loadReels,
+                          color: AppColors.primary,
+                          child: CustomScrollView(
+                            slivers: [
+                              SliverToBoxAdapter(child: _buildStatsRow()),
+                              SliverPadding(
+                                padding: const EdgeInsets.all(16),
+                                sliver: _isGridView ? _buildGrid() : _buildList(),
+                              ),
+                            ],
+                          ),
+                        ),
+        );
+      },
     );
   }
 

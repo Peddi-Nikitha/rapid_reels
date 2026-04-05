@@ -1,4 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
+import '../booking_callable_payload.dart';
+import '../../booking/date_availability.dart';
 import '../models/firebase_user_model.dart';
 import '../models/firebase_provider_model.dart';
 import '../models/firebase_booking_model.dart';
@@ -69,6 +73,18 @@ class FirestoreService {
         .map((doc) => doc.exists ? FirebaseUserModel.fromFirestore(doc) : null);
   }
 
+  /// Admin: stream all users (customers + providers + admins) for management UI.
+  Stream<List<FirebaseUserModel>> streamAllUsers() {
+    return _firestore
+        .collection('users')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) =>
+              snapshot.docs.map(FirebaseUserModel.fromFirestore).toList(),
+        );
+  }
+
   // ==================== PROVIDERS ====================
 
   /// Get provider by ID
@@ -82,6 +98,12 @@ class FirestoreService {
     } catch (e) {
       throw Exception('Error getting provider: $e');
     }
+  }
+
+  Stream<FirebaseProviderModel?> streamProviderDoc(String providerId) {
+    return _firestore.collection('providers').doc(providerId).snapshots().map(
+          (doc) => doc.exists ? FirebaseProviderModel.fromFirestore(doc) : null,
+        );
   }
 
   /// Create or update provider
@@ -269,6 +291,18 @@ class FirestoreService {
     );
   }
 
+  /// Admin: stream all providers regardless of active/verification status.
+  Stream<List<FirebaseProviderModel>> streamAllProviders() {
+    return _firestore
+        .collection('providers')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) =>
+              snapshot.docs.map(FirebaseProviderModel.fromFirestore).toList(),
+        );
+  }
+
   /// Stream only pending providers (for admin verification screen)
   Stream<List<FirebaseProviderModel>> streamPendingProviders() {
     return _firestore
@@ -406,6 +440,70 @@ class FirestoreService {
     } catch (e) {
       throw Exception('Error creating booking: $e');
     }
+  }
+
+  /// Atomically creates a booking if the provider has no other blocking booking on [eventDateKey].
+  /// Also writes `providers/{providerId}/schedule/{eventDateKey}` (server-side only writes).
+  Future<String> createBookingIfAvailable(FirebaseBookingModel booking) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('createBookingIfAvailable');
+      final payload = BookingCallablePayload.encode(booking);
+      final result = await callable.call({'booking': payload});
+      final raw = result.data;
+      if (raw is! Map) {
+        throw Exception('Invalid response from createBookingIfAvailable');
+      }
+      final data = Map<String, dynamic>.from(raw);
+      final id = data['bookingId']?.toString();
+      if (id == null || id.isEmpty) {
+        throw Exception('Invalid response from createBookingIfAvailable');
+      }
+      return id;
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'already-exists') {
+        throw BookingDateTakenException(
+          e.message ?? 'This date is no longer available for this provider.',
+        );
+      }
+      throw Exception('Error creating booking: ${e.message}');
+    } catch (e) {
+      throw Exception('Error creating booking: $e');
+    }
+  }
+
+  /// Date keys (`yyyy-MM-dd`, local) where the provider already has a blocking booking.
+  Future<Set<String>> getProviderOccupiedDateKeys(
+    String providerId, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    try {
+      final list = await getProviderBookings(providerId);
+      final fromD = from != null ? dateOnlyLocal(from) : null;
+      final toD = to != null ? dateOnlyLocal(to) : null;
+      final keys = <String>{};
+      for (final b in list) {
+        if (!bookingStatusBlocksDay(b.status)) continue;
+        final d = dateOnlyLocal(b.eventDate);
+        if (fromD != null && d.isBefore(fromD)) continue;
+        if (toD != null && d.isAfter(toD)) continue;
+        keys.add(b.eventDateKey);
+      }
+      return keys;
+    } catch (e) {
+      throw Exception('Error getting occupied dates: $e');
+    }
+  }
+
+  Stream<Set<String>> streamProviderOccupiedDateKeys(String providerId) {
+    return streamProviderBookings(providerId).map((list) {
+      final keys = <String>{};
+      for (final b in list) {
+        if (!bookingStatusBlocksDay(b.status)) continue;
+        keys.add(b.eventDateKey);
+      }
+      return keys;
+    });
   }
 
   /// Update booking
@@ -724,12 +822,11 @@ class FirestoreService {
           .map((doc) => FirebaseReelModel.fromFirestore(doc))
           .where((r) => r.status == 'delivered' || r.status == 'published')
           .toList();
-      reels.sort((a, b) => b.analytics.views.compareTo(a.analytics.views));
       if (eventType != null) {
-        reels = reels.where((r) => r.eventType == eventType).take(limit).toList();
-      } else {
-        reels = reels.take(limit).toList();
+        reels = reels.where((r) => r.eventType == eventType).toList();
       }
+      reels.sort(FirebaseReelModel.compareForTrending);
+      reels = reels.take(limit).toList();
       return reels;
     } catch (e) {
       throw Exception('Error getting discover reels: $e');

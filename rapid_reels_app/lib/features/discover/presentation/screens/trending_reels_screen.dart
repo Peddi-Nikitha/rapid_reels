@@ -40,7 +40,6 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
     setState(() => _isLoading = true);
     try {
       final reels = await _firestoreService.getDiscoverReels(limit: 50);
-      reels.sort((a, b) => b.views.compareTo(a.views));
       final providerIds = reels.map((r) => r.providerId).toSet().toList();
       final providers = await Future.wait(
         providerIds.map((id) => _firestoreService.getProvider(id)),

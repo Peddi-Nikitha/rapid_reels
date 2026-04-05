@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/firebase/models/firebase_user_model.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 
 class AdminUserManagementScreen extends StatefulWidget {
   const AdminUserManagementScreen({super.key});
@@ -13,6 +16,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
   late TabController _tabController;
   final _searchController = TextEditingController();
   String _selectedFilter = 'All';
+  final _firestore = FirestoreService();
 
   @override
   void initState() {
@@ -29,9 +33,6 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final providers = mockData.getAllProviders();
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -100,7 +101,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
               controller: _tabController,
               children: [
                 _buildCustomersTab(),
-                _buildProvidersTab(providers),
+                _buildProvidersTab(),
               ],
             ),
           ),
@@ -110,35 +111,144 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
   }
 
   Widget _buildCustomersTab() {
-    final customers = [
-      {'id': '1', 'name': 'Amit Kumar', 'email': 'amit@example.com', 'phone': '+91 98765 43210', 'status': 'active', 'joined': 'Jan 2025'},
-      {'id': '2', 'name': 'Priya Sharma', 'email': 'priya@example.com', 'phone': '+91 98765 43211', 'status': 'active', 'joined': 'Dec 2024'},
-      {'id': '3', 'name': 'Rohit Singh', 'email': 'rohit@example.com', 'phone': '+91 98765 43212', 'status': 'inactive', 'joined': 'Nov 2024'},
-    ];
+    return StreamBuilder<List<FirebaseUserModel>>(
+      stream: _firestore.streamAllUsers(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Failed to load users',
+              style: TextStyle(color: Colors.red[400]),
+            ),
+          );
+        }
+        final all = snapshot.data ?? const [];
+        // Filter to customers only
+        var customers = all.where((u) => u.userType == 'customer').toList();
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: customers.length,
-      itemBuilder: (context, index) {
-        final customer = customers[index];
-        return _buildUserCard(customer, isProvider: false);
+        // Search filter
+        final query = _searchController.text.trim().toLowerCase();
+        if (query.isNotEmpty) {
+          customers = customers.where((u) {
+            final name = u.fullName.toLowerCase();
+            final email = (u.email ?? '').toLowerCase();
+            final phone = (u.phoneNumber ?? '').toLowerCase();
+            return name.contains(query) ||
+                email.contains(query) ||
+                phone.contains(query);
+          }).toList();
+        }
+
+        // Status filter
+        if (_selectedFilter == 'Active') {
+          customers = customers.where((u) => u.isActive).toList();
+        } else if (_selectedFilter == 'Inactive') {
+          customers = customers.where((u) => !u.isActive).toList();
+        } else if (_selectedFilter == 'Verified') {
+          customers = customers.where((u) => u.isVerified).toList();
+        }
+
+        if (customers.isEmpty) {
+          return const Center(
+            child: Text(
+              'No customers found',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: customers.length,
+          itemBuilder: (context, index) {
+            final u = customers[index];
+            final userMap = {
+              'id': u.userId,
+              'name': u.fullName,
+              'email': u.email ?? '—',
+              'phone': u.phoneNumber ?? '—',
+              'status': u.isActive ? 'active' : 'inactive',
+            };
+            return _buildUserCard(userMap, isProvider: false);
+          },
+        );
       },
     );
   }
 
-  Widget _buildProvidersTab(List providers) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: providers.length,
-      itemBuilder: (context, index) {
-        final provider = providers[index];
-        return _buildProviderCard(provider);
+  Widget _buildProvidersTab() {
+    return StreamBuilder<List<FirebaseProviderModel>>(
+      stream: _firestore.streamAllProviders(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Failed to load providers',
+              style: TextStyle(color: Colors.red[400]),
+            ),
+          );
+        }
+
+        var providers = snapshot.data ?? const [];
+
+        // Search
+        final query = _searchController.text.trim().toLowerCase();
+        if (query.isNotEmpty) {
+          providers = providers.where((p) {
+            final business = p.businessName.toLowerCase();
+            final owner = p.ownerName.toLowerCase();
+            final email = p.email.toLowerCase();
+            final phone = p.phoneNumber.toLowerCase();
+            return business.contains(query) ||
+                owner.contains(query) ||
+                email.contains(query) ||
+                phone.contains(query);
+          }).toList();
+        }
+
+        // Filter by status / verification
+        if (_selectedFilter == 'Active') {
+          providers = providers.where((p) => p.isActive).toList();
+        } else if (_selectedFilter == 'Inactive') {
+          providers = providers.where((p) => !p.isActive).toList();
+        } else if (_selectedFilter == 'Verified') {
+          providers = providers.where((p) => p.isVerified).toList();
+        }
+
+        if (providers.isEmpty) {
+          return const Center(
+            child: Text(
+              'No providers found',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: providers.length,
+          itemBuilder: (context, index) {
+            final provider = providers[index];
+            return _buildProviderCard(provider);
+          },
+        );
       },
     );
   }
 
   Widget _buildUserCard(Map<String, dynamic> user, {required bool isProvider}) {
     final isActive = user['status'] == 'active';
+    final name = (user['name'] ?? '').toString().trim();
+    final email = (user['email'] ?? '—').toString();
+    final phone = (user['phone'] ?? '—').toString();
+    final avatarLetter =
+        name.isNotEmpty ? name.characters.first.toUpperCase() : 'U';
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -153,7 +263,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
             radius: 24,
             backgroundColor: AppColors.primary.withValues(alpha: 0.1),
             child: Text(
-              user['name'][0].toUpperCase(),
+              avatarLetter,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -169,7 +279,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
                 Row(
                   children: [
                     Text(
-                      user['name'],
+                      name.isNotEmpty ? name : 'Unknown user',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -195,12 +305,12 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  user['email'],
+                  email,
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  user['phone'],
+                  phone,
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -226,7 +336,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
     );
   }
 
-  Widget _buildProviderCard(provider) {
+  Widget _buildProviderCard(FirebaseProviderModel provider) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -245,7 +355,22 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> w
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundImage: NetworkImage(provider.profileImage),
+                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                backgroundImage: provider.profileImage.isNotEmpty
+                    ? NetworkImage(provider.profileImage)
+                    : null,
+                child: provider.profileImage.isEmpty
+                    ? Text(
+                        provider.businessName.isNotEmpty
+                            ? provider.businessName[0].toUpperCase()
+                            : 'P',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : null,
               ),
               const SizedBox(width: 16),
               Expanded(

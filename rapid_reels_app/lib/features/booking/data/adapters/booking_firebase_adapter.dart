@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/booking/date_availability.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
 
 /// Adapter to convert bookingData map (from package customization/summary flow)
@@ -92,12 +93,19 @@ class BookingFirebaseAdapter {
     final eventDate = data['eventDate'] is DateTime
         ? data['eventDate'] as DateTime
         : DateTime.now();
+    final eventDateKey = dateKeyLocal(eventDate);
 
     final now = DateTime.now();
 
     final catalogueEventId = data['catalogueEventId']?.toString();
     final catalogueTitle = data['catalogueTitle']?.toString();
     final catalogueHeroUrl = data['catalogueHeroUrl']?.toString();
+
+    Map<String, dynamic>? bookingMetadata;
+    final rawMeta = data['metadata'];
+    if (rawMeta is Map<String, dynamic>) {
+      bookingMetadata = Map<String, dynamic>.from(rawMeta);
+    }
 
     return FirebaseBookingModel(
       bookingId: '',
@@ -106,6 +114,7 @@ class BookingFirebaseAdapter {
       eventType: data['eventType']?.toString() ?? '',
       eventName: data['eventName']?.toString() ?? '',
       eventDate: eventDate,
+      eventDateKey: eventDateKey,
       eventTime: eventTimeStr,
       duration: durationMinutes,
       guestCount: (data['guestCount'] ?? 0) as int,
@@ -136,7 +145,7 @@ class BookingFirebaseAdapter {
       cancelledAt: null,
       cancellationReason: null,
       completedAt: null,
-      metadata: null,
+      metadata: bookingMetadata,
       catalogueEventId: catalogueEventId != null && catalogueEventId.isEmpty ? null : catalogueEventId,
       catalogueTitle: catalogueTitle != null && catalogueTitle.isEmpty ? null : catalogueTitle,
       catalogueHeroUrl: catalogueHeroUrl != null && catalogueHeroUrl.isEmpty ? null : catalogueHeroUrl,

@@ -1,6 +1,7 @@
 import '../models/event_booking_model.dart';
 import '../models/service_provider_model.dart';
 import '../adapters/booking_firebase_mappers.dart';
+import '../../../../core/booking/date_availability.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart' as fb;
 
@@ -114,6 +115,7 @@ class BookingRepository {
   }) async {
     await _firestore.updateBooking(bookingId, {
       'eventDate': newDate,
+      'eventDateKey': dateKeyLocal(newDate),
       'eventTime': newTime,
     });
   }
@@ -162,6 +164,7 @@ class BookingRepository {
       eventType: e.eventType,
       eventName: e.eventName,
       eventDate: e.eventDate,
+      eventDateKey: dateKeyLocal(e.eventDate),
       eventTime: e.eventTime,
       duration: e.duration,
       guestCount: e.guestCount,

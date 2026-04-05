@@ -175,6 +175,19 @@ class FirebaseReelModel {
       likedBy: likedBy ?? this.likedBy,
     );
   }
+
+  /// Discover / trending: highest engagement (likes) first, then tie-breakers.
+  static int compareForTrending(FirebaseReelModel a, FirebaseReelModel b) {
+    final likeCmp = b.likes.compareTo(a.likes);
+    if (likeCmp != 0) return likeCmp;
+    final likedByCmp = b.likedBy.length.compareTo(a.likedBy.length);
+    if (likedByCmp != 0) return likedByCmp;
+    final viewCmp = b.views.compareTo(a.views);
+    if (viewCmp != 0) return viewCmp;
+    final ta = a.publishedAt ?? a.createdAt;
+    final tb = b.publishedAt ?? b.createdAt;
+    return tb.compareTo(ta);
+  }
 }
 
 /// Comment document under `reels/{reelId}/comments/{commentId}`.

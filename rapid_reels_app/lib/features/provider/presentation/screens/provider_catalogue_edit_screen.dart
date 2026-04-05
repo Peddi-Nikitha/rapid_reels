@@ -155,7 +155,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
 
   Future<void> _showQuickAddStarterPackage() async {
     final nameController = TextEditingController(text: 'Standard package');
-    final priceController = TextEditingController(text: '15000');
+    final priceController = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -209,6 +209,14 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
 
     if (ok != true || !mounted) return;
 
+    final parsedPrice = double.tryParse(priceText);
+    if (parsedPrice == null || parsedPrice <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid package price (greater than 0).')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final fresh = await _firestore.getProvider(widget.providerId);
@@ -216,7 +224,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
       final newPkg = PackageOffering(
         packageId: const Uuid().v4(),
         name: name.isEmpty ? 'Standard package' : name,
-        price: double.tryParse(priceText) ?? 15000,
+        price: parsedPrice,
         duration: 240,
         reelsCount: 2,
         editingStyle: 'Cinematic',
@@ -246,6 +254,84 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
           SnackBar(content: Text('Could not add package: $e')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _showEditPackagePriceDialog(PackageOffering pkg) async {
+    final priceController =
+        TextEditingController(text: pkg.price.toStringAsFixed(2));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit price: ${pkg.name}'),
+        content: TextField(
+          controller: priceController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Price (£)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    final newPrice = double.tryParse(priceController.text.trim());
+    priceController.dispose();
+
+    if (ok != true || !mounted) return;
+    if (newPrice == null || newPrice <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid package price (greater than 0).')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final fresh = await _firestore.getProvider(widget.providerId);
+      if (!mounted || fresh == null) return;
+      final updatedPackages = fresh.packages.map((p) {
+        if (p.packageId == pkg.packageId) {
+          return PackageOffering(
+            packageId: p.packageId,
+            name: p.name,
+            price: newPrice,
+            duration: p.duration,
+            reelsCount: p.reelsCount,
+            editingStyle: p.editingStyle,
+            deliveryTime: p.deliveryTime,
+            highlightVideo: p.highlightVideo,
+            liveReelStation: p.liveReelStation,
+            features: p.features,
+          );
+        }
+        return p;
+      }).toList();
+      await _firestore.updateProvider(
+        widget.providerId,
+        {'packages': updatedPackages.map((p) => p.toMap()).toList()},
+      );
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Package price updated.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update package price: $e')),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -374,6 +460,11 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
               'Pick at least one.',
               style: TextStyle(fontSize: 13, color: Colors.grey[700], height: 1.35),
             ),
+            const SizedBox(height: 6),
+            Text(
+              'Tip: tap Edit beside a package to change its price.',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
             const SizedBox(height: 16),
             if (valid.isEmpty) ...[
               Container(
@@ -472,23 +563,32 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
               const SizedBox(height: 4),
               ...valid.map((pkg) {
                 final id = pkg.packageId;
-                return CheckboxListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: _selectedPackageIds.contains(id),
-                  onChanged: _saving
-                      ? null
-                      : (checked) {
-                          setState(() {
-                            if (checked == true) {
-                              _selectedPackageIds.add(id);
-                            } else {
-                              _selectedPackageIds.remove(id);
-                            }
-                          });
-                        },
-                  title: Text('${pkg.name} — £${pkg.price.toStringAsFixed(2)}'),
+                return Row(
+                  children: [
+                    Checkbox(
+                      value: _selectedPackageIds.contains(id),
+                      onChanged: _saving
+                          ? null
+                          : (checked) {
+                              setState(() {
+                                if (checked == true) {
+                                  _selectedPackageIds.add(id);
+                                } else {
+                                  _selectedPackageIds.remove(id);
+                                }
+                              });
+                            },
+                    ),
+                    Expanded(
+                      child: Text('${pkg.name} — £${pkg.price.toStringAsFixed(2)}'),
+                    ),
+                    TextButton(
+                      onPressed: _saving
+                          ? null
+                          : () => _showEditPackagePriceDialog(pkg),
+                      child: const Text('Edit'),
+                    ),
+                  ],
                 );
               }),
             ],

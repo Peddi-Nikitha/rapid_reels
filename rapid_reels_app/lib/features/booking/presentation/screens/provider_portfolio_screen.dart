@@ -8,6 +8,7 @@ import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../features/booking/data/models/service_provider_model.dart';
 import '../../../../shared/widgets/custom_button.dart';
+import '../../../../shared/widgets/customer_provider_availability_calendar.dart';
 import '../../../../shared/widgets/rating_stars.dart';
 import '../../../../shared/widgets/reel_card.dart';
 
@@ -47,7 +48,7 @@ class ProviderPortfolioScreen extends StatelessWidget {
   }
 }
 
-class _PortfolioContent extends StatelessWidget {
+class _PortfolioContent extends StatefulWidget {
   final ServiceProvider provider;
   final Map<String, dynamic> bookingData;
   final bool reelsFromProvider;
@@ -63,7 +64,21 @@ class _PortfolioContent extends StatelessWidget {
   });
 
   @override
+  State<_PortfolioContent> createState() => _PortfolioContentState();
+}
+
+class _PortfolioContentState extends State<_PortfolioContent> {
+  late Map<String, dynamic> _bookingData;
+
+  @override
+  void initState() {
+    super.initState();
+    _bookingData = Map<String, dynamic>.from(widget.bookingData);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final provider = widget.provider;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -292,7 +307,34 @@ class _PortfolioContent extends StatelessWidget {
                       const SizedBox(height: 24),
                       
                       // Portfolio - dynamic from provider.portfolio or mock
-                      if (portfolioCount > 0) ...[
+                      const Text(
+                        'Event date',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Only available days can be selected. Grey days are blocked or already booked.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      CustomerProviderAvailabilityPanel(
+                        providerId: provider.providerId,
+                        selectedDate: (_bookingData['eventDate'] is DateTime)
+                            ? _bookingData['eventDate'] as DateTime
+                            : DateTime.now(),
+                        onDateSelected: (d) {
+                          setState(() => _bookingData['eventDate'] = d);
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      if (widget.portfolioCount > 0) ...[
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -313,7 +355,7 @@ class _PortfolioContent extends StatelessWidget {
                         const SizedBox(height: 12),
                         SizedBox(
                           height: 200,
-                          child: reelsFromProvider
+                          child: widget.reelsFromProvider
                               ? ListView.builder(
                                   scrollDirection: Axis.horizontal,
                                   itemCount: provider.portfolio.length,
@@ -335,9 +377,9 @@ class _PortfolioContent extends StatelessWidget {
                                 )
                               : ListView.builder(
                                   scrollDirection: Axis.horizontal,
-                                  itemCount: firebaseReels?.length ?? 0,
+                                  itemCount: widget.firebaseReels?.length ?? 0,
                                   itemBuilder: (context, index) {
-                                    final reel = firebaseReels![index];
+                                    final reel = widget.firebaseReels![index];
                                     return Container(
                                       width: 150,
                                       margin: const EdgeInsets.only(right: 12),
@@ -379,7 +421,7 @@ class _PortfolioContent extends StatelessWidget {
                 AppRoutes.catalogueSelection,
                 extra: {
                   'provider': provider,
-                  'bookingData': bookingData,
+                  'bookingData': _bookingData,
                 },
               );
             },

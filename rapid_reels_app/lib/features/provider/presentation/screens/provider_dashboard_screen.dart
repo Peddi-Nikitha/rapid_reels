@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
@@ -98,16 +99,40 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
               appBar: AppBar(
                 backgroundColor: AppColors.surface,
                 elevation: 0,
-                title: Text(
-                  provider.businessName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                scrolledUnderElevation: 0,
+                automaticallyImplyLeading: false,
+                toolbarHeight: 64,
+                titleSpacing: 16,
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Rapid Reels',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.6,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      provider.businessName,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'Notifications',
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -137,7 +162,7 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                   controller: _tabController,
                   children: [
                     _buildOverviewTab(provider, stats, todayBookings),
-                    _buildReelsTab(),
+                    _buildReelsTab(provider),
                     _buildMyProfileTab(),
                   ],
                 ),
@@ -149,10 +174,48 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
     );
   }
 
-  Widget _buildOverviewTab(provider, stats, todayBookings) {
+  Widget _buildOverviewTab(
+    FirebaseProviderModel provider,
+    Map<String, dynamic> stats,
+    List<FirebaseBookingModel> todayBookings,
+  ) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+            if (provider.verificationStatus != 'approved')
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Material(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.verified_user_outlined,
+                          color: AppColors.warning,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            provider.verificationStatus == 'pending'
+                                ? AppStrings.providerPendingApprovalProvider
+                                : 'This profile is not approved for public listings. Contact support if you need help.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.35,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             // Quick Stats
             Row(
               children: [
@@ -193,9 +256,37 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                     subtitle: 'Bookings',
                     icon: Icons.event,
                     color: Colors.green,
+                    onTap: () => context.push(
+                      '${AppRoutes.providerBookings}/${widget.providerId}',
+                    ),
                   ),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 16),
+            _buildActionCard(
+              context: context,
+              icon: Icons.calendar_month,
+              title: 'Booking calendar',
+              subtitle: 'View bookings by day on the calendar',
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0f9b0f), Color(0xFF45b649)],
+              ),
+              onTap: () => context.push(
+                '${AppRoutes.providerBookingCalendar}/${widget.providerId}',
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildActionCard(
+              context: context,
+              icon: Icons.event_busy,
+              title: 'Availability & blocked dates',
+              subtitle: 'Close weekdays or block days you are unavailable',
+              gradient: const LinearGradient(
+                colors: [Color(0xFFcb2d3e), Color(0xFFef473a)],
+              ),
+              onTap: () => context.push(AppRoutes.providerAvailabilityCalendar),
             ),
             
             const SizedBox(height: 24),
@@ -274,7 +365,36 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
     );
   }
 
-  Widget _buildReelsTab() {
+  Widget _buildReelsTab(FirebaseProviderModel provider) {
+    if (provider.verificationStatus != 'approved') {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.hourglass_top_rounded, size: 64, color: Colors.grey[500]),
+              const SizedBox(height: 16),
+              Text(
+                'Reels unlock after admin approval',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                AppStrings.providerPendingApprovalProvider,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, height: 1.4, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -296,6 +416,30 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _buildActionCard(
+          context: context,
+          icon: Icons.calendar_month,
+          title: 'Booking calendar',
+          subtitle: 'Month view of all bookings',
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0f9b0f), Color(0xFF45b649)],
+          ),
+          onTap: () => context.push(
+            '${AppRoutes.providerBookingCalendar}/${widget.providerId}',
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildActionCard(
+          context: context,
+          icon: Icons.event_busy,
+          title: 'Availability & blocked dates',
+          subtitle: 'Manage when customers can book you',
+          gradient: const LinearGradient(
+            colors: [Color(0xFFcb2d3e), Color(0xFFef473a)],
+          ),
+          onTap: () => context.push(AppRoutes.providerAvailabilityCalendar),
+        ),
+        const SizedBox(height: 12),
         _buildActionCard(
           context: context,
           icon: Icons.storefront_outlined,

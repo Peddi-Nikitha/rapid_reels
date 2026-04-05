@@ -374,8 +374,22 @@ class BlockedDate {
   });
 
   factory BlockedDate.fromMap(Map<String, dynamic> map) {
+    DateTime parsedDate;
+    final rawDate = map['date'];
+    if (rawDate is Timestamp) {
+      parsedDate = rawDate.toDate();
+    } else if (rawDate is DateTime) {
+      parsedDate = rawDate;
+    } else if (rawDate is String) {
+      parsedDate = DateTime.tryParse(rawDate) ?? DateTime.now();
+    } else if (rawDate is int) {
+      parsedDate = DateTime.fromMillisecondsSinceEpoch(rawDate);
+    } else {
+      parsedDate = DateTime.now();
+    }
     return BlockedDate(
-      date: (map['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      // Normalize to local calendar representation for day-based matching.
+      date: parsedDate.toLocal(),
       reason: map['reason'] ?? '',
       bookingId: map['bookingId'],
     );

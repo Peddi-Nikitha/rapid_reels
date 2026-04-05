@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/app_assets.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_routes.dart';
+import '../../../../core/theme/text_styles.dart';
 import '../../../../core/utils/helpers.dart';
 import '../providers/auth_provider.dart';
 
@@ -271,7 +273,9 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
+              Center(child: _buildBrandLogo()),
+              const SizedBox(height: 24),
 
               // Title
               const Text(
@@ -422,6 +426,31 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Rapid Reels brand mark: prefers [AppAssets.logo]; falls back to styled wordmark if asset missing.
+  Widget _buildBrandLogo() {
+    return Image.asset(
+      AppAssets.logo,
+      height: 72,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (context, error, stackTrace) {
+        return ShaderMask(
+          shaderCallback: (bounds) =>
+              AppColors.primaryGradient.createShader(bounds),
+          child: Text(
+            AppStrings.appName,
+            textAlign: TextAlign.center,
+            style: AppTypography.headlineLarge.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        );
+      },
     );
   }
 }

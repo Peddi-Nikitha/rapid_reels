@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_routes.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
@@ -274,19 +276,33 @@ class EventDetailsScreen extends ConsumerWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.star_rounded, size: 16, color: AppColors.warning),
+              const SizedBox(width: 4),
+              Text(
+                provider.rating.toStringAsFixed(1),
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           Text(
-            provider.phoneNumber,
-            style: const TextStyle(color: AppColors.textSecondary),
+            AppStrings.providerContactViaApp,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.35,
+            ),
           ),
           const SizedBox(height: 12),
           CustomButton(
-            text: 'Call',
-            onPressed: () async {
-              final uri = Uri.parse('tel:${provider.phoneNumber}');
-              await launchUrl(uri);
+            text: 'View provider',
+            onPressed: () {
+              context.push('${AppRoutes.providerDetails}/${provider.providerId}');
             },
-            icon: Icons.call,
+            icon: Icons.person_search,
           ),
         ],
       ),

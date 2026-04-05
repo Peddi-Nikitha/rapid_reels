@@ -69,22 +69,24 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
         return;
       }
 
-      // 2) Ensure admin has approved this provider
-      if (provider.verificationStatus != 'approved' || !provider.isActive) {
+      // 2) Rejected accounts cannot sign in. Pending may sign in (limited dashboard until approved).
+      if (provider.verificationStatus == 'rejected') {
         setState(() => _isLoading = false);
         if (mounted) {
-          final status = provider.verificationStatus;
-          String message;
-          if (status == 'pending') {
-            message = 'Your provider account is pending admin approval.';
-          } else if (status == 'rejected') {
-            message = 'Your provider account was rejected. Please contact support.';
-          } else {
-            message = 'Your provider account is not active. Please contact support.';
-          }
           Helpers.showSnackBar(
             context,
-            message,
+            'Your provider account was rejected. Please contact support.',
+            isError: true,
+          );
+        }
+        return;
+      }
+      if (!provider.isActive && provider.verificationStatus != 'pending') {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          Helpers.showSnackBar(
+            context,
+            'Your provider account is not active. Please contact support.',
             isError: true,
           );
         }

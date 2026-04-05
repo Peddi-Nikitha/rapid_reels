@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../booking/date_availability.dart';
+
 /// Firebase Booking/Event Model
 /// Collection: bookings
 /// Document ID: bookingId
@@ -10,6 +12,8 @@ class FirebaseBookingModel {
   final String eventType; // wedding, birthday, engagement, corporate, brand
   final String eventName;
   final DateTime eventDate;
+  /// Local-calendar `yyyy-MM-dd` for duplicate-day checks (aligned with [eventDate]).
+  final String eventDateKey;
   final String eventTime;
   final int duration; // in minutes
   final int guestCount;
@@ -44,6 +48,7 @@ class FirebaseBookingModel {
     required this.eventType,
     required this.eventName,
     required this.eventDate,
+    required this.eventDateKey,
     required this.eventTime,
     required this.duration,
     required this.guestCount,
@@ -80,6 +85,11 @@ class FirebaseBookingModel {
       eventType: data['eventType'] ?? '',
       eventName: data['eventName'] ?? '',
       eventDate: (data['eventDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      eventDateKey: (data['eventDateKey'] as String?)?.trim().isNotEmpty == true
+          ? data['eventDateKey'] as String
+          : dateKeyLocal(
+              (data['eventDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+            ),
       eventTime: data['eventTime'] ?? '',
       duration: data['duration'] ?? 0,
       guestCount: data['guestCount'] ?? 0,
@@ -119,6 +129,7 @@ class FirebaseBookingModel {
       'eventType': eventType,
       'eventName': eventName,
       'eventDate': Timestamp.fromDate(eventDate),
+      'eventDateKey': eventDateKey,
       'eventTime': eventTime,
       'duration': duration,
       'guestCount': guestCount,
@@ -154,6 +165,7 @@ class FirebaseBookingModel {
     String? eventType,
     String? eventName,
     DateTime? eventDate,
+    String? eventDateKey,
     String? eventTime,
     int? duration,
     int? guestCount,
@@ -187,6 +199,7 @@ class FirebaseBookingModel {
       eventType: eventType ?? this.eventType,
       eventName: eventName ?? this.eventName,
       eventDate: eventDate ?? this.eventDate,
+      eventDateKey: eventDateKey ?? this.eventDateKey,
       eventTime: eventTime ?? this.eventTime,
       duration: duration ?? this.duration,
       guestCount: guestCount ?? this.guestCount,

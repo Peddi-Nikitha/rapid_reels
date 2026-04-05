@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_catalogue_event_model.dart';
 import '../../../../shared/widgets/catalogue_event_card.dart';
+import '../../../../shared/widgets/customer_provider_availability_calendar.dart';
 
 /// Provider Details & Portfolio Screen - loads provider dynamically from Firestore
 class ProviderDetailsScreen extends ConsumerStatefulWidget {
   final String providerId;
+  /// When set (e.g. mid booking flow), customer can adjust event date against availability.
+  final Map<String, dynamic>? bookingData;
 
   const ProviderDetailsScreen({
     super.key,
     required this.providerId,
+    this.bookingData,
   });
 
   @override
@@ -24,11 +30,15 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _firestoreService = FirestoreService();
+  Map<String, dynamic>? _flowBookingData;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    if (widget.bookingData != null) {
+      _flowBookingData = Map<String, dynamic>.from(widget.bookingData!);
+    }
   }
 
   @override
@@ -197,6 +207,40 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (provider.verificationStatus != 'approved')
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                    child: Material(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              color: AppColors.warning,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                AppStrings.providerPendingApprovalCustomer,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  height: 1.35,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                if (provider.verificationStatus != 'approved')
+                  const SizedBox(height: 16),
                 // Provider Info
                 Padding(
                   padding: const EdgeInsets.all(20),
@@ -265,20 +309,54 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                       ),
                       const SizedBox(height: 20),
 
+                      if (_flowBookingData != null &&
+                          _flowBookingData!['eventDate'] is DateTime) ...[
+                        const Text(
+                          'Your event date',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Pick an available day for this provider.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        CustomerProviderAvailabilityPanel(
+                          providerId: widget.providerId,
+                          selectedDate:
+                              _flowBookingData!['eventDate'] as DateTime,
+                          onDateSelected: (d) {
+                            setState(() => _flowBookingData!['eventDate'] = d);
+                          },
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
                       // Action Buttons
                       Row(
                         children: [
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
-                              onPressed: () {
-                                _showBookingDialog();
-                              },
+                              onPressed: provider.verificationStatus == 'approved'
+                                  ? () {
+                                      _showBookingDialog();
+                                    }
+                                  : null,
                               icon: const Icon(Icons.calendar_today, size: 18),
                               label: const Text('Book Now'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
+                                disabledBackgroundColor:
+                                    AppColors.textTertiary.withValues(alpha: 0.35),
+                                disabledForegroundColor: AppColors.textSecondary,
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -289,11 +367,11 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                           const SizedBox(width: 12),
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: () {
-                                _showContactDialog(provider);
-                              },
-                              icon: const Icon(Icons.phone, size: 18),
-                              label: const Text('Contact'),
+                              onPressed: provider.email.isNotEmpty
+                                  ? () => _openProviderEmail(provider.email)
+                                  : null,
+                              icon: const Icon(Icons.mail_outline, size: 18),
+                              label: const Text('Email'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.primary,
                                 side: BorderSide(color: AppColors.primary),
@@ -1069,88 +1147,28 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
     );
   }
 
-  void _showContactDialog(FirebaseProviderModel provider) {
-    final phone = provider.phoneNumber.isNotEmpty ? provider.phoneNumber : '—';
-    final email = provider.email.isNotEmpty ? provider.email : '—';
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Contact ${provider.businessName}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.phone, color: Colors.green),
-                ),
-                title: const Text('Call Provider'),
-                subtitle: Text(phone),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Opening dialer: $phone')),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.message, color: Colors.blue),
-                ),
-                title: const Text('Send Message'),
-                subtitle: Text(phone),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Opening chat...')),
-                  );
-                },
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.email, color: Colors.orange),
-                ),
-                title: const Text('Send Email'),
-                subtitle: Text(email),
-                onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Opening email: $email')),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
+  Future<void> _openProviderEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No email on file for this provider.')),
+      );
+      return;
+    }
+    final uri = Uri(
+      scheme: 'mailto',
+      path: trimmed,
+      queryParameters: {'subject': 'Rapid Reels — inquiry'},
     );
+    if (!await canLaunchUrl(uri)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open email app.')),
+      );
+      return;
+    }
+    await launchUrl(uri);
   }
 }
 

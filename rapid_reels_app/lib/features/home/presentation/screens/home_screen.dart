@@ -7,10 +7,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import '../../../../core/constants/app_cities.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_offer_model.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/theme/text_styles.dart';
@@ -28,11 +30,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  /// After showing onboarding or the offer popup, suppress again for this long.
+  /// After showing the offer popup, suppress again for this long.
   static const Duration _homePromoCooldown = Duration(days: 7);
-  static const String _kOnboardingLastShownMs = 'home_onboarding_last_shown_ms';
   static const String _kOfferLastShownMs = 'home_offer_last_shown_ms';
-  static const String _kLegacyOnboardingSeen = 'home_onboarding_seen';
   static const String _kLegacyOfferSeen = 'home_offer_seen';
 
   bool _isWithinHomePromoCooldown(int? lastShownMs) {
@@ -41,18 +41,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           DateTime.fromMillisecondsSinceEpoch(lastShownMs),
         ) <
         _homePromoCooldown;
-  }
-
-  Future<int?> _onboardingLastShownMs(SharedPreferences prefs) async {
-    final existing = prefs.getInt(_kOnboardingLastShownMs);
-    if (existing != null) return existing;
-    final legacy = prefs.getBool(_kLegacyOnboardingSeen) ?? false;
-    if (legacy) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      await prefs.setInt(_kOnboardingLastShownMs, now);
-      return now;
-    }
-    return null;
   }
 
   Future<int?> _offerLastShownMs(SharedPreferences prefs) async {
@@ -70,10 +58,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentBannerIndex = 0;
   int _currentReviewIndex = 0;
   String _selectedCity = 'Detecting...';
-  int _onboardingStep = 0;
-  bool _showOnboarding = false;
   bool _showOfferPopup = false;
-  
+  /// First active offer for the home promo modal (image + copy from Firestore).
+  FirebaseOfferModel? _promoPopupOffer;
+
   // Location and nearby providers state
   final _firestoreService = FirestoreService();
 
@@ -90,43 +78,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<FirebaseReelModel> _trendingReels = [];
   final Map<String, bool> _likedReels = {};
 
-  final List<String> _cities = [
-    // Indian Cities
-    'Siddipet',
-    'Hyderabad',
-    'Warangal',
-    'Karimnagar',
-    'Visakhapatnam',
-    'Mumbai',
-    'Chennai',
-    'Bangalore',
-    'Vijayawada',
-    'Delhi',
-    'Kolkata',
-    'Pune',
-    // UK Cities
-    'London',
-    'Manchester',
-    'Birmingham',
-    'Liverpool',
-    'Leeds',
-    'Glasgow',
-    'Edinburgh',
-    'Bristol',
-    'Cardiff',
-    'Belfast',
-  ];
+  /// Minimum rating for nearby + featured provider strips; `null` = no floor.
+  double? _providerRatingMin = 3.5;
+
+  List<String> get _cities => AppCities.customerFilterCities;
 
   @override
   void initState() {
     super.initState();
-    _checkOnboardingStatus();
     _checkOfferPopup();
     // Get location first, then load saved city as fallback
     _getCurrentLocation();
     _loadFeaturedProviders();
     _loadTrendingReels();
     _loadHomeBanners();
+    _loadPromoPopupOffer();
+  }
+
+  Future<void> _loadPromoPopupOffer() async {
+    try {
+      final offers = await _firestoreService.getActiveOffers();
+      if (!mounted) return;
+      setState(() {
+        _promoPopupOffer = offers.isNotEmpty ? offers.first : null;
+      });
+    } catch (e) {
+      debugPrint('Error loading promo popup offer: $e');
+    }
+  }
+
+  String _promoDiscountLine(FirebaseOfferModel o) {
+    final d = o.discount;
+    final t = o.type.toLowerCase();
+    if (t.contains('percentage') || (d.percentage != null && d.percentage! > 0)) {
+      return '${d.percentage!.toStringAsFixed(0)}% off your booking';
+    }
+    if (d.amount != null && d.amount! > 0) {
+      return '£${d.amount!.toStringAsFixed(0)} off your booking';
+    }
+    return 'Limited-time offer';
   }
 
   Future<void> _loadTrendingReels() async {
@@ -188,22 +178,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _bannerItems = [];
         _currentBannerIndex = 0;
       });
-    }
-  }
-
-  Future<void> _checkOnboardingStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final lastShown = await _onboardingLastShownMs(prefs);
-      if (_isWithinHomePromoCooldown(lastShown)) return;
-      await Future.delayed(const Duration(seconds: 1));
-      if (mounted) {
-        setState(() {
-          _showOnboarding = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error checking onboarding: $e');
     }
   }
 
@@ -354,6 +328,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _selectedCity = savedCity;
           });
           _loadFeaturedProviders();
+          _loadNearbyVenues();
         }
       } else {
         // Use default city
@@ -362,6 +337,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _selectedCity = 'Siddipet';
           });
           _loadFeaturedProviders();
+          _loadNearbyVenues();
         }
       }
     } catch (e) {
@@ -384,7 +360,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     setState(() => _isLoadingProviders = true);
     try {
       final city = _selectedCity;
-      final list = await _firestoreService.getFeaturedProviders(city: city);
+      final effectiveCity = (city == 'Detecting...' || city.startsWith('Detecting'))
+          ? null
+          : city;
+      var list = await _firestoreService.getFeaturedProviders(city: effectiveCity);
+      if (_providerRatingMin != null) {
+        list = list.where((p) => p.rating >= _providerRatingMin!).toList();
+      }
       if (!mounted) return;
       setState(() {
         _featuredProviders = list;
@@ -499,7 +481,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final providers = await _firestoreService.getProviders(
         city: effectiveCity,
         eventTypes: const ['photography', 'photo', 'studio'],
-        minRating: 3.5,
+        minRating: _providerRatingMin,
         isActive: true,
         verificationStatus: 'approved',
       );
@@ -667,96 +649,94 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
 
-            // Quick Actions - Equal-sized Horizontal Row
+            // Promotional banner — one grouped section (carousel + dots + Book Now)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionButton(
-                        icon: Icons.add_circle_rounded,
-                        label: AppStrings.bookNow,
-                        onTap: () => _showBookingDialog(),
-                        isPrimary: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GlassSurfaceCard(
+                  padding: const EdgeInsets.fromLTRB(12, 16, 12, 18),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 20,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              AppStrings.homeBannerSectionTitle,
+                              style: AppTypography.titleSmall.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildActionButton(
-                        icon: Icons.receipt_long_rounded,
-                        label: 'My Bookings',
-                        onTap: () => context.push(AppRoutes.myEvents),
-                        isPrimary: false,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-
-            // Promotional Carousel - Refined
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: CarouselSlider(
-                      items: (_bannerItems.isNotEmpty
-                          ? _bannerItems
-                              .map(
-                                (b) => _buildPromoBanner(
-                                  b['text'] ?? '',
-                                  b['imageUrl'] ?? '',
+                      const SizedBox(height: 14),
+                      CarouselSlider(
+                        items: (_bannerItems.isNotEmpty
+                            ? _bannerItems
+                                .map(
+                                  (b) => _buildPromoBanner(
+                                    b['text'] ?? '',
+                                    b['imageUrl'] ?? '',
+                                  ),
+                                )
+                                .toList()
+                            : [
+                                _buildPromoBanner(
+                                  'Your reel\'s ready\nbefore the vibe fades.',
+                                  'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80',
                                 ),
-                              )
-                              .toList()
-                          : [
-                              _buildPromoBanner(
-                                'Your reel\'s ready\nbefore the vibe fades.',
-                                'https://images.unsplash.com/photo-1511578314322-379afb476865?w=800&q=80',
-                              ),
-                              _buildPromoBanner(
-                                'Capture memories\nthat last forever.',
-                                'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
-                              ),
-                            ]),
-                      options: CarouselOptions(
-                        height: 160,
-                        viewportFraction: 0.92,
-                        autoPlay: true,
-                        autoPlayInterval: const Duration(seconds: 4),
-                        autoPlayAnimationDuration: const Duration(milliseconds: 600),
-                        enlargeCenterPage: false,
-                        onPageChanged: (index, reason) {
-                          setState(() => _currentBannerIndex = index);
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Refined Dots Indicator
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      _bannerItems.isNotEmpty ? _bannerItems.length : 2,
-                      (index) => AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: _currentBannerIndex == index ? 24 : 8,
-                        height: 8,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          color: _currentBannerIndex == index
-                              ? AppColors.primary
-                              : AppColors.textTertiary.withValues(alpha: 0.3),
+                                _buildPromoBanner(
+                                  'Capture memories\nthat last forever.',
+                                  'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?w=800&q=80',
+                                ),
+                              ]),
+                        options: CarouselOptions(
+                          height: 160,
+                          viewportFraction: 0.92,
+                          autoPlay: true,
+                          autoPlayInterval: const Duration(seconds: 4),
+                          autoPlayAnimationDuration:
+                              const Duration(milliseconds: 600),
+                          enlargeCenterPage: false,
+                          onPageChanged: (index, reason) {
+                            setState(() => _currentBannerIndex = index);
+                          },
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          _bannerItems.isNotEmpty ? _bannerItems.length : 2,
+                          (index) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: _currentBannerIndex == index ? 24 : 8,
+                            height: 8,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(4),
+                              color: _currentBannerIndex == index
+                                  ? AppColors.primary
+                                  : AppColors.textTertiary
+                                      .withValues(alpha: 0.3),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildHomeBookNowButton(),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
 
@@ -782,9 +762,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                         TextButton(
-                          onPressed: () => context.push('${AppRoutes.discover}/trending'),
+                          onPressed: () =>
+                              context.push('${AppRoutes.discover}/trending'),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                           ),
                           child: Text(
                             AppStrings.viewAll,
@@ -815,6 +797,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+            SliverToBoxAdapter(child: _buildProviderRatingFilterStrip()),
 
             // Nearby Vendors Section - Location Based
             SliverToBoxAdapter(
@@ -1053,73 +1037,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
             ),
           ),
-          // Onboarding Tutorial Overlay
-          if (_showOnboarding) _buildOnboardingOverlay(),
-          // Offer Popup
-          if (_showOfferPopup) _buildOfferPopup(),
+          if (_showOfferPopup)
+            Positioned.fill(
+              child: _buildOfferPopup(),
+            ),
         ],
       ),
     );
   }
 
-  // Unified Action Button Builder - Equal-sized horizontal buttons
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required bool isPrimary,
-  }) {
+  /// Primary booking CTA below the promo banner (replaces the old Quick Actions row).
+  Widget _buildHomeBookNowButton() {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showBookingDialog(),
+        borderRadius: BorderRadius.circular(18),
         child: GlassSurfaceCard(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          borderRadius: BorderRadius.circular(16),
-          gradient: isPrimary
-              ? AppColors.primaryGradient
-              : AppColors.homeGlassGradient,
-          borderColor: isPrimary
-              ? AppColors.homeGlowCyan.withValues(alpha: 0.45)
-              : AppColors.homeGlassBorder,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          borderRadius: BorderRadius.circular(18),
+          gradient: AppColors.primaryGradient,
+          borderColor: AppColors.homeGlowCyan.withValues(alpha: 0.45),
           boxShadow: [
             BoxShadow(
-              color: isPrimary
-                  ? AppColors.homeGlowCyan.withValues(alpha: 0.28)
-                  : AppColors.homeGlassShadow,
-              blurRadius: isPrimary ? 18 : 12,
-              offset: const Offset(0, 6),
+              color: AppColors.homeGlowCyan.withValues(alpha: 0.28),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
           ],
-          child: SizedBox(
-            height: 64,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  color: isPrimary ? AppColors.onPrimary : AppColors.primary,
-                  size: 24,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_circle_rounded, color: AppColors.onPrimary, size: 26),
+              const SizedBox(width: 12),
+              Text(
+                AppStrings.bookNow,
+                style: AppTypography.titleMedium.copyWith(
+                  color: AppColors.onPrimary,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  style: isPrimary
-                      ? AppTypography.labelMedium.copyWith(
-                          color: AppColors.onPrimary,
-                          fontWeight: FontWeight.w700,
-                        )
-                      : AppTypography.labelSmall.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1781,6 +1740,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _currentReviewIndex = 0; // Reset review index when city changes
                     });
                     _loadFeaturedProviders();
+                    _loadNearbyVenues();
                     Navigator.pop(context);
                   },
                 );
@@ -1790,6 +1750,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       },
     );
+  }
+
+  Widget _buildProviderRatingFilterStrip() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Provider rating',
+            style: AppTypography.labelMedium.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _ratingChoiceChip('Any', null),
+                const SizedBox(width: 8),
+                _ratingChoiceChip('3.5+', 3.5),
+                const SizedBox(width: 8),
+                _ratingChoiceChip('4+', 4.0),
+                const SizedBox(width: 8),
+                _ratingChoiceChip('4.5+', 4.5),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ratingChoiceChip(String label, double? value) {
+    final selected = _providerRatingMin == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (bool next) {
+        if (!next) return;
+        _onProviderRatingFilterChanged(value);
+      },
+      selectedColor: AppColors.primary.withValues(alpha: 0.35),
+      labelStyle: TextStyle(
+        color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+      ),
+    );
+  }
+
+  void _onProviderRatingFilterChanged(double? min) {
+    setState(() => _providerRatingMin = min);
+    _loadNearbyVenues();
+    _loadFeaturedProviders();
   }
 
   void _showBookingDialog() {
@@ -2337,156 +2352,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // Build Onboarding Tutorial Overlay
-  Widget _buildOnboardingOverlay() {
-    final steps = [
-      {
-        'title': 'Quick Actions',
-        'description': 'Use these buttons to book events and check your bookings',
-        'position': 'top',
-      },
-      {
-        'title': 'Trending Reels',
-        'description': 'Browse popular reels from recent events in your city',
-        'position': 'middle',
-      },
-      {
-        'title': 'Customer Reviews',
-        'description': 'See what our customers say about our services',
-        'position': 'bottom',
-      },
-    ];
-
-    if (_onboardingStep >= steps.length) {
-      _completeOnboarding();
-      return const SizedBox.shrink();
-    }
-
-    final step = steps[_onboardingStep];
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _onboardingStep++;
-        });
-      },
-      child: Container(
-        color: Colors.black.withValues(alpha: 0.7),
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.3),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  spreadRadius: 5,
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  step['title'] as String,
-                  style: AppTypography.headlineSmall.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  step['description'] as String,
-                  style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (_onboardingStep > 0)
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _onboardingStep--;
-                          });
-                        },
-                        child: const Text('Previous'),
-                      )
-                    else
-                      const SizedBox(),
-                    Row(
-                      children: List.generate(
-                        steps.length,
-                        (index) => Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _onboardingStep == index
-                                ? AppColors.primary
-                                : AppColors.textTertiary.withValues(alpha: 0.3),
-                          ),
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        if (_onboardingStep < steps.length - 1) {
-                          setState(() {
-                            _onboardingStep++;
-                          });
-                        } else {
-                          _completeOnboarding();
-                        }
-                      },
-                      child: Text(
-                        _onboardingStep < steps.length - 1 ? 'Next' : 'Got it',
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _completeOnboarding() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(
-        _kOnboardingLastShownMs,
-        DateTime.now().millisecondsSinceEpoch,
-      );
-      if (mounted) {
-        setState(() {
-          _showOnboarding = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error saving onboarding: $e');
-    }
-  }
-
   // Build Offer Popup
   Widget _buildOfferPopup() {
+    final offer = _promoPopupOffer;
+    final imageUrl = (offer?.imageUrl ?? '').trim();
+    final title = offer?.title.trim().isNotEmpty == true
+        ? offer!.title
+        : 'Special offer';
+    final subtitle = offer != null
+        ? _promoDiscountLine(offer)
+        : 'Get 20% off on your first booking';
+    final desc = (offer?.description ?? '').trim();
+    final code = (offer?.code ?? 'FLASH20').trim();
+
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -2495,117 +2373,223 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _saveOfferSeen();
       },
       child: Container(
-        color: Colors.black.withValues(alpha: 0.7),
+        color: Colors.black.withValues(alpha: 0.72),
         child: Center(
           child: GestureDetector(
-            onTap: () {}, // Prevent closing when tapping inside
+            onTap: () {},
             child: Container(
+              constraints: BoxConstraints(
+                maxWidth: 400,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+              ),
               margin: const EdgeInsets.symmetric(horizontal: 20),
-              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.45),
+                  width: 1.5,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.5),
-                    blurRadius: 30,
-                    spreadRadius: 10,
+                    color: AppColors.primary.withValues(alpha: 0.35),
+                    blurRadius: 28,
+                    spreadRadius: 2,
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Close button
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white),
-                      onPressed: () {
-                        setState(() {
-                          _showOfferPopup = false;
-                        });
-                        _saveOfferSeen();
-                      },
-                    ),
-                  ),
-                  const Icon(
-                    Icons.local_offer_rounded,
-                    size: 64,
-                    color: Colors.white,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Special Offer!',
-                    style: AppTypography.headlineMedium.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Get 20% OFF on your first booking',
-                    style: AppTypography.titleLarge.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Use code: FLASH20',
-                    style: AppTypography.bodyLarge.copyWith(
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _showOfferPopup = false;
-                        });
-                        _saveOfferSeen();
-                        _showBookingDialog();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      children: [
+                        SizedBox(
+                          height: 168,
+                          width: double.infinity,
+                          child: imageUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: imageUrl,
+                                  fit: BoxFit.cover,
+                                  memCacheWidth: 800,
+                                  filterQuality: FilterQuality.high,
+                                  placeholder: (context, url) => Container(
+                                    decoration: BoxDecoration(
+                                      gradient: AppColors.primaryGradient,
+                                    ),
+                                    child: const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  errorWidget: (context, url, error) =>
+                                      _buildOfferPopupImageFallback(),
+                                )
+                              : _buildOfferPopupImageFallback(),
                         ),
-                      ),
-                      child: Text(
-                        'Book Now',
-                        style: AppTypography.buttonLarge.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w700,
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: Material(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              icon: const Icon(Icons.close_rounded,
+                                  color: Colors.white, size: 22),
+                              onPressed: () {
+                                setState(() => _showOfferPopup = false);
+                                _saveOfferSeen();
+                              },
+                            ),
+                          ),
                         ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            title,
+                            style: AppTypography.headlineSmall.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            subtitle,
+                            style: AppTypography.titleMedium.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (desc.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              desc,
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: AppColors.textSecondary,
+                                height: 1.35,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: AppColors.background,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.cardBackground
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Code ',
+                                  style: AppTypography.bodyMedium.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                                SelectableText(
+                                  code,
+                                  style: AppTypography.titleMedium.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                setState(() => _showOfferPopup = false);
+                                _saveOfferSeen();
+                                _showBookingDialog();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: Text(
+                                'Book now',
+                                style: AppTypography.buttonLarge.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _showOfferPopup = false);
+                              _saveOfferSeen();
+                            },
+                            child: Text(
+                              'Maybe later',
+                              style: AppTypography.bodyMedium.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _showOfferPopup = false;
-                      });
-                      _saveOfferSeen();
-                    },
-                    child: Text(
-                      'Maybe Later',
-                      style: AppTypography.bodyMedium.copyWith(
-                        color: Colors.white.withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOfferPopupImageFallback() {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: AppColors.primaryGradient,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.local_offer_rounded,
+            size: 56,
+            color: Colors.white.withValues(alpha: 0.95),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            AppStrings.appName,
+            style: AppTypography.titleLarge.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

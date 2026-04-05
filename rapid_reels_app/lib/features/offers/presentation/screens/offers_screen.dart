@@ -69,9 +69,9 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
     {
       'id': 'offer_005',
       'title': 'Birthday Bash',
-      'description': 'Special 30% discount on birthday event packages',
-      'code': 'BDAY30',
-      'discount': '30% OFF',
+      'description': 'Special savings on birthday event packages — apply your code at checkout',
+      'code': 'BDAYVIP',
+      'discount': 'Limited offer',
       'minAmount': 8000,
       'maxDiscount': 3000,
       'validUntil': DateTime.now().add(const Duration(days: 20)),

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
+import '../../../../core/booking/date_availability.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/services/mock_data_service.dart';
-import '../../../../features/booking/data/models/event_booking_model.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../booking/data/adapters/booking_firebase_mappers.dart';
+import '../../../booking/data/models/event_booking_model.dart';
 
 bool isSameDay(DateTime? a, DateTime? b) {
   if (a == null || b == null) return false;
@@ -13,71 +17,54 @@ bool isSameDay(DateTime? a, DateTime? b) {
 
 class ProviderBookingCalendarScreen extends StatefulWidget {
   final String providerId;
-  
+
   const ProviderBookingCalendarScreen({
     super.key,
     required this.providerId,
   });
 
   @override
-  State<ProviderBookingCalendarScreen> createState() => _ProviderBookingCalendarScreenState();
+  State<ProviderBookingCalendarScreen> createState() =>
+      _ProviderBookingCalendarScreenState();
 }
 
-class _ProviderBookingCalendarScreenState extends State<ProviderBookingCalendarScreen> {
-  late ValueNotifier<List<EventBooking>> _selectedBookings;
+class _ProviderBookingCalendarScreenState
+    extends State<ProviderBookingCalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   CalendarFormat _calendarFormat = CalendarFormat.month;
   String? _selectedStatusFilter;
+  final _firestore = FirestoreService();
 
-  @override
-  void initState() {
-    super.initState();
-    _selectedBookings = ValueNotifier(_getBookingsForDay(_selectedDay));
-  }
-
-  @override
-  void dispose() {
-    _selectedBookings.dispose();
-    super.dispose();
-  }
-
-  List<EventBooking> _getBookingsForDay(DateTime day) {
-    final mockData = MockDataService();
-    final allBookings = mockData.getProviderEvents(widget.providerId);
-    
-    var filteredBookings = allBookings.where((booking) {
-      return isSameDay(booking.eventDate, day);
-    }).toList();
-
-    if (_selectedStatusFilter != null && _selectedStatusFilter!.isNotEmpty) {
-      filteredBookings = filteredBookings.where((booking) {
-        return booking.status == _selectedStatusFilter;
-      }).toList();
+  List<EventBooking> _filteredBookings(
+    List<EventBooking> all,
+    DateTime day,
+  ) {
+    var filtered = all.where((b) => isSameDay(b.eventDate, day)).toList();
+    if (_selectedStatusFilter != null &&
+        _selectedStatusFilter!.isNotEmpty) {
+      filtered = filtered
+          .where((b) => b.status == _selectedStatusFilter)
+          .toList();
     }
-
-    return filteredBookings;
+    return filtered;
   }
 
-  Map<DateTime, List<EventBooking>> _getBookingsMap() {
-    final mockData = MockDataService();
-    final allBookings = mockData.getProviderEvents(widget.providerId);
-    
-    Map<DateTime, List<EventBooking>> bookingsMap = {};
-    
-    for (var booking in allBookings) {
+  Map<DateTime, List<EventBooking>> _bookingsMap(List<EventBooking> all) {
+    final map = <DateTime, List<EventBooking>>{};
+    for (var booking in all) {
       final date = DateTime(
         booking.eventDate.year,
         booking.eventDate.month,
         booking.eventDate.day,
       );
-      
-      if (_selectedStatusFilter == null || _selectedStatusFilter!.isEmpty || booking.status == _selectedStatusFilter) {
-        bookingsMap[date] = (bookingsMap[date] ?? [])..add(booking);
+      if (_selectedStatusFilter == null ||
+          _selectedStatusFilter!.isEmpty ||
+          booking.status == _selectedStatusFilter) {
+        map[date] = (map[date] ?? [])..add(booking);
       }
     }
-    
-    return bookingsMap;
+    return map;
   }
 
   Color _getStatusColor(String status) {
@@ -99,9 +86,6 @@ class _ProviderBookingCalendarScreenState extends State<ProviderBookingCalendarS
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final bookingsMap = _getBookingsMap();
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -118,172 +102,199 @@ class _ProviderBookingCalendarScreenState extends State<ProviderBookingCalendarS
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Status Filter Chips
-          if (_selectedStatusFilter != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: AppColors.surface,
-              child: Row(
+      body: StreamBuilder<FirebaseProviderModel?>(
+        stream: _firestore.streamProviderDoc(widget.providerId),
+        builder: (context, provSnap) {
+          return StreamBuilder<List<FirebaseBookingModel>>(
+            stream: _firestore.streamProviderBookings(widget.providerId),
+            builder: (context, bookSnap) {
+              final provider = provSnap.data;
+              final raw = bookSnap.data ?? [];
+              final all = raw.map(BookingFirebaseMappers.toEventBooking).toList();
+              final occupied = <String>{};
+              for (final b in raw) {
+                if (bookingStatusBlocksDay(b.status)) {
+                  occupied.add(b.eventDateKey);
+                }
+              }
+              final bookingsMap = _bookingsMap(all);
+              final bookingsForDay = _filteredBookings(all, _selectedDay);
+
+              return Column(
                 children: [
-                  Text(
-                    'Filter: ',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[700],
+                  if (_selectedStatusFilter != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      color: AppColors.surface,
+                      child: Row(
+                        children: [
+                          Text(
+                            'Filter: ',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          Chip(
+                            label: Text(_selectedStatusFilter!.toUpperCase()),
+                            backgroundColor: _getStatusColor(
+                                    _selectedStatusFilter!)
+                                .withValues(alpha: 0.2),
+                            deleteIcon: const Icon(Icons.close, size: 18),
+                            onDeleted: () {
+                              setState(() => _selectedStatusFilter = null);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  TableCalendar<EventBooking>(
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: _focusedDay,
+                    calendarFormat: _calendarFormat,
+                    selectedDayPredicate: (day) =>
+                        isSameDay(_selectedDay, day),
+                    eventLoader: (day) => bookingsMap[day] ?? [],
+                    startingDayOfWeek: StartingDayOfWeek.monday,
+                    calendarStyle: CalendarStyle(
+                      outsideDaysVisible: false,
+                      weekendTextStyle: TextStyle(color: Colors.grey[600]),
+                      selectedDecoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      todayDecoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      /// Green dots: any booking on that day (status-agnostic).
+                      markerDecoration: const BoxDecoration(
+                        color: AppColors.success,
+                        shape: BoxShape.circle,
+                      ),
+                      markersMaxCount: 3,
+                    ),
+                    headerStyle: HeaderStyle(
+                      formatButtonVisible: true,
+                      formatButtonShowsNext: false,
+                      formatButtonDecoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      formatButtonTextStyle:
+                          const TextStyle(color: Colors.white),
+                    ),
+                    enabledDayPredicate: (day) {
+                      if (provider == null) return true;
+                      final dayKey =
+                          DateTime(day.year, day.month, day.day);
+                      final dayBookings = bookingsMap[dayKey] ?? [];
+                      final open = isDateAvailableForProvider(
+                            provider,
+                            day,
+                            occupied,
+                          ) ||
+                          dayBookings.isNotEmpty;
+                      return open;
+                    },
+                    onDaySelected: (selectedDay, focusedDay) {
+                      if (!isSameDay(_selectedDay, selectedDay)) {
+                        setState(() {
+                          _selectedDay = selectedDay;
+                          _focusedDay = focusedDay;
+                        });
+                      }
+                    },
+                    onFormatChanged: (format) {
+                      if (_calendarFormat != format) {
+                        setState(() {
+                          _calendarFormat = format;
+                        });
+                      }
+                    },
+                    onPageChanged: (focusedDay) {
+                      _focusedDay = focusedDay;
+                    },
+                    calendarBuilders: CalendarBuilders(
+                      defaultBuilder: (context, date, _) {
+                        if (provider == null) return null;
+                        final dayKey =
+                            DateTime(date.year, date.month, date.day);
+                        final hasBooking =
+                            (bookingsMap[dayKey] ?? []).isNotEmpty;
+                        final unavailable = !isDateAvailableForProvider(
+                              provider,
+                              date,
+                              occupied,
+                            ) &&
+                            !hasBooking;
+                        if (!unavailable) return null;
+                        return Center(
+                          child: Text(
+                            '${date.day}',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 16,
+                            ),
+                          ),
+                        );
+                      },
+                      markerBuilder: (context, date, bookings) {
+                        if (bookings.isEmpty) return const SizedBox.shrink();
+                        return Positioned(
+                          bottom: 1,
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                  Chip(
-                    label: Text(_selectedStatusFilter!.toUpperCase()),
-                    backgroundColor: _getStatusColor(_selectedStatusFilter!).withValues(alpha: 0.2),
-                    deleteIcon: const Icon(Icons.close, size: 18),
-                    onDeleted: () {
-                      setState(() {
-                        _selectedStatusFilter = null;
-                        _selectedBookings.value = _getBookingsForDay(_selectedDay);
-                      });
-                    },
+                  const Divider(height: 1),
+                  Expanded(
+                    child: bookingsForDay.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.event_busy,
+                                  size: 64,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No bookings for this day',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: bookingsForDay.length,
+                            itemBuilder: (context, index) {
+                              final booking = bookingsForDay[index];
+                              return _buildBookingCard(booking);
+                            },
+                          ),
                   ),
                 ],
-              ),
-            ),
-
-          // Calendar
-          TableCalendar<EventBooking>(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            eventLoader: (day) => bookingsMap[day] ?? [],
-            startingDayOfWeek: StartingDayOfWeek.monday,
-            calendarStyle: CalendarStyle(
-              outsideDaysVisible: false,
-              weekendTextStyle: TextStyle(color: Colors.grey[600]),
-              selectedDecoration: BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              todayDecoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              markerDecoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              markersMaxCount: 3,
-            ),
-            headerStyle: HeaderStyle(
-              formatButtonVisible: true,
-              formatButtonShowsNext: false,
-              formatButtonDecoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              formatButtonTextStyle: const TextStyle(color: Colors.white),
-            ),
-            onDaySelected: (selectedDay, focusedDay) {
-              if (!isSameDay(_selectedDay, selectedDay)) {
-                setState(() {
-                  _selectedDay = selectedDay;
-                  _focusedDay = focusedDay;
-                  _selectedBookings.value = _getBookingsForDay(selectedDay);
-                });
-              }
+              );
             },
-            onFormatChanged: (format) {
-              if (_calendarFormat != format) {
-                setState(() {
-                  _calendarFormat = format;
-                });
-              }
-            },
-            onPageChanged: (focusedDay) {
-              _focusedDay = focusedDay;
-            },
-            calendarBuilders: CalendarBuilders(
-              markerBuilder: (context, date, bookings) {
-                if (bookings.isEmpty) return const SizedBox.shrink();
-                
-                final statusColors = bookings.map((b) => _getStatusColor(b.status)).toSet();
-                if (statusColors.length == 1) {
-                  return Positioned(
-                    bottom: 1,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: statusColors.first,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  );
-                }
-                
-                return Positioned(
-                  bottom: 1,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: statusColors.take(3).map((color) => Container(
-                      width: 4,
-                      height: 4,
-                      margin: const EdgeInsets.symmetric(horizontal: 1),
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                    )).toList(),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          const Divider(height: 1),
-
-          // Selected Day Bookings
-          Expanded(
-            child: ValueListenableBuilder<List<EventBooking>>(
-              valueListenable: _selectedBookings,
-              builder: (context, bookings, _) {
-                if (bookings.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.event_busy,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No bookings for this day',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: bookings.length,
-                  itemBuilder: (context, index) {
-                    final booking = bookings[index];
-                    return _buildBookingCard(booking);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -316,9 +327,11 @@ class _ProviderBookingCalendarScreenState extends State<ProviderBookingCalendarS
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(booking.status).withValues(alpha: 0.2),
+                    color:
+                        _getStatusColor(booking.status).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -402,21 +415,16 @@ class _ProviderBookingCalendarScreenState extends State<ProviderBookingCalendarS
   }
 
   Widget _buildFilterOption(String label, String? status) {
-    final isSelected = _selectedStatusFilter == status;
     return ListTile(
       title: Text(label),
       leading: Radio<String?>(
         value: status,
         groupValue: _selectedStatusFilter,
         onChanged: (value) {
-          setState(() {
-            _selectedStatusFilter = value;
-            _selectedBookings.value = _getBookingsForDay(_selectedDay);
-          });
+          setState(() => _selectedStatusFilter = value);
           Navigator.pop(context);
         },
       ),
     );
   }
 }
-

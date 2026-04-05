@@ -18,6 +18,18 @@ Use a backend-first Stripe integration for production.
   - `npm run migrate:inr-gbp:dry`
   - `npm run migrate:inr-gbp -- --fxRate=0.0095 --batchId=fx_2026_uk_rollout`
 
+## Test-charge override (temporary)
+
+- The backend can force Stripe PaymentIntent amount to `£2.00` for payment testing.
+- Booking source amounts remain unchanged in Firestore (`payment.totalAmount`, `payment.advanceAmount`).
+- PaymentIntent metadata includes:
+  - `isTestChargeOverride`
+  - `originalAdvanceAmount`
+  - `overrideChargeAmount`
+- Rollback:
+  - set `STRIPE_TEST_CHARGE_ENABLED=false` in Functions environment, or
+  - remove the override logic from `createStripePaymentIntent`.
+
 ## Why this is mandatory
 
 - Mobile apps can be reverse engineered; any embedded secret key can be extracted.
@@ -56,12 +68,63 @@ Use a backend-first Stripe integration for production.
 
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
+- Optional (post-payment invoice PDF + email): `SMTP_USER`, `SMTP_PASS` (see below)
+
+## Post-payment invoice (email + PDF)
+
+On **`payment_intent.succeeded`**, after the booking is marked confirmed, Cloud Functions can email the customer a **plain HTML receipt** and attach a **simple PDF invoice** (`invoice_email.js` via `pdfkit` + `nodemailer`).
+
+### Behaviour
+
+- **Recipient**: `users/{customerId}.email`. If missing, the function logs a warning and sets `metadata.invoiceEmailSkipped` on the booking (webhook still returns 200).
+- **Idempotency**: Skips if `metadata.invoiceEmailSentAt` is already set.
+- **Failures**: Invoice errors are logged and stored on `metadata.invoiceEmailError`; they do **not** fail the Stripe webhook.
+
+### Gmail App Password (typical setup)
+
+1. Google Account → **Security** → enable **2-Step Verification**.
+2. **Security** → **App passwords** → create one for Mail (e.g. device name `Firebase Functions`).
+3. Copy the **16-character** password (no spaces required).
+
+Send limits apply on consumer Gmail; for higher volume use SendGrid, Resend, SES, etc.
+
+### Configure SMTP
+
+**Production (Firebase Secret Manager)** — from `rapid_reels_app`:
+
+```bash
+firebase functions:secrets:set SMTP_USER   # full Gmail address
+firebase functions:secrets:set SMTP_PASS     # App Password (not your normal password)
+```
+
+Optional env on the function (Google Cloud Console → Cloud Functions → `stripeWebhook` → Environment variables):
+
+- `SMTP_FROM` — defaults to `SMTP_USER` if unset
+- `SMTP_HOST` — default `smtp.gmail.com`
+- `SMTP_PORT` — default `465` (use `587` with STARTTLS if you prefer)
+
+Then redeploy so `stripeWebhook` receives the new secrets:
+
+```bash
+firebase deploy --only functions
+```
+
+**Local emulator**: add to `functions/.env` (see `.env.example`):
+
+`SMTP_USER`, `SMTP_PASS`, optionally `SMTP_FROM`, `SMTP_HOST`, `SMTP_PORT`.
+
+### Verify
+
+1. Complete a successful test payment.
+2. Check Functions logs for `Invoice email sent` or skip/warn messages.
+3. Confirm the booking document has `metadata.invoiceEmailSentAt` and the customer inbox received `invoice-{bookingId}.pdf`.
 
 ## Production rollout steps
 
 1. Configure backend secrets (Firebase Secret Manager). From `rapid_reels_app` run:
    - `firebase functions:secrets:set STRIPE_SECRET_KEY` (paste `sk_live_...` when prompted)
    - `firebase functions:secrets:set STRIPE_WEBHOOK_SECRET` (paste `whsec_...` when prompted)
+   - Optional: `SMTP_USER` / `SMTP_PASS` for invoice emails (see **Post-payment invoice** above)
    - Ensure **Secret Manager API** is enabled for your GCP project and your account can create secrets.
 2. Deploy functions so `createStripePaymentIntent` and `stripeWebhook` receive those secrets:
    - `firebase deploy --only functions`

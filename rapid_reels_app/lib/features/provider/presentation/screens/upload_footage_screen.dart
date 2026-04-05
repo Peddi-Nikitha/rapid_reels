@@ -67,7 +67,58 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
       );
     }
 
-    return Scaffold(
+    return FutureBuilder<FirebaseProviderModel?>(
+      future: _firestoreService.getProvider(user.uid),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              title: const Text(
+                'Upload Reels',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            body: const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          );
+        }
+        final prov = snap.data;
+        if (prov == null || prov.verificationStatus != 'approved') {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: AppColors.surface,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+              title: const Text(
+                'Upload Reels',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Reels upload is available after Rapid Reels approves your provider profile.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    height: 1.45,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
@@ -225,6 +276,8 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
             ),
         ],
       ),
+    );
+      },
     );
   }
 

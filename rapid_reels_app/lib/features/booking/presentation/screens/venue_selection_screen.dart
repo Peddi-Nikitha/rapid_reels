@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/mock/mock_venues.dart';
@@ -51,8 +52,10 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
   @override
   void initState() {
     super.initState();
-    _allDisplayVenues = List<Venue>.from(MockVenues.allVenues);
-    _nearbyVenues = List<Venue>.from(_allDisplayVenues);
+    // Do not preload Siddipet/all venues by default.
+    // Wait for detected location (or fallback city) and then fetch nearby venues.
+    _allDisplayVenues = [];
+    _nearbyVenues = [];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _updateMarkers();
@@ -82,6 +85,56 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
     super.dispose();
   }
 
+  List<Venue> _venuesForCity(String city) {
+    final c = city.trim().toLowerCase();
+    if (c.isEmpty) return [];
+    final filtered = MockVenues.allVenues
+        .where((v) => v.city.trim().toLowerCase() == c)
+        .toList();
+    if (filtered.isNotEmpty) return filtered;
+    return [];
+  }
+
+  Future<void> _loadFallbackVenueFeed() async {
+    final bookingCity = (widget.bookingData['venueCity'] as String?)?.trim() ?? '';
+    String city = bookingCity;
+    if (city.isEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        city = (prefs.getString('selected_city') ?? '').trim();
+      } catch (_) {}
+    }
+
+    final cityVenues = _venuesForCity(city);
+    if (mounted) {
+      setState(() {
+        _allDisplayVenues = cityVenues.isNotEmpty
+            ? cityVenues
+            : MockVenues.getNearbyVenues(
+                _currentLocation.latitude,
+                _currentLocation.longitude,
+                radiusKm: _searchRadiusKm,
+              );
+        _isLoadingLocation = false;
+      });
+      _applySearchFilter(_searchController.text);
+      _updateMarkers();
+      _updateCircles();
+    }
+  }
+
+  void _refreshNearbyVenuesFromCurrentLocation() {
+    final nearby = MockVenues.getNearbyVenues(
+      _currentLocation.latitude,
+      _currentLocation.longitude,
+      radiusKm: _searchRadiusKm,
+    );
+    _allDisplayVenues = nearby;
+    _applySearchFilter(_searchController.text);
+    _updateMarkers();
+    _updateCircles();
+  }
+
   Future<void> _getCurrentLocation() async {
     if (!mounted) return;
     
@@ -91,9 +144,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
       // Check if location services are enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        if (mounted) {
-          setState(() => _isLoadingLocation = false);
-        }
+        await _loadFallbackVenueFeed();
         return;
       }
 
@@ -102,17 +153,13 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          if (mounted) {
-            setState(() => _isLoadingLocation = false);
-          }
+          await _loadFallbackVenueFeed();
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          setState(() => _isLoadingLocation = false);
-        }
+        await _loadFallbackVenueFeed();
         return;
       }
 
@@ -127,6 +174,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
           _currentLocation = LatLng(position.latitude, position.longitude);
           _isLoadingLocation = false;
         });
+        _refreshNearbyVenuesFromCurrentLocation();
 
         if (_mapController != null && _mapInitialized) {
           _moveCameraToLocation(_currentLocation);
@@ -135,10 +183,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
       }
     } catch (e) {
       debugPrint('Error getting location: $e');
-      if (mounted) {
-        setState(() => _isLoadingLocation = false);
-      }
-      // Use default location - already loaded in initState
+      await _loadFallbackVenueFeed();
     }
   }
 
@@ -174,7 +219,11 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
 
     final venues = savedVenueEntries.isNotEmpty
         ? savedVenueEntries
-        : List<Venue>.from(MockVenues.allVenues);
+        : MockVenues.getNearbyVenues(
+            _currentLocation.latitude,
+            _currentLocation.longitude,
+            radiusKm: _searchRadiusKm,
+          );
 
     _allDisplayVenues = venues;
     _applySearchFilter(_searchController.text);

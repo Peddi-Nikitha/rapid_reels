@@ -1,6 +1,7 @@
 class AppAssets {
   // Images
-  static const String logo = 'assets/images/logo.png';
+  /// Brand mark on auth screens; replace with a dedicated `logo.png` when available.
+  static const String logo = 'assets/images/onboarding_1.jpg';
   static const String splashLogo = 'assets/images/splash_logo.png';
   static const String onboarding1 = 'assets/images/onboarding_1.png';
   static const String onboarding2 = 'assets/images/onboarding_2.png';

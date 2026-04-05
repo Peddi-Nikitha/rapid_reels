@@ -1,16 +1,140 @@
 const {onRequest, onCall, HttpsError} = require("firebase-functions/v2/https");
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const {onSchedule} = require("firebase-functions/v2/scheduler");
 const {defineSecret} = require("firebase-functions/params");
 require("dotenv").config();
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const Stripe = require("stripe");
+const invoiceEmail = require("./invoice_email");
 
 admin.initializeApp();
 
+/**
+ * Rebuild Firestore Timestamp values from Flutter callable JSON
+ * ({ seconds, nanoseconds }).
+ * @param {*} value
+ * @return {*}
+ */
+function reviveFirestoreTimestamps(value) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "object" && !Array.isArray(value) &&
+      typeof value.seconds === "number") {
+    const ns = typeof value.nanoseconds === "number" ? value.nanoseconds : 0;
+    return new admin.firestore.Timestamp(value.seconds, ns);
+  }
+  if (Array.isArray(value)) {
+    return value.map(reviveFirestoreTimestamps);
+  }
+  if (typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = reviveFirestoreTimestamps(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+const BLOCKING_BOOKING_STATUSES = ["pending", "confirmed", "ongoing"];
+
+/** One active booking per provider per calendar day (eventDateKey). */
+exports.createBookingIfAvailable = onCall(async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError("unauthenticated", "Sign in required.");
+  }
+  const raw = request.data && request.data.booking;
+  if (!raw || typeof raw !== "object") {
+    throw new HttpsError("invalid-argument", "booking payload required.");
+  }
+  const booking = reviveFirestoreTimestamps(raw);
+  if (booking.customerId !== request.auth.uid) {
+    throw new HttpsError("permission-denied", "customerId must match the signed-in user.");
+  }
+  const providerId = booking.providerId;
+  const eventDateKey = booking.eventDateKey;
+  if (!providerId || !eventDateKey) {
+    throw new HttpsError("invalid-argument", "providerId and eventDateKey are required.");
+  }
+
+  const db = admin.firestore();
+  const bookingRef = db.collection("bookings").doc();
+  const newBookingId = bookingRef.id;
+  const lockRef = db.collection("providers").doc(String(providerId))
+      .collection("schedule").doc(String(eventDateKey));
+
+  let slotUnavailable = false;
+  try {
+    await db.runTransaction(async (t) => {
+      const q = db.collection("bookings")
+          .where("providerId", "==", providerId)
+          .where("eventDateKey", "==", eventDateKey)
+          .where("status", "in", BLOCKING_BOOKING_STATUSES);
+      const conflictSnap = await t.get(q);
+      if (!conflictSnap.empty) {
+        slotUnavailable = true;
+        return;
+      }
+      const lockSnap = await t.get(lockRef);
+      if (lockSnap.exists) {
+        slotUnavailable = true;
+        return;
+      }
+
+      const payload = Object.assign({}, booking);
+      delete payload.bookingId;
+      payload.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+      payload.createdAt = admin.firestore.FieldValue.serverTimestamp();
+
+      t.set(lockRef, {
+        bookingId: newBookingId,
+        customerId: request.auth.uid,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      t.set(bookingRef, payload);
+    });
+  } catch (e) {
+    logger.error("createBookingIfAvailable failed", e);
+    throw new HttpsError("internal", "Could not create booking.");
+  }
+
+  if (slotUnavailable) {
+    throw new HttpsError("already-exists", "This date is no longer available.");
+  }
+
+  return {bookingId: newBookingId};
+});
+
+/** Free schedule lock when a booking leaves a blocking status. */
+exports.onBookingReleaseScheduleSlot = onDocumentUpdated("bookings/{bookingId}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  if (!before || !after) return null;
+  const blocking = new Set(BLOCKING_BOOKING_STATUSES);
+  const wasBlocking = blocking.has(before.status);
+  const nowBlocking = blocking.has(after.status);
+  if (!(wasBlocking && !nowBlocking)) return null;
+  const pid = after.providerId;
+  const key = after.eventDateKey;
+  const bid = event.params.bookingId;
+  if (!pid || !key) return null;
+  const ref = admin.firestore().collection("providers").doc(String(pid))
+      .collection("schedule").doc(String(key));
+  const snap = await ref.get();
+  if (snap.exists && snap.data().bookingId === bid) {
+    await ref.delete();
+  }
+  return null;
+});
+
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
+const smtpUser = defineSecret("SMTP_USER");
+const smtpPass = defineSecret("SMTP_PASS");
+const STRIPE_TEST_CHARGE_GBP = 2.0;
+const STRIPE_TEST_CHARGE_FLAG = String(
+    process.env.STRIPE_TEST_CHARGE_ENABLED || "",
+).toLowerCase();
 
 // Emulator: use `functions/.env`. Deployed: secrets bound via `secrets` on each function.
 function resolveStripeApiKey() {
@@ -361,7 +485,18 @@ exports.createStripePaymentIntent = onCall(
               "Only GBP payments are supported",
           );
         }
-        const amountInSmallestUnit = Math.round(advanceAmount * 100);
+        // Test mode default: with `sk_test` keys we charge £2 unless explicitly disabled.
+        const stripeKey = resolveStripeApiKey();
+        const usingLiveStripeKey = String(stripeKey || "").startsWith("sk_live");
+        const forceTestCharge = STRIPE_TEST_CHARGE_FLAG === "true";
+        const disableTestCharge = STRIPE_TEST_CHARGE_FLAG === "false";
+        const effectiveTestChargeEnabled = forceTestCharge ||
+          (!usingLiveStripeKey && !disableTestCharge);
+
+        const stripeChargeAmount = effectiveTestChargeEnabled ?
+          STRIPE_TEST_CHARGE_GBP :
+          advanceAmount;
+        const amountInSmallestUnit = Math.round(stripeChargeAmount * 100);
         if (!Number.isFinite(amountInSmallestUnit) || amountInSmallestUnit <= 0) {
           throw new HttpsError("failed-precondition", "Invalid booking amount");
         }
@@ -383,6 +518,9 @@ exports.createStripePaymentIntent = onCall(
             bookingId: String(bookingId),
             customerUserId: String(uid),
             providerUserId: String(booking.providerId || ""),
+            isTestChargeOverride: effectiveTestChargeEnabled ? "true" : "false",
+            originalAdvanceAmount: String(advanceAmount.toFixed(2)),
+            overrideChargeAmount: String(stripeChargeAmount.toFixed(2)),
           },
         }, {idempotencyKey});
 
@@ -413,7 +551,12 @@ exports.createStripePaymentIntent = onCall(
 // Stripe webhook for authoritative payment status updates
 exports.stripeWebhook = onRequest(
     {
-      secrets: [stripeSecretKey, stripeWebhookSecret],
+      secrets: [
+        stripeSecretKey,
+        stripeWebhookSecret,
+        smtpUser,
+        smtpPass,
+      ],
     },
     async (request, response) => {
   if (request.method !== "POST") {
@@ -554,6 +697,53 @@ exports.stripeWebhook = onRequest(
             bookingUpdate["payment.failureReason"] = failureMessage;
           }
           await bookingRef.update(bookingUpdate);
+
+          if (status === "succeeded") {
+            try {
+              let smtpUserVal = process.env.SMTP_USER || "";
+              let smtpPassVal = process.env.SMTP_PASS || "";
+              if (!smtpUserVal || !smtpPassVal) {
+                try {
+                  if (!smtpUserVal) smtpUserVal = smtpUser.value();
+                  if (!smtpPassVal) smtpPassVal = smtpPass.value();
+                } catch (secErr) {
+                  logger.info("SMTP secrets unavailable (emulator?)", {
+                    message: String(secErr && secErr.message ? secErr.message : secErr),
+                  });
+                }
+              }
+              const smtpFrom = process.env.SMTP_FROM || smtpUserVal || "";
+              await invoiceEmail.maybeSendInvoiceEmail({
+                db: admin.firestore(),
+                bookingRef,
+                bookingId,
+                bookingSnapshotData: booking,
+                paymentIntent,
+                logger,
+                smtp: {
+                  user: smtpUserVal,
+                  pass: smtpPassVal,
+                  from: smtpFrom,
+                  host: process.env.SMTP_HOST || "smtp.gmail.com",
+                  port: parseInt(process.env.SMTP_PORT || "465", 10),
+                },
+              });
+            } catch (invErr) {
+              logger.error("Invoice email error (non-fatal)", {
+                bookingId,
+                message: invErr && invErr.message,
+              });
+              try {
+                await bookingRef.update({
+                  "metadata.invoiceEmailError": String(invErr.message || invErr),
+                  "metadata.invoiceEmailErrorAt":
+                      admin.firestore.FieldValue.serverTimestamp(),
+                });
+              } catch (metaErr) {
+                logger.warn("Could not persist invoiceEmailError", metaErr);
+              }
+            }
+          }
 
           await createPaymentNotification({
             userId: String(booking.providerId || paymentIntent.metadata?.providerUserId || ""),

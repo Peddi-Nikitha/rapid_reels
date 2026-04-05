@@ -1,14 +1,21 @@
+import 'dart:math' as math;
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/booking/date_availability.dart';
 import '../../../../core/config/stripe_config.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
-import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/constants/app_strings.dart';
+import '../../../../core/firebase/booking_callable_payload.dart';
+import '../../../../core/firebase/models/firebase_offer_model.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
 import '../../data/adapters/booking_firebase_adapter.dart';
@@ -24,10 +31,153 @@ class BookingSummaryScreen extends StatefulWidget {
 }
 
 class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
+  static const double _testStripeChargeAmount = 2.0;
   bool _acceptedTerms = false;
   bool _isProcessing = false;
   final _firestoreService = FirestoreService();
   final _stripePaymentService = StripePaymentService();
+  final TextEditingController _couponController = TextEditingController();
+  FirebaseOfferModel? _appliedOffer;
+  double _discountAmount = 0;
+  bool _couponApplying = false;
+  String? _couponError;
+
+  @override
+  void dispose() {
+    _couponController.dispose();
+    super.dispose();
+  }
+
+  double _computeOfferDiscount(FirebaseOfferModel offer, double subtotal) {
+    final d = offer.discount;
+    if (d.minPurchaseAmount != null && subtotal < d.minPurchaseAmount!) {
+      return 0;
+    }
+    final t = offer.type.toLowerCase();
+    if (t.contains('percentage') ||
+        (d.percentage != null && d.percentage! > 0)) {
+      final pct = d.percentage ?? 0;
+      var off = subtotal * (pct / 100);
+      if (d.maxDiscount != null && off > d.maxDiscount!) {
+        off = d.maxDiscount!;
+      }
+      return math.min(off, subtotal);
+    }
+    if (t.contains('amount') || (d.amount != null && d.amount! > 0)) {
+      return math.min(d.amount ?? 0, subtotal);
+    }
+    return 0;
+  }
+
+  bool _offerMatchesBooking(FirebaseOfferModel offer) {
+    final eventType = widget.bookingData['eventType']?.toString() ?? '';
+    if (offer.applicableEventTypes != null &&
+        offer.applicableEventTypes!.isNotEmpty) {
+      if (!offer.applicableEventTypes!.contains(eventType)) return false;
+    }
+    final pkg = widget.bookingData['package'];
+    String pkgId = '';
+    if (pkg is Map<String, dynamic>) {
+      pkgId = pkg['packageId']?.toString() ?? '';
+    }
+    if (pkgId.isEmpty) {
+      pkgId = widget.bookingData['packageId']?.toString() ?? '';
+    }
+    if (offer.applicablePackages != null &&
+        offer.applicablePackages!.isNotEmpty) {
+      if (pkgId.isEmpty || !offer.applicablePackages!.contains(pkgId)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _applyCoupon() async {
+    final code = _couponController.text.trim();
+    if (code.isEmpty) {
+      setState(() => _couponError = 'Enter a coupon code');
+      return;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sign in to apply a coupon.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final totalAmountNum =
+        (widget.bookingData['totalAmount'] is num)
+            ? (widget.bookingData['totalAmount'] as num).toDouble()
+            : 0.0;
+
+    setState(() {
+      _couponApplying = true;
+      _couponError = null;
+    });
+
+    try {
+      final offer = await _firestoreService.validateOfferCode(code, user.uid);
+      if (offer == null) {
+        if (!mounted) return;
+        setState(() {
+          _appliedOffer = null;
+          _discountAmount = 0;
+          _couponError = 'Invalid or expired code';
+        });
+        return;
+      }
+      if (!_offerMatchesBooking(offer)) {
+        if (!mounted) return;
+        setState(() {
+          _appliedOffer = null;
+          _discountAmount = 0;
+          _couponError = 'This code does not apply to this booking';
+        });
+        return;
+      }
+      final discount = _computeOfferDiscount(offer, totalAmountNum);
+      if (discount <= 0) {
+        if (!mounted) return;
+        setState(() {
+          _appliedOffer = null;
+          _discountAmount = 0;
+          _couponError = 'This code does not apply to this amount';
+        });
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _appliedOffer = offer;
+        _discountAmount = discount;
+        _couponError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _couponError = 'Could not validate code';
+        _appliedOffer = null;
+        _discountAmount = 0;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _couponApplying = false);
+      }
+    }
+  }
+
+  void _clearCoupon() {
+    setState(() {
+      _appliedOffer = null;
+      _discountAmount = 0;
+      _couponError = null;
+      _couponController.clear();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,10 +201,19 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         (widget.bookingData['advanceAmount'] is num)
             ? (widget.bookingData['advanceAmount'] as num).toDouble()
             : 0.0;
+    final effectiveTotal =
+        math.max(0.0, totalAmountNum - _discountAmount);
+    var advanceForPayment = configuredAdvance;
+    if (totalAmountNum > 0 &&
+        configuredAdvance > 0 &&
+        _discountAmount > 0) {
+      advanceForPayment =
+          configuredAdvance * (effectiveTotal / totalAmountNum);
+    }
     final payableAmount = _resolvePayableAmount(
       currency: currency,
-      configuredAdvance: configuredAdvance,
-      totalAmount: totalAmountNum,
+      configuredAdvance: advanceForPayment,
+      totalAmount: effectiveTotal,
     );
 
     return PopScope(
@@ -173,7 +332,10 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                         return _buildSection('Service Provider', [
                           _buildDetailRow('Provider', provider.businessName),
                           _buildDetailRow('Rating', '${provider.rating} ⭐'),
-                          _buildDetailRow('Contact', provider.phoneNumber),
+                          _buildDetailRow(
+                            'Updates',
+                            AppStrings.providerContactViaApp,
+                          ),
                         ]);
                       },
                     ),
@@ -204,6 +366,88 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                       _buildDetailRow('Drone Footage', 'Included'),
                   ]),
 
+                  // Coupon
+                  _buildSection(
+                    'Coupon code',
+                    [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _couponController,
+                              textCapitalization: TextCapitalization.characters,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[A-Za-z0-9_-]')),
+                              ],
+                              decoration: InputDecoration(
+                                hintText: 'Enter code',
+                                filled: true,
+                                fillColor: AppColors.background,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: AppColors.cardBackground
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                              ),
+                              onSubmitted: (_) => _applyCoupon(),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          TextButton(
+                            onPressed:
+                                _couponApplying ? null : _applyCoupon,
+                            child: _couponApplying
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Apply'),
+                          ),
+                        ],
+                      ),
+                      if (_couponError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _couponError!,
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                      if (_appliedOffer != null && _discountAmount > 0) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Applied: ${_appliedOffer!.code}',
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _clearCoupon,
+                              child: const Text('Remove'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+
                   // Payment Breakdown
                   _buildSection('Payment', [
                     _buildDetailRow(
@@ -212,14 +456,29 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                     ),
                     const Divider(height: 24),
                     _buildDetailRow(
-                      'Total Amount',
+                      'Subtotal',
                       _formatMoney(totalAmountNum, currency),
+                    ),
+                    if (_discountAmount > 0) ...[
+                      _buildDetailRow(
+                        'Coupon discount',
+                        '-${_formatMoney(_discountAmount, currency)}',
+                      ),
+                    ],
+                    _buildDetailRow(
+                      'Total',
+                      _formatMoney(effectiveTotal, currency),
                       isTotal: true,
                     ),
                     _buildDetailRow(
                       'Payable Now',
                       _formatMoney(payableAmount, currency),
                       subtitle: 'One-time payment',
+                    ),
+                    _buildDetailRow(
+                      'Test Charge (Stripe)',
+                      _formatMoney(_testStripeChargeAmount, currency),
+                      subtitle: 'Temporary test override',
                     ),
                   ]),
 
@@ -282,7 +541,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
             child: SafeArea(
               top: false,
               child: CustomButton(
-                text: 'Pay $currencySymbol${_formatAmount(payableAmount, currency)} & Confirm',
+                text: 'Pay $currencySymbol${_formatAmount(_testStripeChargeAmount, currency)} & Confirm',
                 onPressed: !_isProcessing ? _handleConfirmBooking : null,
                 isLoading: _isProcessing,
                 icon: Icons.payment,
@@ -467,10 +726,19 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         (widget.bookingData['advanceAmount'] is num)
             ? (widget.bookingData['advanceAmount'] as num).toDouble()
             : 0.0;
+    final effectiveTotal =
+        math.max(0.0, totalAmountNum - _discountAmount);
+    var advanceForPayment = configuredAdvance;
+    if (totalAmountNum > 0 &&
+        configuredAdvance > 0 &&
+        _discountAmount > 0) {
+      advanceForPayment =
+          configuredAdvance * (effectiveTotal / totalAmountNum);
+    }
     final payableAmount = _resolvePayableAmount(
       currency: currency,
-      configuredAdvance: configuredAdvance,
-      totalAmount: totalAmountNum,
+      configuredAdvance: advanceForPayment,
+      totalAmount: effectiveTotal,
     );
     const minAdvance = 0.30;
 
@@ -494,13 +762,65 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
 
     try {
       final bookingData = Map<String, dynamic>.from(widget.bookingData);
+      final providerId = bookingData['providerId']?.toString() ?? '';
+      final ev = bookingData['eventDate'];
+      if (providerId.isEmpty || ev is! DateTime) {
+        if (!mounted) return;
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Missing provider or event date. Go back and try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      final fbProvider = await _firestoreService.getProvider(providerId);
+      if (fbProvider == null) {
+        if (!mounted) return;
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Provider not found.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      final occupied =
+          await _firestoreService.getProviderOccupiedDateKeys(providerId);
+      if (!isDateAvailableForProvider(fbProvider, ev, occupied)) {
+        if (!mounted) return;
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This date is no longer available for the selected provider. '
+              'Pick another date from the provider screen.',
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 6),
+          ),
+        );
+        return;
+      }
+
       bookingData['paymentCurrency'] = currency;
+      bookingData['totalAmount'] = effectiveTotal;
       bookingData['advanceAmount'] = payableAmount;
+      if (_appliedOffer != null && _discountAmount > 0) {
+        bookingData['metadata'] = <String, dynamic>{
+          'offerId': _appliedOffer!.offerId,
+          'couponCode': _appliedOffer!.code,
+          'discountAmount': _discountAmount,
+          'subtotalAmount': totalAmountNum,
+        };
+      }
       final booking = BookingFirebaseAdapter.fromBookingData(
         bookingData,
         user.uid,
       );
-      final bookingId = await _firestoreService.createBooking(booking);
+      final bookingId = await _firestoreService.createBookingIfAvailable(booking);
       final paymentIntent = await _stripePaymentService.createPaymentIntent(
         bookingId: bookingId,
       );
@@ -518,7 +838,18 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
           'bookingId': bookingId,
           'paymentId': paymentIntent.paymentIntentId,
           'amount': payableAmount,
+          'chargedAmount': _testStripeChargeAmount,
         },
+      );
+    } on BookingDateTakenException catch (e) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 6),
+        ),
       );
     } on StripeException catch (e) {
       if (!mounted) return;

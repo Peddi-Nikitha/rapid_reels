@@ -321,11 +321,19 @@ class AppRouter {
         path: '${AppRoutes.providerDetails}/:providerId',
         name: 'providerDetails',
         pageBuilder: (context, state) {
+          final extra = _extraMap(state.extra);
           final providerId = state.pathParameters['providerId'] ?? '';
+          final bookingRaw = extra['bookingData'];
+          final bookingData = bookingRaw != null
+              ? _nestedStringMap(bookingRaw)
+              : null;
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderDetailsScreen(providerId: providerId),
+            ProviderDetailsScreen(
+              providerId: providerId,
+              bookingData: bookingData,
+            ),
           );
         },
       ),
