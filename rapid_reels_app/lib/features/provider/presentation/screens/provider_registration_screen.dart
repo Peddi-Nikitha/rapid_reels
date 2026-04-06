@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
@@ -44,9 +44,9 @@ class _ProviderRegistrationScreenState extends State<ProviderRegistrationScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -69,7 +69,7 @@ class _ProviderRegistrationScreenState extends State<ProviderRegistrationScreen>
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+                  color: ProviderAppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
@@ -214,7 +214,7 @@ class _ProviderRegistrationScreenState extends State<ProviderRegistrationScreen>
                     onChanged: (value) {
                       setState(() => _agreeToTerms = value ?? false);
                     },
-                    activeColor: AppColors.primary,
+                    activeColor: ProviderAppColors.primary,
                   ),
                   Expanded(
                     child: GestureDetector(

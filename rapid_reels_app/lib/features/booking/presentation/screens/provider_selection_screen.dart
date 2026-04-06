@@ -124,6 +124,8 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
               ifscCode: p.bankDetails!.ifscCode,
               accountHolderName: p.bankDetails!.accountHolderName,
               upiId: p.bankDetails!.upiId,
+              bankName: p.bankDetails!.bankName,
+              countryCode: p.bankDetails!.countryCode,
             )
           : null,
       commissionRate: p.commissionRate,

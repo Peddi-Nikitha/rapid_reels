@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../../core/theme/provider_app_theme.dart';
+import '../../../../shared/widgets/provider/provider_action_card.dart';
+import '../../../../shared/widgets/provider/provider_stat_card.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 
 bool isSameDay(DateTime? a, DateTime? b) {
@@ -25,21 +27,8 @@ class ProviderDashboardScreen extends StatefulWidget {
   State<ProviderDashboardScreen> createState() => _ProviderDashboardScreenState();
 }
 
-class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> {
   final FirestoreService _firestoreService = FirestoreService();
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,17 +36,17 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
       future: _firestoreService.getProvider(widget.providerId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            backgroundColor: AppColors.background,
+          return Scaffold(
             body: Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
           );
         }
 
         if (snapshot.hasError) {
           return Scaffold(
-            backgroundColor: AppColors.background,
             body: Center(
               child: Text(
                 'Error loading provider: ${snapshot.error}',
@@ -70,7 +59,6 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
         final provider = snapshot.data;
         if (provider == null) {
           return const Scaffold(
-            backgroundColor: AppColors.background,
             body: Center(child: Text('Provider not found')),
           );
         }
@@ -95,11 +83,7 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
             };
 
             return Scaffold(
-              backgroundColor: AppColors.background,
               appBar: AppBar(
-                backgroundColor: AppColors.surface,
-                elevation: 0,
-                scrolledUnderElevation: 0,
                 automaticallyImplyLeading: false,
                 toolbarHeight: 64,
                 titleSpacing: 16,
@@ -113,17 +97,15 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.6,
-                        color: Colors.grey[600],
+                        color: Theme.of(context).hintColor,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       provider.businessName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -135,35 +117,31 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
                     tooltip: 'Notifications',
                     onPressed: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsScreen(),
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProviderAppTheme.wrap(
+                            const NotificationsScreen(),
+                          ),
                         ),
                       );
                     },
                   ),
                 ],
-                bottom: TabBar(
-                  controller: _tabController,
-                  indicatorColor: AppColors.primary,
-                  labelColor: AppColors.primary,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: const [
-                    Tab(text: 'Dashboard'),
-                    Tab(text: 'Reels'),
-                    Tab(text: 'My Profile'),
-                  ],
-                ),
               ),
               body: RefreshIndicator(
                 onRefresh: () async {
                   setState(() {});
                 },
-                child: TabBarView(
-                  controller: _tabController,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
                   children: [
-                    _buildOverviewTab(provider, stats, todayBookings),
-                    _buildReelsTab(provider),
-                    _buildMyProfileTab(),
+                    ..._buildOverviewContent(
+                      context,
+                      provider,
+                      stats,
+                      todayBookings,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildReelsSection(context, provider),
                   ],
                 ),
               ),
@@ -174,456 +152,211 @@ class _ProviderDashboardScreenState extends State<ProviderDashboardScreen> with 
     );
   }
 
-  Widget _buildOverviewTab(
+  List<Widget> _buildOverviewContent(
+    BuildContext context,
     FirebaseProviderModel provider,
     Map<String, dynamic> stats,
     List<FirebaseBookingModel> todayBookings,
   ) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-            if (provider.verificationStatus != 'approved')
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Material(
-                  color: AppColors.warning.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.verified_user_outlined,
-                          color: AppColors.warning,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            provider.verificationStatus == 'pending'
-                                ? AppStrings.providerPendingApprovalProvider
-                                : 'This profile is not approved for public listings. Contact support if you need help.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              height: 1.35,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-                        ),
-                      ],
+    final cs = Theme.of(context).colorScheme;
+    return [
+      if (provider.verificationStatus != 'approved')
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Material(
+            color: cs.primaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.verified_user_outlined, color: cs.primary, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      provider.verificationStatus == 'pending'
+                          ? AppStrings.providerPendingApprovalProvider
+                          : 'This profile is not approved for public listings. Contact support if you need help.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
-            // Quick Stats
-            Row(
+            ),
+          ),
+        ),
+      Row(
+        children: [
+          Expanded(
+            child: ProviderStatCard(
+              title: 'Today',
+              value: '${todayBookings.length}',
+              subtitle: 'Bookings',
+              icon: Icons.today,
+              accentColor: cs.primary,
+              onTap: () => context.go(
+                '${AppRoutes.providerPortal}/${widget.providerId}/bookings',
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ProviderStatCard(
+              title: 'Pending',
+              value: '${stats['pendingBookings']}',
+              subtitle: 'To confirm',
+              icon: Icons.pending_actions,
+              accentColor: const Color(0xFFFFB020),
+              onTap: () => context.go(
+                '${AppRoutes.providerPortal}/${widget.providerId}/bookings',
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            child: ProviderStatCard(
+              title: 'Total',
+              value: '${stats['totalBookings']}',
+              subtitle: 'Bookings',
+              icon: Icons.event,
+              accentColor: const Color(0xFF4ADE80),
+              onTap: () => context.go(
+                '${AppRoutes.providerPortal}/${widget.providerId}/bookings',
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      ProviderActionCard(
+        icon: Icons.calendar_month_outlined,
+        title: 'Schedule',
+        subtitle: 'Events calendar and availability',
+        onTap: () => context.go(
+          '${AppRoutes.providerPortal}/${widget.providerId}/schedule',
+        ),
+      ),
+      const SizedBox(height: 12),
+      ProviderActionCard(
+        icon: Icons.event_busy,
+        title: 'Availability only',
+        subtitle: 'Weekly hours and blocked dates',
+        leadingAccent: false,
+        onTap: () => context.push(AppRoutes.providerAvailabilityCalendar),
+      ),
+      const SizedBox(height: 24),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            "Today's bookings",
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          TextButton(
+            onPressed: () => context.go(
+              '${AppRoutes.providerPortal}/${widget.providerId}/bookings',
+            ),
+            child: const Text('View all'),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      if (todayBookings.isEmpty)
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Center(
+            child: Text(
+              'No bookings for today',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+          ),
+        )
+      else
+        ...todayBookings.map(
+          (booking) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
               children: [
+                Icon(Icons.event, color: cs.primary, size: 18),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: _buildStatCard(
-                    title: 'Today',
-                    value: '${todayBookings.length}',
-                    subtitle: 'Bookings',
-                    icon: Icons.today,
-                    color: Colors.blue,
-                    onTap: () => context.push(
-                      '${AppRoutes.providerBookings}/${widget.providerId}',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    title: 'Pending',
-                    value: '${stats['pendingBookings']}',
-                    subtitle: 'To Confirm',
-                    icon: Icons.pending_actions,
-                    color: Colors.orange,
-                    onTap: () => context.push(
-                      '${AppRoutes.providerBookings}/${widget.providerId}',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    title: 'Total',
-                    value: '${stats['totalBookings']}',
-                    subtitle: 'Bookings',
-                    icon: Icons.event,
-                    color: Colors.green,
-                    onTap: () => context.push(
-                      '${AppRoutes.providerBookings}/${widget.providerId}',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-            _buildActionCard(
-              context: context,
-              icon: Icons.calendar_month,
-              title: 'Booking calendar',
-              subtitle: 'View bookings by day on the calendar',
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0f9b0f), Color(0xFF45b649)],
-              ),
-              onTap: () => context.push(
-                '${AppRoutes.providerBookingCalendar}/${widget.providerId}',
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildActionCard(
-              context: context,
-              icon: Icons.event_busy,
-              title: 'Availability & blocked dates',
-              subtitle: 'Close weekdays or block days you are unavailable',
-              gradient: const LinearGradient(
-                colors: [Color(0xFFcb2d3e), Color(0xFFef473a)],
-              ),
-              onTap: () => context.push(AppRoutes.providerAvailabilityCalendar),
-            ),
-            
-            const SizedBox(height: 24),
-            // Today's Bookings
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Today\'s Bookings',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.push(
-                    '${AppRoutes.providerBookings}/${widget.providerId}',
-                  ),
-                  child: const Text('View All'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (todayBookings.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'No bookings for today',
-                  textAlign: TextAlign.center,
-                ),
-              )
-            else
-              ...todayBookings.map(
-                (booking) => Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.event, color: AppColors.primary, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              booking.eventType.toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${booking.eventDate.day}/${booking.eventDate.month}/${booking.eventDate.year} at ${booking.eventTime}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
+                      Text(
+                        booking.eventType.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${booking.eventDate.day}/${booking.eventDate.month}/${booking.eventDate.year} at ${booking.eventTime}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).hintColor,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-          ],
-    );
+              ],
+            ),
+          ),
+        ),
+    ];
   }
 
-  Widget _buildReelsTab(FirebaseProviderModel provider) {
+  Widget _buildReelsSection(BuildContext context, FirebaseProviderModel provider) {
     if (provider.verificationStatus != 'approved') {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.hourglass_top_rounded, size: 64, color: Colors.grey[500]),
-              const SizedBox(height: 16),
-              Text(
-                'Reels unlock after admin approval',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                AppStrings.providerPendingApprovalProvider,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, height: 1.4, color: Colors.grey[600]),
-              ),
-            ],
-          ),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            Icon(Icons.hourglass_top_rounded, size: 48, color: Theme.of(context).hintColor),
+            const SizedBox(height: 12),
+            Text(
+              'Reels unlock after admin approval',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              AppStrings.providerPendingApprovalProvider,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Theme.of(context).hintColor),
+            ),
+          ],
         ),
       );
     }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildActionCard(
-          context: context,
-          icon: Icons.video_library,
-          title: 'My Reels',
-          subtitle: 'View and manage your reels',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF8E44AD), Color(0xFF9B59B6)],
-          ),
-          onTap: () => context.push('${AppRoutes.providerMyReels}/${widget.providerId}'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMyProfileTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildActionCard(
-          context: context,
-          icon: Icons.calendar_month,
-          title: 'Booking calendar',
-          subtitle: 'Month view of all bookings',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF0f9b0f), Color(0xFF45b649)],
-          ),
-          onTap: () => context.push(
-            '${AppRoutes.providerBookingCalendar}/${widget.providerId}',
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildActionCard(
-          context: context,
-          icon: Icons.event_busy,
-          title: 'Availability & blocked dates',
-          subtitle: 'Manage when customers can book you',
-          gradient: const LinearGradient(
-            colors: [Color(0xFFcb2d3e), Color(0xFFef473a)],
-          ),
-          onTap: () => context.push(AppRoutes.providerAvailabilityCalendar),
-        ),
-        const SizedBox(height: 12),
-        _buildActionCard(
-          context: context,
-          icon: Icons.storefront_outlined,
-          title: 'Event catalogue',
-          subtitle: 'Offerings, photos, and linked packages',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF11998e), Color(0xFF38ef7d)],
-          ),
-          onTap: () => context.push('${AppRoutes.providerCatalogue}/${widget.providerId}'),
-        ),
-        const SizedBox(height: 12),
-        _buildActionCard(
-          context: context,
-          icon: Icons.person,
-          title: 'Business Profile',
-          subtitle: 'Update your provider profile',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
-          ),
-          onTap: () => context.push(AppRoutes.providerBusinessProfile),
-        ),
-        const SizedBox(height: 12),
-        _buildActionCard(
-          context: context,
-          icon: Icons.policy_outlined,
-          title: 'Refund & Cancellation Policy',
-          subtitle: 'View payment cancellation and refund clauses',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-          ),
-          onTap: () => context.push(AppRoutes.refundCancellationPolicy),
-        ),
-        const SizedBox(height: 12),
-        _buildActionCard(
-          context: context,
-          icon: Icons.logout,
-          title: 'Logout',
-          subtitle: 'Sign out from your account',
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF3B30), Color(0xFFFF6B6B)],
-          ),
-          onTap: () => _showLogoutDialog(context),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    VoidCallback? onTap,
-  }) {
-    final card = Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (onTap == null) return card;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: card,
-    );
-  }
-
-  Widget _buildActionCard({
-    required BuildContext context,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Gradient gradient,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: Colors.white, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.white70,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Navigate to provider login page
-              if (context.mounted) {
-                context.go(AppRoutes.providerLogin);
-              }
-            },
-            child: const Text(
-              'Logout',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
+    return ProviderActionCard(
+      icon: Icons.video_library_outlined,
+      title: 'My reels',
+      subtitle: 'Delivered and in-progress reels',
+      onTap: () => context.push('${AppRoutes.providerMyReels}/${widget.providerId}'),
     );
   }
 }

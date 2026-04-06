@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../../core/constants/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/utils/helpers.dart';
@@ -104,7 +106,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
       setState(() => _isLoading = false);
 
       // 4) Navigate to provider dashboard for this providerId
-      context.go('${AppRoutes.providerDashboard}/${provider.providerId}');
+      context.go('${AppRoutes.providerPortal}/${provider.providerId}/home');
     } on FirebaseAuthException catch (e) {
       setState(() => _isLoading = false);
       String message = 'Login failed. Please try again.';
@@ -146,6 +148,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: ProviderAppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -162,7 +165,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
+                      gradient: ProviderAppColors.primaryGradient,
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: const Icon(
@@ -174,22 +177,22 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Title
-                const Text(
+                Text(
                   'Welcome Back, Provider!',
-                  style: TextStyle(
+                  style: GoogleFonts.poppins(
                     fontSize: 28,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
+                    color: ProviderAppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 12),
 
-                // Subtitle
                 Text(
                   'Sign in to manage your bookings and earnings',
-                  style: TextStyle(
+                  style: GoogleFonts.poppins(
                     fontSize: 16,
-                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w400,
+                    color: ProviderAppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 48),
@@ -200,20 +203,22 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                     // Country code dropdown
                     Container(
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: ProviderAppColors.searchBarFill,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.grey[300]!,
+                          color: ProviderAppColors.outline,
                         ),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _selectedCountryCode,
-                          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[700]),
-                          style: const TextStyle(
+                          icon: Icon(Icons.arrow_drop_down, color: ProviderAppColors.textTertiary),
+                          style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
+                            color: ProviderAppColors.textPrimary,
                           ),
+                          dropdownColor: ProviderAppColors.surfaceElevated,
                           items: _countryCodes.map((country) {
                             return DropdownMenuItem<String>(
                               value: country['code'],
@@ -253,7 +258,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: AppColors.surface,
+                          fillColor: ProviderAppColors.searchBarFill,
                         ),
                         validator: Validators.validatePhone,
                       ),
@@ -282,7 +287,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: AppColors.surface,
+                    fillColor: ProviderAppColors.searchBarFill,
                   ),
                   validator: Validators.validatePassword,
                 ),
@@ -304,52 +309,28 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Login button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text(
-                            'Sign In',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
+                ProviderGradientButton(
+                  onPressed: _isLoading ? null : _login,
+                  loading: _isLoading,
+                  label: 'Sign In',
                 ),
                 const SizedBox(height: 24),
 
                 // Divider
                 Row(
                   children: [
-                    Expanded(child: Divider(color: Colors.grey[300])),
+                    Expanded(child: Divider(color: ProviderAppColors.outline)),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
                         'OR',
-                        style: TextStyle(color: Colors.grey[600]),
+                        style: GoogleFonts.poppins(
+                          color: ProviderAppColors.textTertiary,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                    Expanded(child: Divider(color: Colors.grey[300])),
+                    Expanded(child: Divider(color: ProviderAppColors.outline)),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -367,18 +348,19 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                         return const Icon(Icons.g_mobiledata, size: 24);
                       },
                     ),
-                    label: const Text(
+                    label: Text(
                       'Sign in with Google',
-                      style: TextStyle(
+                      style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
+                        color: ProviderAppColors.textPrimary,
                       ),
                     ),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black87,
-                      side: BorderSide(color: Colors.grey[300]!),
+                      foregroundColor: ProviderAppColors.textPrimary,
+                      side: const BorderSide(color: ProviderAppColors.outline),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                   ),
@@ -392,7 +374,9 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                     children: [
                       Text(
                         "Don't have an account? ",
-                        style: TextStyle(color: Colors.grey[600]),
+                        style: GoogleFonts.poppins(
+                          color: ProviderAppColors.textTertiary,
+                        ),
                       ),
                       TextButton(
                         onPressed: () {
@@ -413,7 +397,9 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                     },
                     child: Text(
                       'Login as Customer',
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: GoogleFonts.poppins(
+                        color: ProviderAppColors.textTertiary,
+                      ),
                     ),
                   ),
                 ),

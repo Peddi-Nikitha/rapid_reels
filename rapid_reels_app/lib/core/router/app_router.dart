@@ -86,6 +86,10 @@ import '../../features/provider/presentation/screens/provider_availability_calen
 import '../../features/provider/presentation/screens/provider_verification_screen.dart';
 import '../../features/provider/presentation/screens/provider_catalogue_list_screen.dart';
 import '../../features/provider/presentation/screens/provider_catalogue_edit_screen.dart';
+import '../../features/provider/presentation/screens/provider_portal_shell.dart';
+import '../../features/provider/presentation/screens/provider_schedule_screen.dart';
+import '../../features/provider/presentation/screens/provider_account_screen.dart';
+import '../../core/theme/provider_app_theme.dart';
 
 // Admin screens
 import '../../features/admin/presentation/screens/admin_login_screen.dart';
@@ -106,6 +110,8 @@ import '../../shared/widgets/main_scaffold.dart';
 // Constants
 import '../constants/app_routes.dart';
 import '../firebase/models/firebase_reel_model.dart';
+
+Widget _providerThemed(Widget child) => ProviderAppTheme.wrap(child);
 
 bool _isProtectedAdminRoute(String location) {
   return location.startsWith('/admin-') && location != AppRoutes.adminLogin;
@@ -692,27 +698,119 @@ class AppRouter {
       // ==================== Provider App Routes ====================
       GoRoute(
         path: '${AppRoutes.providerDashboard}/:providerId',
-        name: 'providerDashboard',
-        pageBuilder: (context, state) {
-          final providerId = state.pathParameters['providerId'] ?? '';
-          return _buildPageWithSlideTransition(
-            context,
-            state,
-            ProviderDashboardScreen(providerId: providerId),
-          );
+        redirect: (context, state) {
+          final id = state.pathParameters['providerId'];
+          if (id == null || id.isEmpty) return null;
+          return '${AppRoutes.providerPortal}/$id/home';
         },
       ),
       GoRoute(
         path: '${AppRoutes.providerBookings}/:providerId',
-        name: 'providerBookings',
-        pageBuilder: (context, state) {
-          final providerId = state.pathParameters['providerId'] ?? '';
-          return _buildPageWithSlideTransition(
-            context,
-            state,
-            ProviderBookingsScreen(providerId: providerId),
-          );
+        redirect: (context, state) {
+          final id = state.pathParameters['providerId'];
+          if (id == null || id.isEmpty) return null;
+          return '${AppRoutes.providerPortal}/$id/bookings';
         },
+      ),
+      GoRoute(
+        path: '${AppRoutes.providerPortal}/:providerId',
+        redirect: (context, state) {
+          final segs = state.uri.pathSegments;
+          if (segs.length == 2 && segs[0] == 'provider-portal') {
+            return '${AppRoutes.providerPortal}/${segs[1]}/home';
+          }
+          return null;
+        },
+        routes: [
+          StatefulShellRoute.indexedStack(
+            builder: (context, state, navigationShell) {
+              final id = state.pathParameters['providerId'] ?? '';
+              return ProviderAppTheme.wrap(
+                ProviderPortalShell(
+                  providerId: id,
+                  navigationShell: navigationShell,
+                ),
+              );
+            },
+            branches: [
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: 'home',
+                    name: 'providerPortalHome',
+                    pageBuilder: (context, state) {
+                      final id = state.pathParameters['providerId'] ?? '';
+                      return NoTransitionPage<void>(
+                        key: state.pageKey,
+                        child: ProviderDashboardScreen(providerId: id),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: 'schedule',
+                    name: 'providerPortalSchedule',
+                    pageBuilder: (context, state) {
+                      final id = state.pathParameters['providerId'] ?? '';
+                      return NoTransitionPage<void>(
+                        key: state.pageKey,
+                        child: ProviderScheduleScreen(providerId: id),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: 'bookings',
+                    name: 'providerPortalBookings',
+                    pageBuilder: (context, state) {
+                      final id = state.pathParameters['providerId'] ?? '';
+                      return NoTransitionPage<void>(
+                        key: state.pageKey,
+                        child: ProviderBookingsScreen(providerId: id),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: 'earnings',
+                    name: 'providerPortalEarnings',
+                    pageBuilder: (context, state) {
+                      final id = state.pathParameters['providerId'] ?? '';
+                      return NoTransitionPage<void>(
+                        key: state.pageKey,
+                        child: ProviderEarningsScreen(providerId: id),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: 'account',
+                    name: 'providerPortalAccount',
+                    pageBuilder: (context, state) {
+                      final id = state.pathParameters['providerId'] ?? '';
+                      return NoTransitionPage<void>(
+                        key: state.pageKey,
+                        child: ProviderAccountScreen(providerId: id),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.liveEventMode,
@@ -720,7 +818,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithFadeTransition(
           context,
           state,
-          const LiveEventModeScreen(),
+          _providerThemed(const LiveEventModeScreen()),
         ),
       ),
       GoRoute(
@@ -729,19 +827,15 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ReelEditorScreen(),
+          _providerThemed(const ReelEditorScreen()),
         ),
       ),
       GoRoute(
         path: '${AppRoutes.providerEarnings}/:providerId',
-        name: 'providerEarnings',
-        pageBuilder: (context, state) {
-          final providerId = state.pathParameters['providerId'] ?? '';
-          return _buildPageWithSlideTransition(
-            context,
-            state,
-            ProviderEarningsScreen(providerId: providerId),
-          );
+        redirect: (context, state) {
+          final id = state.pathParameters['providerId'];
+          if (id == null || id.isEmpty) return null;
+          return '${AppRoutes.providerPortal}/$id/earnings';
         },
       ),
       GoRoute(
@@ -750,7 +844,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const UploadFootageScreen(),
+          _providerThemed(const UploadFootageScreen()),
         ),
       ),
       GoRoute(
@@ -761,7 +855,7 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderMyReelsScreen(providerId: providerId),
+            _providerThemed(ProviderMyReelsScreen(providerId: providerId)),
           );
         },
       ),
@@ -773,7 +867,7 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderCatalogueListScreen(providerId: providerId),
+            _providerThemed(ProviderCatalogueListScreen(providerId: providerId)),
           );
         },
       ),
@@ -788,9 +882,11 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderCatalogueEditScreen(
-              providerId: providerId,
-              catalogueEventId: catalogueEventId,
+            _providerThemed(
+              ProviderCatalogueEditScreen(
+                providerId: providerId,
+                catalogueEventId: catalogueEventId,
+              ),
             ),
           );
         },
@@ -803,7 +899,9 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderBookingCalendarScreen(providerId: providerId),
+            _providerThemed(
+              ProviderBookingCalendarScreen(providerId: providerId),
+            ),
           );
         },
       ),
@@ -816,9 +914,11 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderBookingTimelineScreen(
-              providerId: providerId,
-              bookingId: bookingId,
+            _providerThemed(
+              ProviderBookingTimelineScreen(
+                providerId: providerId,
+                bookingId: bookingId,
+              ),
             ),
           );
         },
@@ -832,9 +932,11 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderCustomerContactScreen(
-              providerId: providerId,
-              bookingId: bookingId,
+            _providerThemed(
+              ProviderCustomerContactScreen(
+                providerId: providerId,
+                bookingId: bookingId,
+              ),
             ),
           );
         },
@@ -848,9 +950,11 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderVenueNavigationScreen(
-              providerId: providerId,
-              bookingId: bookingId,
+            _providerThemed(
+              ProviderVenueNavigationScreen(
+                providerId: providerId,
+                bookingId: bookingId,
+              ),
             ),
           );
         },
@@ -864,9 +968,11 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderPreEventChecklistScreen(
-              providerId: providerId,
-              bookingId: bookingId,
+            _providerThemed(
+              ProviderPreEventChecklistScreen(
+                providerId: providerId,
+                bookingId: bookingId,
+              ),
             ),
           );
         },
@@ -880,9 +986,11 @@ class AppRouter {
           return _buildPageWithSlideTransition(
             context,
             state,
-            ProviderBookingStatusScreen(
-              providerId: providerId,
-              bookingId: bookingId,
+            _providerThemed(
+              ProviderBookingStatusScreen(
+                providerId: providerId,
+                bookingId: bookingId,
+              ),
             ),
           );
         },
@@ -895,7 +1003,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderLoginScreen(),
+          _providerThemed(const ProviderLoginScreen()),
         ),
       ),
       GoRoute(
@@ -904,7 +1012,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderRegistrationScreen(),
+          _providerThemed(const ProviderRegistrationScreen()),
         ),
       ),
       GoRoute(
@@ -913,7 +1021,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderBusinessProfileScreen(),
+          _providerThemed(const ProviderBusinessProfileScreen()),
         ),
       ),
       GoRoute(
@@ -922,7 +1030,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderPortfolioUploadScreen(),
+          _providerThemed(const ProviderPortfolioUploadScreen()),
         ),
       ),
       GoRoute(
@@ -931,7 +1039,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderServiceAreasScreen(),
+          _providerThemed(const ProviderServiceAreasScreen()),
         ),
       ),
       GoRoute(
@@ -940,7 +1048,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderDocumentUploadScreen(),
+          _providerThemed(const ProviderDocumentUploadScreen()),
         ),
       ),
       GoRoute(
@@ -949,7 +1057,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderAvailabilityCalendarScreen(),
+          _providerThemed(const ProviderAvailabilityCalendarScreen()),
         ),
       ),
       GoRoute(
@@ -958,7 +1066,7 @@ class AppRouter {
         pageBuilder: (context, state) => _buildPageWithSlideTransition(
           context,
           state,
-          const ProviderVerificationScreen(),
+          _providerThemed(const ProviderVerificationScreen()),
         ),
       ),
 

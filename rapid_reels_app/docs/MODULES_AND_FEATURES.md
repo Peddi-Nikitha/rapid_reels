@@ -201,9 +201,15 @@ Also uses **`google_sign_in`** via `AuthRepository` for Google authentication.
 
 **Purpose:** Provider lifecycle: registration, business profile, portfolio & documents, service areas, availability, verification, catalogue CRUD, dashboard, bookings calendar/timeline/status, customer contact, venue navigation, pre-event checklist, live event mode, footage upload, reel editor, earnings, login.
 
+**Navigation & theme:** Signed-in hub uses **`StatefulShellRoute`** under `/provider-portal/:providerId` with bottom tabs **Home · Schedule · Bookings · Earnings · Account** (`ProviderPortalShell`, `ProviderBottomNavBar`). Legacy URLs `/provider-dashboard/:id`, `/provider-bookings/:id`, and `/provider-earnings/:id` **redirect** into this shell. Provider-only screens use **`ProviderAppTheme`** (orange accent, charcoal surfaces, Poppins) at the router; the customer app keeps the neon theme.
+
+**Earnings:** `provider_earnings_screen` aggregates **`payment_transactions`** where `providerUserId` matches, sums **gross** for `status == succeeded`, and shows **estimated net** using `commissionRate` on the provider document. **Bank / payout** fields live on `providers.bankDetails` (`ProviderBankDetailsScreen`).
+
 | Screen | Related stack |
 |--------|----------------|
 | Registration / verification chain | Firestore `providers`, Storage under `providers/{providerId}/**` |
+| `provider_schedule_screen` | Embedded `provider_booking_calendar_screen` + `provider_availability_calendar_screen` |
+| `provider_account_screen`, `provider_bank_details_screen` | Firestore `providers` |
 | `provider_availability_calendar_screen` | `table_calendar`, Firestore |
 | `upload_footage_screen`, `provider_portfolio_upload_screen`, `provider_document_upload_screen` | `firebase_storage`, `image_picker` |
 | `provider_catalogue_list_screen`, `provider_catalogue_edit_screen` | `catalogue_events` subcollection |
@@ -288,7 +294,7 @@ Cloud Function **`processReferral`** (Firestore trigger) supports referral autom
 | Area | Path (indicative) | Role |
 |------|-------------------|------|
 | Routing | `lib/core/router/app_router.dart`, `app_routes.dart` | All routes; admin guard |
-| Theme | `lib/core/theme/app_theme.dart`, `app_colors.dart` | Global look & feel |
+| Theme | `lib/core/theme/app_theme.dart`, `app_colors.dart` (customer neon); `provider_app_theme.dart`, `provider_app_colors.dart` (provider portal warm/orange) | Global look & feel; provider shell uses a separate `ThemeData` |
 | Firebase services | `lib/core/firebase/services/` | Init, Firestore access |
 | Models | `lib/core/firebase/models/` | User, booking, reel, provider, etc. |
 | Admin helpers | `lib/core/admin/` | Admin route cache, role check |

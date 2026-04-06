@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
@@ -19,7 +19,13 @@ const _orderedDayKeys = [
 ];
 
 class ProviderAvailabilityCalendarScreen extends StatefulWidget {
-  const ProviderAvailabilityCalendarScreen({super.key});
+  /// When true, no [Scaffold] / AppBar — for embedding in [ProviderScheduleScreen].
+  final bool embedded;
+
+  const ProviderAvailabilityCalendarScreen({
+    super.key,
+    this.embedded = false,
+  });
 
   @override
   State<ProviderAvailabilityCalendarScreen> createState() =>
@@ -160,29 +166,16 @@ class _ProviderAvailabilityCalendarScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text(
-          'Availability Calendar',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text(_error!, textAlign: TextAlign.center))
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _error != null
+            ? Center(child: Text(_error!, textAlign: TextAlign.center))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!widget.embedded) ...[
                       const Text(
                         'Set Your Availability',
                         style: TextStyle(
@@ -196,6 +189,7 @@ class _ProviderAvailabilityCalendarScreenState
                         style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 32),
+                    ],
                       const Text(
                         'Weekly Schedule',
                         style: TextStyle(
@@ -222,7 +216,7 @@ class _ProviderAvailabilityCalendarScreenState
                             icon: const Icon(Icons.add),
                             label: const Text('Block Date'),
                             style: TextButton.styleFrom(
-                              foregroundColor: AppColors.primary,
+                              foregroundColor: ProviderAppColors.primary,
                             ),
                           ),
                         ],
@@ -232,7 +226,7 @@ class _ProviderAvailabilityCalendarScreenState
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: AppColors.surface,
+                            color: ProviderAppColors.surface,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Center(
@@ -274,20 +268,45 @@ class _ProviderAvailabilityCalendarScreenState
                         text: _saving ? 'Saving...' : 'Save availability',
                         onPressed: _saving ? () {} : _saveToFirestore,
                       ),
-                      const SizedBox(height: 16),
-                      CustomButton(
-                        text: 'Complete Setup',
-                        onPressed: _saving
-                            ? () {}
-                            : () async {
-                                await _saveToFirestore();
-                                if (!context.mounted) return;
-                                _showCompleteDialog();
-                              },
-                      ),
+                      if (!widget.embedded) ...[
+                        const SizedBox(height: 16),
+                        CustomButton(
+                          text: 'Complete Setup',
+                          onPressed: _saving
+                              ? () {}
+                              : () async {
+                                  await _saveToFirestore();
+                                  if (!context.mounted) return;
+                                  _showCompleteDialog();
+                                },
+                        ),
+                      ],
                     ],
                   ),
-                ),
+                );
+
+    if (widget.embedded) {
+      return ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: body,
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: ProviderAppColors.background,
+      appBar: AppBar(
+        backgroundColor: ProviderAppColors.surface,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
+        title: const Text(
+          'Availability Calendar',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: body,
     );
   }
 
@@ -299,7 +318,7 @@ class _ProviderAvailabilityCalendarScreenState
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: ProviderAppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -320,7 +339,7 @@ class _ProviderAvailabilityCalendarScreenState
                 schedule['isOpen'] = value;
               });
             },
-            activeThumbColor: AppColors.primary,
+            activeThumbColor: ProviderAppColors.primary,
           ),
           if (isOpen) ...[
             const SizedBox(width: 16),
@@ -330,14 +349,14 @@ class _ProviderAvailabilityCalendarScreenState
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
+                  color: ProviderAppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   '${schedule['startTime']} - ${schedule['endTime']}',
                   style: const TextStyle(
                     fontSize: 12,
-                    color: AppColors.primary,
+                    color: ProviderAppColors.primary,
                   ),
                 ),
               ),
@@ -388,9 +407,9 @@ class _ProviderAvailabilityCalendarScreenState
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: AppColors.primary,
-              onPrimary: AppColors.onPrimary,
-              surface: AppColors.surface,
+              primary: ProviderAppColors.primary,
+              onPrimary: ProviderAppColors.onPrimary,
+              surface: ProviderAppColors.surface,
               onSurface: Colors.white,
             ),
           ),
@@ -411,12 +430,12 @@ class _ProviderAvailabilityCalendarScreenState
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         title: const Text('Registration Complete!'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, size: 64, color: AppColors.success),
+            Icon(Icons.check_circle, size: 64, color: ProviderAppColors.success),
             const SizedBox(height: 16),
             const Text(
               'Your provider account has been created successfully.',

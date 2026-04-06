@@ -19,6 +19,36 @@ service cloud.firestore {
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType in ['admin', 'superadmin'];
     }
+
+    // Provider booking updates may change status, metadata, eventStatus, timestamps — not identity, payment, or core event fields.
+    function providerBookingImmutableFieldsMatch() {
+      let b = resource.data;
+      let a = request.resource.data;
+      return a.customerId == b.customerId &&
+        a.providerId == b.providerId &&
+        a.payment == b.payment &&
+        a.venue == b.venue &&
+        a.package == b.package &&
+        a.customizations == b.customizations &&
+        a.eventType == b.eventType &&
+        a.eventName == b.eventName &&
+        a.eventDate == b.eventDate &&
+        a.eventDateKey == b.eventDateKey &&
+        a.eventTime == b.eventTime &&
+        a.duration == b.duration &&
+        a.guestCount == b.guestCount &&
+        a.contactPerson == b.contactPerson &&
+        a.contactNumber == b.contactNumber &&
+        a.alternateContact == b.alternateContact &&
+        a.specialRequirements == b.specialRequirements &&
+        a.keyMoments == b.keyMoments &&
+        a.expectedReelsCount == b.expectedReelsCount &&
+        a.deliveryTimeline == b.deliveryTimeline &&
+        a.createdAt == b.createdAt &&
+        a.catalogueEventId == b.catalogueEventId &&
+        a.catalogueTitle == b.catalogueTitle &&
+        a.catalogueHeroUrl == b.catalogueHeroUrl;
+    }
     
     // ==================== USERS COLLECTION ====================
     match /users/{userId} {
@@ -83,8 +113,8 @@ service cloud.firestore {
       // Customer can update their bookings (cancel, etc.)
       allow update: if isOwner(resource.data.customerId);
       
-      // Provider can update their bookings (accept, update status, etc.)
-      allow update: if isOwner(resource.data.providerId);
+      // Provider can update operational fields only (status, metadata, eventStatus, completion/cancel times).
+      allow update: if isOwner(resource.data.providerId) && providerBookingImmutableFieldsMatch();
       
       // Admin can read/write any booking
       allow read, write: if isAdmin();

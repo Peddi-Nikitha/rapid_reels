@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
@@ -26,9 +26,9 @@ class _ProviderPortfolioUploadScreenState extends State<ProviderPortfolioUploadS
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -69,10 +69,10 @@ class _ProviderPortfolioUploadScreenState extends State<ProviderPortfolioUploadS
                         width: double.infinity,
                         height: 200,
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
+                          color: ProviderAppColors.surface,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: AppColors.primary,
+                            color: ProviderAppColors.primary,
                             width: 2,
                             style: BorderStyle.solid,
                           ),
@@ -80,7 +80,7 @@ class _ProviderPortfolioUploadScreenState extends State<ProviderPortfolioUploadS
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.cloud_upload, size: 64, color: AppColors.primary),
+                            Icon(Icons.cloud_upload, size: 64, color: ProviderAppColors.primary),
                             const SizedBox(height: 16),
                             const Text(
                               'Upload Reels or Photos',
@@ -123,8 +123,8 @@ class _ProviderPortfolioUploadScreenState extends State<ProviderPortfolioUploadS
                         icon: const Icon(Icons.add),
                         label: const Text('Add More Items'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          side: const BorderSide(color: AppColors.primary),
+                          foregroundColor: ProviderAppColors.primary,
+                          side: const BorderSide(color: ProviderAppColors.primary),
                         ),
                       ),
                     ),

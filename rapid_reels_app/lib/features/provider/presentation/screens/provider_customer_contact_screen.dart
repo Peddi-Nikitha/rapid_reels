@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
@@ -93,16 +94,16 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
       builder: (context, bookingSnapshot) {
         if (bookingSnapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: ProviderAppColors.background,
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
         if (bookingSnapshot.hasError || !bookingSnapshot.hasData || bookingSnapshot.data == null) {
           return Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: ProviderAppColors.background,
             appBar: AppBar(
-              backgroundColor: AppColors.surface,
+              backgroundColor: ProviderAppColors.surface,
               elevation: 0,
               title: const Text(
                 'Customer Contact',
@@ -126,9 +127,9 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
             final customer = userSnapshot.data;
 
             return Scaffold(
-              backgroundColor: AppColors.background,
+              backgroundColor: ProviderAppColors.background,
               appBar: AppBar(
-                backgroundColor: AppColors.surface,
+                backgroundColor: ProviderAppColors.surface,
                 elevation: 0,
                 title: const Text(
                   'Customer Contact',
@@ -144,14 +145,14 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: ProviderAppColors.surface,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Column(
                         children: [
                           CircleAvatar(
                             radius: 40,
-                            backgroundColor: AppColors.primary.withValues(alpha: 0.2),
+                            backgroundColor: ProviderAppColors.primary.withValues(alpha: 0.2),
                             child: Text(
                               (customer?.fullName ?? booking.contactPerson)
                                   .substring(0, 1)
@@ -159,7 +160,7 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
                               style: TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
+                                color: ProviderAppColors.primary,
                               ),
                             ),
                           ),
@@ -273,7 +274,7 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: ProviderAppColors.surface,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: TextField(
@@ -287,25 +288,14 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          // TODO: Persist notes to Firestore (e.g., under booking.metadata)
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Notes saved')),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Save Notes'),
-                      ),
+                    ProviderGradientButton(
+                      onPressed: () {
+                        // TODO: Persist notes to Firestore (e.g., under booking.metadata)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Notes saved')),
+                        );
+                      },
+                      label: 'Save Notes',
                     ),
                   ],
                 ),
@@ -360,14 +350,14 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: ProviderAppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
         onTap: onTap,
         child: Row(
           children: [
-            Icon(icon, color: AppColors.primary, size: 24),
+            Icon(icon, color: ProviderAppColors.primary, size: 24),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -396,92 +386,6 @@ class _ProviderCustomerContactScreenState extends State<ProviderCustomerContactS
         ),
       ),
     );
-  }
-
-  Widget _buildBookingHistoryItem(FirebaseBookingModel booking) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.event,
-              color: AppColors.primary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  booking.eventName,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${booking.eventType} • ${_formatDate(booking.eventDate)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getStatusColor(booking.status).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              booking.status.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: _getStatusColor(booking.status),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return Colors.orange;
-      case 'confirmed':
-        return Colors.blue;
-      case 'ongoing':
-        return Colors.purple;
-      case 'completed':
-        return Colors.green;
-      case 'cancelled':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
   }
 }
 

@@ -1,12 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/services/mock_data_service.dart';
-import '../../../../features/booking/data/models/event_booking_model.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart';
+import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../booking/data/adapters/booking_firebase_mappers.dart';
 
 class ProviderPreEventChecklistScreen extends StatefulWidget {
   final String bookingId;
   final String providerId;
-  
+
   const ProviderPreEventChecklistScreen({
     super.key,
     required this.bookingId,
@@ -14,40 +17,182 @@ class ProviderPreEventChecklistScreen extends StatefulWidget {
   });
 
   @override
-  State<ProviderPreEventChecklistScreen> createState() => _ProviderPreEventChecklistScreenState();
+  State<ProviderPreEventChecklistScreen> createState() =>
+      _ProviderPreEventChecklistScreenState();
 }
 
-class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventChecklistScreen> {
-  final Map<String, bool> _checklistItems = {
-    'Equipment checked (camera, batteries, memory cards)': false,
-    'Backup equipment ready': false,
-    'Venue location confirmed': false,
-    'Customer contact verified': false,
-    'Event schedule reviewed': false,
-    'Backup plan prepared': false,
-    'Transportation arranged': false,
-    'Assistant/team briefed (if applicable)': false,
-    'Editing software ready': false,
-    'Storage space available': false,
-  };
+class _ProviderPreEventChecklistScreenState
+    extends State<ProviderPreEventChecklistScreen> {
+  final _firestore = FirestoreService();
 
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final bookings = mockData.getProviderEvents(widget.providerId);
-    final booking = bookings.firstWhere(
-      (b) => b.eventId == widget.bookingId,
-      orElse: () => bookings.first,
-    );
+    return FutureBuilder<FirebaseBookingModel?>(
+      future: _firestore.getBooking(widget.bookingId),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: ProviderAppColors.background,
+            appBar: AppBar(
+              backgroundColor: ProviderAppColors.background,
+              elevation: 0,
+              title: const Text(
+                'Pre-Event Checklist',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasError) {
+          return Scaffold(
+            backgroundColor: ProviderAppColors.background,
+            appBar: AppBar(
+              backgroundColor: ProviderAppColors.background,
+              title: const Text('Pre-Event Checklist'),
+            ),
+            body: Center(child: Text('${snap.error}')),
+          );
+        }
+        final raw = snap.data;
+        if (raw == null || raw.providerId != widget.providerId) {
+          return Scaffold(
+            backgroundColor: ProviderAppColors.background,
+            appBar: AppBar(
+              backgroundColor: ProviderAppColors.background,
+              title: const Text('Pre-Event Checklist'),
+            ),
+            body: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Booking not found or you do not have access.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
 
+        return _PreEventChecklistLoadedView(
+          raw: raw,
+          firestore: _firestore,
+        );
+      },
+    );
+  }
+}
+
+class _PreEventChecklistLoadedView extends StatefulWidget {
+  const _PreEventChecklistLoadedView({
+    required this.raw,
+    required this.firestore,
+  });
+
+  final FirebaseBookingModel raw;
+  final FirestoreService firestore;
+
+  @override
+  State<_PreEventChecklistLoadedView> createState() =>
+      _PreEventChecklistLoadedViewState();
+}
+
+class _PreEventChecklistLoadedViewState extends State<_PreEventChecklistLoadedView> {
+  static const _kKeys = [
+    'Equipment checked (camera, batteries, memory cards)',
+    'Backup equipment ready',
+    'Venue location confirmed',
+    'Customer contact verified',
+    'Event schedule reviewed',
+    'Backup plan prepared',
+    'Transportation arranged',
+    'Assistant/team briefed (if applicable)',
+    'Editing software ready',
+    'Storage space available',
+  ];
+
+  late Map<String, bool> _checklistItems;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checklistItems = {for (final k in _kKeys) k: false};
+    final saved = widget.raw.metadata?['providerPreEventChecklist'];
+    if (saved is Map) {
+      for (final k in _kKeys) {
+        final v = saved[k];
+        if (v == true) _checklistItems[k] = true;
+      }
+    }
+  }
+
+  Future<void> _persistChecklist() async {
+    setState(() => _saving = true);
+    try {
+      final meta = Map<String, dynamic>.from(widget.raw.metadata ?? {});
+      meta['providerPreEventChecklist'] =
+          Map<String, bool>.from(_checklistItems);
+      await widget.firestore.updateBooking(widget.raw.bookingId, {
+        'metadata': meta,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Checklist saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _markReady() async {
+    setState(() => _saving = true);
+    try {
+      final meta = Map<String, dynamic>.from(widget.raw.metadata ?? {});
+      meta['providerPreEventChecklist'] =
+          Map<String, bool>.from(_checklistItems);
+      meta['providerMarkedReadyAt'] = Timestamp.now();
+      await widget.firestore.updateBooking(widget.raw.bookingId, {
+        'metadata': meta,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Marked as ready (saved on booking)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final booking =
+        BookingFirebaseMappers.toEventBooking(widget.raw);
     final completedCount = _checklistItems.values.where((v) => v).length;
     final totalCount = _checklistItems.length;
     final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         title: const Text(
           'Pre-Event Checklist',
@@ -59,11 +204,10 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Event Info Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: ProviderAppColors.card,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -79,7 +223,8 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                      Icon(Icons.calendar_today,
+                          size: 16, color: Colors.grey[600]),
                       const SizedBox(width: 8),
                       Text(
                         _formatDate(booking.eventDate),
@@ -89,7 +234,8 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
                         ),
                       ),
                       const SizedBox(width: 16),
-                      Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                      Icon(Icons.access_time,
+                          size: 16, color: Colors.grey[600]),
                       const SizedBox(width: 8),
                       Text(
                         booking.eventTime,
@@ -103,22 +249,19 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // Progress Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppColors.primary.withValues(alpha: 0.1),
-                    AppColors.primary.withValues(alpha: 0.05),
+                    ProviderAppColors.primary.withValues(alpha: 0.1),
+                    ProviderAppColors.primary.withValues(alpha: 0.05),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.3),
+                  color: ProviderAppColors.primary.withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
@@ -138,7 +281,7 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: ProviderAppColors.primary,
                         ),
                       ),
                     ],
@@ -147,7 +290,8 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
                   LinearProgressIndicator(
                     value: progress,
                     backgroundColor: Colors.grey[200],
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(ProviderAppColors.primary),
                     minHeight: 8,
                     borderRadius: BorderRadius.circular(4),
                   ),
@@ -162,10 +306,7 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // Checklist Items
             const Text(
               'Checklist Items',
               style: TextStyle(
@@ -176,20 +317,18 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
             const SizedBox(height: 12),
             ..._checklistItems.entries.map((entry) {
               return _buildChecklistItem(
-                key: entry.key,
                 label: entry.key,
                 isChecked: entry.value,
-                onChanged: (value) {
-                  setState(() {
-                    _checklistItems[entry.key] = value ?? false;
-                  });
-                },
+                onChanged: _saving
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _checklistItems[entry.key] = value ?? false;
+                        });
+                      },
               );
             }),
-
             const SizedBox(height: 24),
-
-            // Action Buttons
             if (completedCount == totalCount)
               Container(
                 padding: const EdgeInsets.all(16),
@@ -217,70 +356,45 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
                   ],
                 ),
               ),
-
             const SizedBox(height: 16),
-
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Save checklist
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Checklist saved')),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text('Save Checklist'),
-              ),
+            ProviderGradientButton(
+              onPressed: _saving ? null : _persistChecklist,
+              loading: _saving,
+              label: _saving ? 'Saving…' : 'Save Checklist',
             ),
-
             const SizedBox(height: 12),
-
             if (completedCount == totalCount)
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () {
-                    // Mark as ready
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Mark as Ready?'),
-                        content: const Text(
-                          'Are you sure you want to mark this event as ready? This will notify the customer.',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Cancel'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Event marked as ready!'),
-                                  backgroundColor: Colors.green,
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          showDialog<void>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Mark as Ready?'),
+                              content: const Text(
+                                'Save readiness on this booking? You can change checklist items later.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancel'),
                                 ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
+                                ProviderSuccessButton(
+                                  fullWidth: false,
+                                  minHeight: 40,
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _markReady();
+                                  },
+                                  label: 'Mark Ready',
+                                ),
+                              ],
                             ),
-                            child: const Text('Mark Ready'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                          );
+                        },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.green,
                     side: const BorderSide(color: Colors.green),
@@ -299,16 +413,15 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
   }
 
   Widget _buildChecklistItem({
-    required String key,
     required String label,
     required bool isChecked,
-    required ValueChanged<bool?> onChanged,
+    required ValueChanged<bool?>? onChanged,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: ProviderAppColors.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isChecked
@@ -351,11 +464,10 @@ class _ProviderPreEventChecklistScreenState extends State<ProviderPreEventCheckl
   }
 
   String _formatDate(DateTime date) {
-    final months = [
+    const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${date.day} ${months[date.month - 1]}, ${date.year}';
   }
 }
-

@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../core/theme/provider_app_theme.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import 'provider_booking_details_screen.dart';
@@ -56,19 +59,21 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
         }
 
         return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.background,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Bookings',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
         ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: AppColors.primary,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: Colors.grey,
+          indicatorColor: ProviderAppColors.primary,
+          labelColor: ProviderAppColors.primary,
+          unselectedLabelColor: ProviderAppColors.textMuted,
+          labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+          unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w500, fontSize: 13),
           isScrollable: true,
           tabs: [
             Tab(text: 'Pending (${pending.length})'),
@@ -96,9 +101,12 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.event_busy, size: 64, color: Colors.grey[400]),
+            Icon(Icons.event_busy, size: 64, color: ProviderAppColors.textMuted),
             const SizedBox(height: 16),
-            Text('No $status bookings', style: TextStyle(color: Colors.grey[600])),
+            Text(
+              'No $status bookings',
+              style: GoogleFonts.poppins(color: ProviderAppColors.textSecondary),
+            ),
           ],
         ),
       );
@@ -119,8 +127,9 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: ProviderAppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ProviderAppColors.outline.withValues(alpha: 0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,12 +142,19 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                   children: [
                     Text(
                       booking.eventType.toUpperCase(),
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: ProviderAppColors.textPrimary,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'ID: ${booking.bookingId}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: ProviderAppColors.textTertiary,
+                      ),
                     ),
                   ],
                 ),
@@ -174,12 +190,14 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    Navigator.push(
+                    Navigator.push<void>(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => ProviderBookingDetailsScreen(
-                          bookingId: booking.bookingId,
-                          providerId: widget.providerId,
+                      MaterialPageRoute<void>(
+                        builder: (context) => ProviderAppTheme.wrap(
+                          ProviderBookingDetailsScreen(
+                            bookingId: booking.bookingId,
+                            providerId: widget.providerId,
+                          ),
                         ),
                       ),
                     );
@@ -187,8 +205,11 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                   icon: const Icon(Icons.info_outline, size: 18),
                   label: const Text('Details'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
+                    foregroundColor: ProviderAppColors.primary,
+                    side: const BorderSide(color: ProviderAppColors.primary),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                 ),
               ),
@@ -198,28 +219,33 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
                   child: OutlinedButton(
                     onPressed: () => _declineBooking(booking),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
+                      foregroundColor: ProviderAppColors.error,
+                      side: const BorderSide(color: ProviderAppColors.error),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     child: const Text('Decline'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
+                  child: ProviderSuccessButton(
+                    fullWidth: true,
+                    minHeight: 44,
                     onPressed: () => _acceptBooking(booking),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                    child: const Text('Accept'),
+                    label: 'Accept',
                   ),
                 ),
               ],
               if (booking.status == 'confirmed' || booking.status == 'ongoing') ...[
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
+                  child: ProviderGradientButton(
+                    fullWidth: true,
+                    minHeight: 44,
                     onPressed: () => _markAsDone(booking),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                    child: const Text('Mark Done'),
+                    label: 'Mark Done',
                   ),
                 ),
               ],
@@ -233,12 +259,15 @@ class _ProviderBookingsScreenState extends State<ProviderBookingsScreen>
   Widget _buildInfoRow(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 14, color: Colors.grey[600]),
+        Icon(icon, size: 14, color: ProviderAppColors.textTertiary),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
-            style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: ProviderAppColors.textSecondary,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

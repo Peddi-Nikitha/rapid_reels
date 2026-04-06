@@ -409,12 +409,18 @@ class BankDetails {
   final String ifscCode;
   final String accountHolderName;
   final String upiId;
+  /// Optional display name for the bank (UK/IN and other regions).
+  final String bankName;
+  /// Optional ISO region hint for payout forms.
+  final String countryCode;
 
   BankDetails({
     required this.accountNumber,
     required this.ifscCode,
     required this.accountHolderName,
     required this.upiId,
+    this.bankName = '',
+    this.countryCode = '',
   });
 
   factory BankDetails.fromMap(Map<String, dynamic> map) {
@@ -423,6 +429,8 @@ class BankDetails {
       ifscCode: map['ifscCode'] ?? '',
       accountHolderName: map['accountHolderName'] ?? '',
       upiId: map['upiId'] ?? '',
+      bankName: map['bankName'] ?? '',
+      countryCode: map['countryCode'] ?? '',
     );
   }
 
@@ -432,6 +440,8 @@ class BankDetails {
       'ifscCode': ifscCode,
       'accountHolderName': accountHolderName,
       'upiId': upiId,
+      'bankName': bankName,
+      'countryCode': countryCode,
     };
   }
 }

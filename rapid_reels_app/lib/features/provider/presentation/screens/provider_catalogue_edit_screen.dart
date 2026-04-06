@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/models/firebase_catalogue_event_model.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
@@ -195,9 +196,11 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          ProviderGradientButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Add package'),
+            label: 'Add package',
+            fullWidth: false,
+            minHeight: 40,
           ),
         ],
       ),
@@ -244,7 +247,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Package added and selected for this catalogue entry.'),
-            backgroundColor: AppColors.primary,
+            backgroundColor: ProviderAppColors.primary,
           ),
         );
       }
@@ -279,9 +282,11 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          ProviderGradientButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save'),
+            label: 'Save',
+            fullWidth: false,
+            minHeight: 40,
           ),
         ],
       ),
@@ -408,7 +413,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
       await _firestore.upsertCatalogueEvent(widget.providerId, model);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved'), backgroundColor: AppColors.primary),
+        const SnackBar(content: Text('Saved'), backgroundColor: ProviderAppColors.primary),
       );
       context.go('${AppRoutes.providerCatalogue}/${widget.providerId}');
     } catch (e) {
@@ -427,7 +432,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
 
     return Card(
       elevation: 0,
-      color: AppColors.surface,
+      color: ProviderAppColors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.grey.shade300),
@@ -471,7 +476,7 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.background,
+                  color: ProviderAppColors.background,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
@@ -482,10 +487,10 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
                 ),
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
+              ProviderGradientButton(
                 onPressed: _saving ? null : _showQuickAddStarterPackage,
                 icon: const Icon(Icons.add),
-                label: const Text('Add starter package'),
+                label: 'Add starter package',
               ),
             ] else ...[
               if (unlinked.isNotEmpty)
@@ -602,14 +607,14 @@ class _ProviderCatalogueEditScreenState extends State<ProviderCatalogueEditScree
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        body: Center(child: CircularProgressIndicator(color: ProviderAppColors.primary)),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         title: Text(widget.isNew ? 'New catalogue entry' : 'Edit entry'),
       ),
       body: Form(

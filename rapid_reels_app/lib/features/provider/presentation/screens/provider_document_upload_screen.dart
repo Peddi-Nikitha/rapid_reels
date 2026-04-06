@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
@@ -32,9 +32,9 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -74,13 +74,13 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.info.withValues(alpha: 0.1),
+                color: ProviderAppColors.info.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
+                border: Border.all(color: ProviderAppColors.info.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppColors.info),
+                  Icon(Icons.info_outline, color: ProviderAppColors.info),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -111,10 +111,10 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: ProviderAppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: hasFile ? AppColors.success : Colors.grey[700]!,
+          color: hasFile ? ProviderAppColors.success : Colors.grey[700]!,
           width: 1,
         ),
       ),
@@ -127,13 +127,13 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: hasFile
-                      ? AppColors.success.withValues(alpha: 0.1)
-                      : AppColors.primary.withValues(alpha: 0.1),
+                      ? ProviderAppColors.success.withValues(alpha: 0.1)
+                      : ProviderAppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   hasFile ? Icons.check_circle : Icons.description,
-                  color: hasFile ? AppColors.success : AppColors.primary,
+                  color: hasFile ? ProviderAppColors.success : ProviderAppColors.primary,
                   size: 24,
                 ),
               ),
@@ -154,7 +154,7 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
                       hasFile ? 'Uploaded' : 'Not uploaded',
                       style: TextStyle(
                         fontSize: 12,
-                        color: hasFile ? AppColors.success : Colors.grey[600],
+                        color: hasFile ? ProviderAppColors.success : Colors.grey[600],
                       ),
                     ),
                   ],
@@ -175,12 +175,12 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
                   icon: const Icon(Icons.upload_file),
                   label: const Text('Upload'),
                   style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
+                    foregroundColor: ProviderAppColors.primary,
                   ),
                 ),
             ],
           ),
-          if (hasFile && filePath != null) ...[
+          if (hasFile) ...[
             const SizedBox(height: 12),
             Container(
               height: 100,

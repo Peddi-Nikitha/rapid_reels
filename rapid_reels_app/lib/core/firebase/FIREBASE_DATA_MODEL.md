@@ -117,7 +117,7 @@ firestore/
 - `averageDeliveryTime`: int (minutes)
 - `availability`: Map<String, DayAvailability>
 - `blockedDates`: List<BlockedDate>
-- `bankDetails`: BankDetails?
+- `bankDetails`: BankDetails? (`accountNumber`, `ifscCode`, `accountHolderName`, `upiId`, optional `bankName`, `countryCode`)
 - `commissionRate`: double
 - `isVerified`: bool
 - `isActive`: bool

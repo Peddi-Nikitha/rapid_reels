@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../shared/widgets/custom_button.dart';
@@ -56,9 +56,9 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -100,9 +100,9 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
+                          color: ProviderAppColors.surface,
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.primary, width: 2),
+                          border: Border.all(color: ProviderAppColors.primary, width: 2),
                         ),
                         child: _selectedProfileImage != null
                             ? ClipOval(
@@ -153,7 +153,7 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
                           width: 100,
                           margin: const EdgeInsets.only(right: 12),
                           decoration: BoxDecoration(
-                            color: AppColors.surface,
+                            color: ProviderAppColors.surface,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: Colors.grey[700]!, width: 1),
                           ),
@@ -252,8 +252,8 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
                         }
                       });
                     },
-                    selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                    checkmarkColor: AppColors.primary,
+                    selectedColor: ProviderAppColors.primary.withValues(alpha: 0.2),
+                    checkmarkColor: ProviderAppColors.primary,
                   );
                 }).toList(),
               ),

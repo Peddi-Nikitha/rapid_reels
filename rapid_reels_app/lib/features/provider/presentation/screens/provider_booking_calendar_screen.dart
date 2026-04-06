@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../../../../core/booking/date_availability.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_routes.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../booking/data/adapters/booking_firebase_mappers.dart';
 import '../../../booking/data/models/event_booking_model.dart';
-
-bool isSameDay(DateTime? a, DateTime? b) {
-  if (a == null || b == null) return false;
-  return a.year == b.year && a.month == b.month && a.day == b.day;
-}
+import '../../../../shared/widgets/provider/provider_day_agenda_bottom_sheet.dart';
+import '../../../../shared/widgets/provider/provider_month_calendar.dart';
+import 'provider_booking_details_screen.dart';
 
 class ProviderBookingCalendarScreen extends StatefulWidget {
   final String providerId;
 
+  /// When true, no [Scaffold] / AppBar — for embedding in [ProviderScheduleScreen].
+  final bool embedded;
+
   const ProviderBookingCalendarScreen({
     super.key,
     required this.providerId,
+    this.embedded = false,
   });
 
   @override
@@ -40,7 +40,8 @@ class _ProviderBookingCalendarScreenState
     List<EventBooking> all,
     DateTime day,
   ) {
-    var filtered = all.where((b) => isSameDay(b.eventDate, day)).toList();
+    var filtered =
+        all.where((b) => providerCalendarIsSameDay(b.eventDate, day)).toList();
     if (_selectedStatusFilter != null &&
         _selectedStatusFilter!.isNotEmpty) {
       filtered = filtered
@@ -86,10 +87,17 @@ class _ProviderBookingCalendarScreenState
 
   @override
   Widget build(BuildContext context) {
+    final body = _buildCalendarBody(context);
+    if (widget.embedded) {
+      return ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: body,
+      );
+    }
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.background,
         elevation: 0,
         title: const Text(
           'Booking Calendar',
@@ -102,7 +110,15 @@ class _ProviderBookingCalendarScreenState
           ),
         ],
       ),
-      body: StreamBuilder<FirebaseProviderModel?>(
+      body: body,
+    );
+  }
+
+  Widget _buildCalendarBody(BuildContext context) {
+    final theme = Theme.of(context);
+    final surface = theme.colorScheme.surface;
+
+    return StreamBuilder<FirebaseProviderModel?>(
         stream: _firestore.streamProviderDoc(widget.providerId),
         builder: (context, provSnap) {
           return StreamBuilder<List<FirebaseBookingModel>>(
@@ -122,11 +138,24 @@ class _ProviderBookingCalendarScreenState
 
               return Column(
                 children: [
+                  if (widget.embedded)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.filter_list),
+                            onPressed: _showFilterDialog,
+                          ),
+                        ],
+                      ),
+                    ),
                   if (_selectedStatusFilter != null)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8),
-                      color: AppColors.surface,
+                      color: surface,
                       child: Row(
                         children: [
                           Text(
@@ -134,7 +163,7 @@ class _ProviderBookingCalendarScreenState
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: Colors.grey[700],
+                              color: theme.hintColor,
                             ),
                           ),
                           Chip(
@@ -150,58 +179,15 @@ class _ProviderBookingCalendarScreenState
                         ],
                       ),
                     ),
-                  TableCalendar<EventBooking>(
-                    firstDay: DateTime.utc(2020, 1, 1),
-                    lastDay: DateTime.utc(2030, 12, 31),
+                  ProviderMonthCalendar(
                     focusedDay: _focusedDay,
+                    selectedDay: _selectedDay,
                     calendarFormat: _calendarFormat,
-                    selectedDayPredicate: (day) =>
-                        isSameDay(_selectedDay, day),
-                    eventLoader: (day) => bookingsMap[day] ?? [],
-                    startingDayOfWeek: StartingDayOfWeek.monday,
-                    calendarStyle: CalendarStyle(
-                      outsideDaysVisible: false,
-                      weekendTextStyle: TextStyle(color: Colors.grey[600]),
-                      selectedDecoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      todayDecoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      /// Green dots: any booking on that day (status-agnostic).
-                      markerDecoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
-                      markersMaxCount: 3,
-                    ),
-                    headerStyle: HeaderStyle(
-                      formatButtonVisible: true,
-                      formatButtonShowsNext: false,
-                      formatButtonDecoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      formatButtonTextStyle:
-                          const TextStyle(color: Colors.white),
-                    ),
-                    enabledDayPredicate: (day) {
-                      if (provider == null) return true;
-                      final dayKey =
-                          DateTime(day.year, day.month, day.day);
-                      final dayBookings = bookingsMap[dayKey] ?? [];
-                      final open = isDateAvailableForProvider(
-                            provider,
-                            day,
-                            occupied,
-                          ) ||
-                          dayBookings.isNotEmpty;
-                      return open;
-                    },
+                    bookingsMap: bookingsMap,
+                    provider: provider,
+                    occupiedDateKeys: occupied,
                     onDaySelected: (selectedDay, focusedDay) {
-                      if (!isSameDay(_selectedDay, selectedDay)) {
+                      if (!providerCalendarIsSameDay(_selectedDay, selectedDay)) {
                         setState(() {
                           _selectedDay = selectedDay;
                           _focusedDay = focusedDay;
@@ -218,47 +204,33 @@ class _ProviderBookingCalendarScreenState
                     onPageChanged: (focusedDay) {
                       _focusedDay = focusedDay;
                     },
-                    calendarBuilders: CalendarBuilders(
-                      defaultBuilder: (context, date, _) {
-                        if (provider == null) return null;
-                        final dayKey =
-                            DateTime(date.year, date.month, date.day);
-                        final hasBooking =
-                            (bookingsMap[dayKey] ?? []).isNotEmpty;
-                        final unavailable = !isDateAvailableForProvider(
-                              provider,
-                              date,
-                              occupied,
-                            ) &&
-                            !hasBooking;
-                        if (!unavailable) return null;
-                        return Center(
-                          child: Text(
-                            '${date.day}',
-                            style: TextStyle(
-                              color: Colors.grey[500],
-                              fontSize: 16,
-                            ),
-                          ),
-                        );
-                      },
-                      markerBuilder: (context, date, bookings) {
-                        if (bookings.isEmpty) return const SizedBox.shrink();
-                        return Positioned(
-                          bottom: 1,
-                          child: Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: AppColors.success,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
                   ),
                   const Divider(height: 1),
+                  if (bookingsForDay.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            final day = DateTime(
+                              _selectedDay.year,
+                              _selectedDay.month,
+                              _selectedDay.day,
+                            );
+                            showProviderDayAgendaBottomSheet(
+                              context: context,
+                              day: day,
+                              bookings: bookingsForDay,
+                              providerId: widget.providerId,
+                            );
+                          },
+                          icon: const Icon(Icons.view_agenda_outlined, size: 20),
+                          label: const Text('Day agenda'),
+                        ),
+                      ),
+                    ),
                   Expanded(
                     child: bookingsForDay.isEmpty
                         ? Center(
@@ -295,7 +267,6 @@ class _ProviderBookingCalendarScreenState
             },
           );
         },
-      ),
     );
   }
 
@@ -304,7 +275,7 @@ class _ProviderBookingCalendarScreenState
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: ProviderAppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: _getStatusColor(booking.status).withValues(alpha: 0.3),
@@ -313,12 +284,16 @@ class _ProviderBookingCalendarScreenState
       ),
       child: InkWell(
         onTap: () {
-          context.push(
-            '${AppRoutes.providerBookings}/details',
-            extra: {
-              'bookingId': booking.eventId,
-              'providerId': widget.providerId,
-            },
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (ctx) => Theme(
+                data: Theme.of(context),
+                child: ProviderBookingDetailsScreen(
+                  bookingId: booking.eventId,
+                  providerId: widget.providerId,
+                ),
+              ),
+            ),
           );
         },
         child: Column(
@@ -395,36 +370,44 @@ class _ProviderBookingCalendarScreenState
   }
 
   void _showFilterDialog() {
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Filter by Status'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildFilterOption('All', null),
-            _buildFilterOption('Pending', 'pending'),
-            _buildFilterOption('Confirmed', 'confirmed'),
-            _buildFilterOption('Ongoing', 'ongoing'),
-            _buildFilterOption('Completed', 'completed'),
-            _buildFilterOption('Cancelled', 'cancelled'),
-          ],
+        content: SingleChildScrollView(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildFilterChip(dialogContext, 'All', null),
+              _buildFilterChip(dialogContext, 'Pending', 'pending'),
+              _buildFilterChip(dialogContext, 'Confirmed', 'confirmed'),
+              _buildFilterChip(dialogContext, 'Ongoing', 'ongoing'),
+              _buildFilterChip(dialogContext, 'Completed', 'completed'),
+              _buildFilterChip(dialogContext, 'Cancelled', 'cancelled'),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildFilterOption(String label, String? status) {
-    return ListTile(
-      title: Text(label),
-      leading: Radio<String?>(
-        value: status,
-        groupValue: _selectedStatusFilter,
-        onChanged: (value) {
-          setState(() => _selectedStatusFilter = value);
-          Navigator.pop(context);
-        },
-      ),
+  Widget _buildFilterChip(
+    BuildContext dialogContext,
+    String label,
+    String? status,
+  ) {
+    final selected = status == null
+        ? _selectedStatusFilter == null
+        : _selectedStatusFilter == status;
+    return FilterChip(
+      showCheckmark: false,
+      selected: selected,
+      label: Text(label),
+      onSelected: (_) {
+        setState(() => _selectedStatusFilter = status);
+        Navigator.pop(dialogContext);
+      },
     );
   }
 }

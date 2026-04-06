@@ -3,11 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
-import '../../../../shared/widgets/custom_button.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import 'video_controller_io.dart' if (dart.library.html) 'video_controller_web.dart' as video_helper;
 
 const _eventTypes = ['wedding', 'engagement', 'birthday', 'corporate', 'brand'];
@@ -41,9 +41,9 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: ProviderAppColors.background,
         appBar: AppBar(
-          backgroundColor: AppColors.surface,
+          backgroundColor: ProviderAppColors.surface,
           elevation: 0,
           title: const Text('Upload Reels', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         ),
@@ -72,9 +72,9 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: ProviderAppColors.background,
             appBar: AppBar(
-              backgroundColor: AppColors.surface,
+              backgroundColor: ProviderAppColors.surface,
               elevation: 0,
               title: const Text(
                 'Upload Reels',
@@ -82,16 +82,16 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
               ),
             ),
             body: const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+              child: CircularProgressIndicator(color: ProviderAppColors.primary),
             ),
           );
         }
         final prov = snap.data;
         if (prov == null || prov.verificationStatus != 'approved') {
           return Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: ProviderAppColors.background,
             appBar: AppBar(
-              backgroundColor: AppColors.surface,
+              backgroundColor: ProviderAppColors.surface,
               elevation: 0,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
@@ -119,9 +119,9 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
           );
         }
         return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         title: const Text('Upload Reels', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         actions: [
@@ -136,7 +136,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: const BoxDecoration(
-                        color: AppColors.primary,
+                        color: ProviderAppColors.primary,
                         shape: BoxShape.circle,
                       ),
                       child: Text(
@@ -163,7 +163,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: ProviderAppColors.surface,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -183,17 +183,19 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                           onChanged: (value) {
                             setState(() => _enableCompression = value ?? true);
                           },
-                          activeColor: AppColors.primary,
+                          activeColor: ProviderAppColors.primary,
                         ),
                         Text('Compress videos before upload', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    CustomButton(
-                      text: 'Select Video',
-                      onPressed: _selectVideo,
-                      isFullWidth: false,
+                    SizedBox(
                       width: 200,
+                      child: ProviderGradientButton(
+                        label: 'Select Video',
+                        onPressed: _selectVideo,
+                        fullWidth: true,
+                      ),
                     ),
                   ],
                 ),
@@ -219,8 +221,8 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                       icon: const Icon(Icons.add),
                       label: const Text('Add More Videos'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
+                        foregroundColor: ProviderAppColors.primary,
+                        side: const BorderSide(color: ProviderAppColors.primary),
                         minimumSize: const Size.fromHeight(48),
                       ),
                     ),
@@ -236,7 +238,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                   LinearProgressIndicator(
                     value: _uploadProgress,
                     backgroundColor: Colors.grey[300],
-                    color: AppColors.primary,
+                    color: ProviderAppColors.primary,
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -266,8 +268,9 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
-                    child: CustomButton(
-                      text: 'Upload ${_selectedReels.length} ${_selectedReels.length == 1 ? 'Reel' : 'Reels'}',
+                    child: ProviderGradientButton(
+                      label:
+                          'Upload ${_selectedReels.length} ${_selectedReels.length == 1 ? 'Reel' : 'Reels'}',
                       onPressed: _uploadReels,
                     ),
                   ),
@@ -292,7 +295,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: ProviderAppColors.surface,
         borderRadius: BorderRadius.circular(12),
         border: hasError ? Border.all(color: Colors.red, width: 1) : null,
       ),
@@ -323,7 +326,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
                     if (status == 'uploading')
                       Text(
                         '${(progress * 100).toInt()}%',
-                        style: TextStyle(fontSize: 12, color: AppColors.primary),
+                        style: TextStyle(fontSize: 12, color: ProviderAppColors.primary),
                       ),
                     if (hasError)
                       Text(
@@ -335,7 +338,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
               ),
               if (hasError)
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: AppColors.primary),
+                  icon: const Icon(Icons.refresh, color: ProviderAppColors.primary),
                   onPressed: () => _retryUpload(index),
                 ),
               IconButton(
@@ -388,7 +391,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
               child: LinearProgressIndicator(
                 value: progress,
                 backgroundColor: Colors.grey[800],
-                color: AppColors.primary,
+                color: ProviderAppColors.primary,
               ),
             ),
         ],
@@ -399,9 +402,9 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
   Widget _buildPreview(VideoPlayerController? controller, XFile? xFile, String status, double progress) {
     if (status == 'uploading') {
       return Container(
-        color: AppColors.primary.withValues(alpha: 0.1),
+        color: ProviderAppColors.primary.withValues(alpha: 0.1),
         child: Center(
-          child: CircularProgressIndicator(value: progress, strokeWidth: 2, color: AppColors.primary),
+          child: CircularProgressIndicator(value: progress, strokeWidth: 2, color: ProviderAppColors.primary),
         ),
       );
     }
@@ -416,11 +419,11 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
       );
     }
     return Container(
-      color: AppColors.primary.withValues(alpha: 0.1),
+      color: ProviderAppColors.primary.withValues(alpha: 0.1),
       child: Center(
         child: Icon(
           status == 'failed' ? Icons.error : Icons.videocam,
-          color: status == 'failed' ? Colors.red : AppColors.primary,
+          color: status == 'failed' ? Colors.red : ProviderAppColors.primary,
           size: 32,
         ),
       ),
@@ -651,7 +654,7 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
   void _showUploadQueue() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: ProviderAppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -669,13 +672,13 @@ class _UploadFootageScreenState extends State<UploadFootageScreen> {
             ..._selectedReels.map((item) => ListTile(
               leading: Icon(
                 item['status'] == 'completed' ? Icons.check_circle : Icons.pending,
-                color: item['status'] == 'completed' ? AppColors.success : Colors.grey,
+                color: item['status'] == 'completed' ? ProviderAppColors.success : Colors.grey,
               ),
               title: Text(item['name'] as String? ?? 'Video'),
               subtitle: Text(item['status'] as String? ?? 'pending'),
               trailing: item['status'] == 'failed'
                   ? IconButton(
-                      icon: const Icon(Icons.refresh, color: AppColors.primary),
+                      icon: const Icon(Icons.refresh, color: ProviderAppColors.primary),
                       onPressed: () => Navigator.pop(context),
                     )
                   : null,

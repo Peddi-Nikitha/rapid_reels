@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 
 class ReelEditorScreen extends StatefulWidget {
   const ReelEditorScreen({super.key});
@@ -27,9 +28,9 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         title: const Text('Reel Editor', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         actions: [
@@ -80,7 +81,7 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
             height: 80,
             margin: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: ProviderAppColors.surface,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -192,7 +193,7 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: ProviderAppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -231,15 +232,13 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
                 ),
               ),
               if (status == 'ready')
-                ElevatedButton(
+                ProviderGradientButton(
                   onPressed: () {
                     _showQualityCheck(item);
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Review'),
+                  label: 'Review',
+                  fullWidth: false,
+                  minHeight: 40,
                 ),
             ],
           ),
@@ -248,7 +247,7 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
             LinearProgressIndicator(
               value: progress,
               backgroundColor: Colors.grey[800],
-              color: AppColors.primary,
+              color: ProviderAppColors.primary,
             ),
             const SizedBox(height: 4),
             Text(
@@ -265,7 +264,7 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         title: const Text('Quality Control Check'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -283,18 +282,16 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Needs Revision'),
           ),
-          ElevatedButton(
+          ProviderSuccessButton(
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Reel approved and ready for delivery!')),
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Approve & Deliver'),
+            label: 'Approve & Deliver',
+            fullWidth: false,
+            minHeight: 40,
           ),
         ],
       ),
@@ -308,7 +305,7 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
         children: [
           Icon(
             passed ? Icons.check_circle : Icons.cancel,
-            color: passed ? AppColors.success : AppColors.error,
+            color: passed ? ProviderAppColors.success : ProviderAppColors.error,
             size: 20,
           ),
           const SizedBox(width: 8),
@@ -321,9 +318,9 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'ready':
-        return AppColors.success;
+        return ProviderAppColors.success;
       case 'processing':
-        return AppColors.warning;
+        return ProviderAppColors.warning;
       default:
         return Colors.grey;
     }
@@ -349,7 +346,7 @@ class _ReelEditorScreenState extends State<ReelEditorScreen> {
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primary : AppColors.surface,
+                    color: isSelected ? ProviderAppColors.primary : ProviderAppColors.surface,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Center(

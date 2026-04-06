@@ -61,7 +61,13 @@ class AppRoutes {
   static const String refundCancellationPolicy = '/refund-cancellation-policy';
 
   // Provider Routes
+  /// Shell with bottom nav: `/provider-portal/:providerId/(home|schedule|bookings|earnings|account)`
+  static const String providerPortal = '/provider-portal';
   static const String providerDashboard = '/provider-dashboard';
+  static const String providerBankDetails = '/provider-bank-details';
+
+  static String providerPortalTab(String providerId, String tab) =>
+      '$providerPortal/$providerId/$tab';
   static const String liveEventMode = '/live-event-mode';
   static const String reelEditor = '/reel-editor';
   static const String uploadFootage = '/upload-footage';

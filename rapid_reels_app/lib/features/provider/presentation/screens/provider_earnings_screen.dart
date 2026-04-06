@@ -1,23 +1,29 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import '../../../../core/constants/app_routes.dart';
+import '../../../../core/firebase/models/firebase_booking_model.dart';
 import '../../../../core/firebase/models/firebase_payment_transaction_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
-import '../../../../core/services/mock_data_service.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 
 class ProviderEarningsScreen extends StatefulWidget {
-  final String providerId;
-  
   const ProviderEarningsScreen({super.key, required this.providerId});
+
+  final String providerId;
 
   @override
   State<ProviderEarningsScreen> createState() => _ProviderEarningsScreenState();
 }
 
-class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with SingleTickerProviderStateMixin {
+class _ProviderEarningsScreenState extends State<ProviderEarningsScreen>
+    with SingleTickerProviderStateMixin {
   String _selectedPeriod = 'This Month';
   late TabController _tabController;
   final _firestoreService = FirestoreService();
-  
+
+  static const _periods = ['This Week', 'This Month', 'This Year', 'All Time'];
+
   @override
   void initState() {
     super.initState();
@@ -29,24 +35,67 @@ class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with Si
     _tabController.dispose();
     super.dispose();
   }
-  
+
+  DateTime _periodStart() {
+    final now = DateTime.now();
+    switch (_selectedPeriod) {
+      case 'This Week':
+        return DateTime(now.year, now.month, now.day)
+            .subtract(Duration(days: now.weekday - DateTime.monday));
+      case 'This Month':
+        return DateTime(now.year, now.month, 1);
+      case 'This Year':
+        return DateTime(now.year, 1, 1);
+      default:
+        return DateTime(2000);
+    }
+  }
+
+  bool _inSelectedPeriod(DateTime t) {
+    if (_selectedPeriod == 'All Time') return true;
+    final start = _periodStart();
+    final end = DateTime.now().add(const Duration(days: 1));
+    return !t.isBefore(start) && t.isBefore(end);
+  }
+
+  List<FirebasePaymentTransactionModel> _filterForPeriod(
+    List<FirebasePaymentTransactionModel> all,
+  ) {
+    return all.where((t) => _inSelectedPeriod(t.createdAt)).toList();
+  }
+
+  double _sumGrossSucceeded(List<FirebasePaymentTransactionModel> list) {
+    return list
+        .where((t) => t.status == 'succeeded')
+        .fold<double>(0, (a, t) => a + t.amount);
+  }
+
+  double _estimateNet(double gross, double commissionPercent) {
+    return gross * (1 - commissionPercent / 100);
+  }
+
+  String _formatMoney(double amount, String currency) {
+    final c = currency.toLowerCase();
+    final sym = c == 'gbp'
+        ? '£'
+        : c == 'inr'
+            ? '₹'
+            : c.toUpperCase();
+    return '$sym${amount.toStringAsFixed(2)}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final mockData = MockDataService();
-    final stats = mockData.getProviderStats(widget.providerId);
-    final totalEarnings = stats['totalEarnings'] as double;
-    
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        title: const Text('Earnings & Analytics', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        title: const Text('Earnings'),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: AppColors.primary,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: Colors.grey,
+          indicatorColor: cs.primary,
+          labelColor: cs.primary,
+          unselectedLabelColor: Theme.of(context).hintColor,
           tabs: const [
             Tab(text: 'Overview'),
             Tab(text: 'Payments'),
@@ -54,373 +103,365 @@ class _ProviderEarningsScreenState extends State<ProviderEarningsScreen> with Si
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildOverviewTab(stats, totalEarnings),
-          _buildPaymentsTab(),
-          _buildAnalyticsTab(stats),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOverviewTab(stats, totalEarnings) {
-    return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Total Earnings Card
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF11998E), Color(0xFF38EF7D)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF11998E).withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Total Earnings', style: TextStyle(fontSize: 14, color: Colors.white70)),
-                const SizedBox(height: 8),
-                Text(
-                  '£${totalEarnings.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.trending_up, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      '+15% from last month',
-                      style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Period Selector
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: ['This Week', 'This Month', 'This Year', 'All Time']
-                  .map((period) => _buildPeriodChip(period))
-                  .toList(),
-            ),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Stats Grid
-          Row(
-            children: [
-              Expanded(child: _buildStatCard('Bookings', '${stats['totalBookings']}', Icons.event, Colors.blue)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildStatCard('Completed', '${stats['completedBookings']}', Icons.check_circle, Colors.green)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _buildStatCard('Pending', '${stats['pendingBookings']}', Icons.hourglass_empty, Colors.orange)),
-              const SizedBox(width: 12),
-              Expanded(child: _buildStatCard('Rating', '${stats['averageRating']}⭐', Icons.star, Colors.amber)),
-            ],
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Recent Transactions
-          const Text('Recent Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          
-          ..._buildTransactions(),
-          
-          const SizedBox(height: 24),
-          
-          // Withdraw Button
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: _showWithdrawDialog,
-              icon: const Icon(Icons.account_balance),
-              label: const Text('Withdraw Funds'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-            ),
-          ),
-        ],
-    );
-  }
-
-  Widget _buildPeriodChip(String period) {
-    final isSelected = _selectedPeriod == period;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedPeriod = period),
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
+      body: StreamBuilder<List<FirebasePaymentTransactionModel>>(
+        stream: _firestoreService.streamPaymentTransactionsForProvider(
+          widget.providerId,
         ),
-        child: Text(
-          period,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isSelected ? Colors.white : Colors.grey[700],
-          ),
-        ),
-      ),
-    );
-  }
+        builder: (context, txSnap) {
+          return StreamBuilder(
+            stream: _firestoreService.streamProviderDoc(widget.providerId),
+            builder: (context, provSnap) {
+              final commission = provSnap.data?.commissionRate ?? 15.0;
+              final allTx = txSnap.data ?? const <FirebasePaymentTransactionModel>[];
+              final periodTx = _filterForPeriod(allTx);
+              final gross = _sumGrossSucceeded(periodTx);
+              final netEst = _estimateNet(gross, commission);
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildTransactions() {
-    final transactions = [
-      {'date': 'Dec 15, 2025', 'event': 'Wedding - Amit & Sneha', 'amount': 25000.0},
-      {'date': 'Dec 10, 2025', 'event': 'Birthday Party', 'amount': 8000.0},
-      {'date': 'Dec 5, 2025', 'event': 'Engagement - Priya & Rohit', 'amount': 15000.0},
-    ];
-    
-    return transactions.map((t) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.arrow_downward, color: Colors.green, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              return TabBarView(
+                controller: _tabController,
                 children: [
-                  Text(t['event'] as String, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(t['date'] as String, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  _buildOverview(context, gross, netEst, commission, periodTx),
+                  _buildPaymentsTab(allTx),
+                  _buildAnalyticsTab(allTx, commission),
                 ],
-              ),
-            ),
-            Text(
-              '£${(t['amount'] as double).toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-            ),
-          ],
-        ),
-      );
-    }).toList();
-  }
-
-  void _showWithdrawDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Withdraw Funds'),
-        content: const Text('Enter amount to withdraw to your bank account.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Withdrawal request submitted!')),
               );
             },
-            child: const Text('Confirm'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildPaymentsTab() {
-    return StreamBuilder<List<FirebasePaymentTransactionModel>>(
-      stream: _firestoreService.streamPaymentTransactionsForProvider(widget.providerId),
-      builder: (context, snapshot) {
-        final transactions = snapshot.data ?? const <FirebasePaymentTransactionModel>[];
-        final pending = transactions.where((t) => t.status == 'processing').toList();
-        final history = transactions.where((t) => t.status != 'processing').toList();
+  Widget _buildOverview(
+    BuildContext context,
+    double grossSucceeded,
+    double netEstimate,
+    double commissionRate,
+    List<FirebasePaymentTransactionModel> periodTx,
+  ) {
+    final recent =
+        periodTx.where((t) => t.status == 'succeeded').take(8).toList();
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text('Pending Payments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            if (pending.isEmpty)
-              _buildEmptyMessage('No pending payments')
-            else
-              ...pending.map((t) => _buildPaymentTxCard(t)),
-            const SizedBox(height: 24),
-            const Text('Payment History', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            if (history.isEmpty)
-              _buildEmptyMessage('No payment history yet')
-            else
-              ...history.map((t) => _buildPaymentTxCard(t)),
-          ],
-        );
-      },
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            gradient: ProviderAppColors.primarySoftGradient,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Customer payments (gross)',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.9),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _formatMoney(grossSucceeded, 'gbp'),
+                style: const TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Est. your share (${(100 - commissionRate).toStringAsFixed(0)}% after ${commissionRate.toStringAsFixed(0)}% platform): ${_formatMoney(netEstimate, 'gbp')}',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                  color: Colors.white.withValues(alpha: 0.92),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _periods
+                .map(
+                  (p) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      selected: _selectedPeriod == p,
+                      label: Text(p),
+                      onSelected: (_) => setState(() => _selectedPeriod = p),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 20),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Payout bank details'),
+          subtitle: const Text('Manage where you receive funds'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () {
+            context.push(
+              '${AppRoutes.providerPortal}/${widget.providerId}/account',
+            );
+          },
+        ),
+        const Divider(),
+        Text(
+          'Recent in period',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 12),
+        if (recent.isEmpty)
+          Text(
+            'No successful payments in this period.',
+            style: TextStyle(color: Theme.of(context).hintColor),
+          )
+        else
+          ...recent.map((t) => _paymentRow(context, t, commissionRate)),
+      ],
+    );
+  }
+
+  Future<String> _bookingTitle(String bookingId) async {
+    final b = await _firestoreService.getBooking(bookingId);
+    if (b == null) return 'Booking $bookingId';
+    return b.eventName.isNotEmpty ? b.eventName : '${b.eventType} · $bookingId';
+  }
+
+  Widget _paymentRow(
+    BuildContext context,
+    FirebasePaymentTransactionModel t,
+    double commissionRate,
+  ) {
+    final net = _estimateNet(
+      t.status == 'succeeded' ? t.amount : 0,
+      commissionRate,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: ListTile(
+          title: FutureBuilder<String>(
+            future: _bookingTitle(t.bookingId),
+            builder: (context, snap) => Text(
+              snap.data ?? '…',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          subtitle: Text(
+            DateFormat.yMMMd().add_jm().format(t.createdAt),
+            style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+          ),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _formatMoney(t.amount, t.currency),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              if (t.status == 'succeeded')
+                Text(
+                  'est. ${_formatMoney(net, t.currency)}',
+                  style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentsTab(List<FirebasePaymentTransactionModel> transactions) {
+    final pending =
+        transactions.where((t) => t.status == 'processing').toList();
+    final history = transactions
+        .where((t) => t.status != 'processing')
+        .toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          'Pending',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        if (pending.isEmpty)
+          _buildEmptyMessage('No pending payments')
+        else
+          ...pending.map((t) => _buildPaymentTxCard(t)),
+        const SizedBox(height: 24),
+        const Text(
+          'History',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        if (history.isEmpty)
+          _buildEmptyMessage('No payment history yet')
+        else
+          ...history.map((t) => _buildPaymentTxCard(t)),
+      ],
     );
   }
 
   Widget _buildEmptyMessage(String message) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Text(message),
     );
   }
 
   Widget _buildPaymentTxCard(FirebasePaymentTransactionModel tx) {
     final isPending = tx.status == 'processing';
-    return _buildPaymentCard({
-      'event': 'Booking ${tx.bookingId}',
-      'amount': tx.amount,
-      'date': '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}',
-    }, isPending: isPending);
-  }
-
-  Widget _buildAnalyticsTab(stats) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          height: 200,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Earnings Trend', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.show_chart, size: 48, color: Colors.grey[600]),
-                      const SizedBox(height: 8),
-                      Text('Chart visualization', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        const Text('Performance Metrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildMetricCard('Avg per Event', '£25,000', Icons.trending_up, Colors.green)),
-            const SizedBox(width: 12),
-            Expanded(child: _buildMetricCard('Total Events', '${stats['totalBookings']}', Icons.event, Colors.blue)),
-          ],
-        ),
-      ],
+    return FutureBuilder<FirebaseBookingModel?>(
+      future: _firestoreService.getBooking(tx.bookingId),
+      builder: (context, snap) {
+        final title = snap.data?.eventName.isNotEmpty == true
+            ? snap.data!.eventName
+            : 'Booking ${tx.bookingId}';
+        return _buildPaymentCard(
+          {
+            'event': title,
+            'amount': tx.amount,
+            'currency': tx.currency,
+            'date':
+                '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year}',
+            'status': tx.status,
+          },
+          isPending: isPending,
+        );
+      },
     );
   }
 
-  Widget _buildPaymentCard(Map<String, dynamic> payment, {required bool isPending}) {
+  Widget _buildPaymentCard(Map<String, dynamic> payment,
+      {required bool isPending}) {
+    final cs = Theme.of(context).colorScheme;
+    final amount = payment['amount'] as double;
+    final currency = payment['currency'] as String? ?? 'gbp';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: cs.surface,
         borderRadius: BorderRadius.circular(12),
-        border: isPending ? Border.all(color: AppColors.warning, width: 1) : null,
+        border: isPending
+            ? Border.all(color: ProviderAppColors.warning, width: 1)
+            : null,
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isPending ? AppColors.warning.withValues(alpha: 0.1) : AppColors.success.withValues(alpha: 0.1),
+              color: isPending
+                  ? ProviderAppColors.warning.withValues(alpha: 0.12)
+                  : cs.primary.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
-            child: Icon(isPending ? Icons.pending : Icons.check_circle, color: isPending ? AppColors.warning : AppColors.success, size: 24),
+            child: Icon(
+              isPending ? Icons.pending : Icons.check_circle,
+              color: isPending ? ProviderAppColors.warning : cs.primary,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(payment['event'] as String, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                Text(
+                  payment['event'] as String,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(payment['date'] as String, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text(
+                  '${payment['date']} · ${payment['status']}',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                ),
               ],
             ),
           ),
-          Text('£${(payment['amount'] as double).toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(
+            _formatMoney(amount, currency),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
-    return Container(
+  Widget _buildAnalyticsTab(
+    List<FirebasePaymentTransactionModel> all,
+    double commissionRate,
+  ) {
+    final succeeded = all.where((t) => t.status == 'succeeded').toList();
+    final byMonth = <String, double>{};
+    for (final t in succeeded) {
+      final k = '${t.createdAt.year}-${t.createdAt.month.toString().padLeft(2, '0')}';
+      byMonth[k] = (byMonth[k] ?? 0) + t.amount;
+    }
+    final keys = byMonth.keys.toList()..sort();
+
+    return ListView(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        ],
-      ),
+      children: [
+        Text(
+          'Gross by month (successful charges)',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 12),
+        if (keys.isEmpty)
+          Text(
+            'No data yet.',
+            style: TextStyle(color: Theme.of(context).hintColor),
+          )
+        else
+          ...keys.map((k) {
+            final gross = byMonth[k]!;
+            final net = _estimateNet(gross, commissionRate);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                tileColor: Theme.of(context).colorScheme.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                title: Text(k),
+                subtitle: Text(
+                  'Est. net ${_formatMoney(net, 'gbp')}',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                ),
+                trailing: Text(
+                  _formatMoney(gross, 'gbp'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            );
+          }),
+      ],
     );
   }
 }
-

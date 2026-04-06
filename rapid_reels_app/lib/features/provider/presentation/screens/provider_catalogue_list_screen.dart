@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/models/firebase_catalogue_event_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
@@ -18,16 +18,16 @@ class ProviderCatalogueListScreen extends StatelessWidget {
     final firestore = FirestoreService();
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         title: const Text('Event catalogue'),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(
           '${AppRoutes.providerCatalogueEdit}/$providerId/new',
         ),
-        backgroundColor: AppColors.primary,
+        backgroundColor: ProviderAppColors.primary,
         icon: const Icon(Icons.add),
         label: const Text('New'),
       ),
@@ -35,7 +35,7 @@ class ProviderCatalogueListScreen extends StatelessWidget {
         stream: firestore.streamCatalogueEvents(providerId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+            return const Center(child: CircularProgressIndicator(color: ProviderAppColors.primary));
           }
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
@@ -48,12 +48,12 @@ class ProviderCatalogueListScreen extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.event_note, size: 56, color: AppColors.textSecondary),
+                    const Icon(Icons.event_note, size: 56, color: ProviderAppColors.textSecondary),
                     const SizedBox(height: 16),
                     const Text(
                       'No catalogue entries yet. Create one with photos, copy, and linked packages so customers can book.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+                      style: TextStyle(color: ProviderAppColors.textSecondary, height: 1.4),
                     ),
                     const SizedBox(height: 20),
                     ElevatedButton(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../shared/widgets/custom_button.dart';
 
@@ -31,9 +31,9 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -67,7 +67,7 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: ProviderAppColors.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -88,7 +88,7 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
+                          color: ProviderAppColors.primary,
                         ),
                       ),
                     ],
@@ -99,7 +99,7 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
                     min: 10,
                     max: 100,
                     divisions: 18,
-                    activeColor: AppColors.primary,
+                    activeColor: ProviderAppColors.primary,
                     onChanged: (value) {
                       setState(() => _serviceRadius = value);
                     },
@@ -143,10 +143,10 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
                       }
                     });
                   },
-                  selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                  checkmarkColor: AppColors.primary,
+                  selectedColor: ProviderAppColors.primary.withValues(alpha: 0.2),
+                  checkmarkColor: ProviderAppColors.primary,
                   avatar: isSelected
-                      ? const Icon(Icons.check_circle, size: 18, color: AppColors.primary)
+                      ? const Icon(Icons.check_circle, size: 18, color: ProviderAppColors.primary)
                       : null,
                 );
               }).toList(),
@@ -157,7 +157,7 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
             Container(
               height: 200,
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: ProviderAppColors.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(

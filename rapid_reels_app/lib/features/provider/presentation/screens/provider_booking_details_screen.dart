@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import '../../../../core/firebase/models/firebase_booking_model.dart';
 import '../../../../core/firebase/models/firebase_payment_transaction_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
@@ -40,13 +42,13 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
         final booking = snapshot.data!;
 
         return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.background,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Booking Details',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
         ),
       ),
       body: SingleChildScrollView(
@@ -93,7 +95,10 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           'Booking ID: ${booking.bookingId}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: ProviderAppColors.textTertiary,
+                          ),
                         ),
                       ],
                     ),
@@ -104,9 +109,13 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
             const SizedBox(height: 24),
             
             // Event Information
-            const Text(
+            Text(
               'Event Information',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: ProviderAppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 12),
             if (booking.catalogueTitle != null && booking.catalogueTitle!.isNotEmpty)
@@ -143,26 +152,31 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
             const SizedBox(height: 24),
             
             // Customer Contact
-            const Text(
+            Text(
               'Customer Contact',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: ProviderAppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
+                color: ProviderAppColors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: ProviderAppColors.outline.withValues(alpha: 0.5)),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
+                      color: ProviderAppColors.primary.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.person, color: AppColors.primary),
+                    child: const Icon(Icons.person, color: ProviderAppColors.primary),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -179,19 +193,22 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           booking.contactNumber,
-                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: ProviderAppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.phone, color: AppColors.primary),
+                    icon: const Icon(Icons.phone, color: ProviderAppColors.primary),
                     onPressed: () {
                       // Make call
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.message, color: AppColors.primary),
+                    icon: const Icon(Icons.message, color: ProviderAppColors.primary),
                     onPressed: () {
                       // Send message
                     },
@@ -202,29 +219,22 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
             const SizedBox(height: 24),
             
             // Navigation to Venue
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  // Open maps navigation
-                },
-                icon: const Icon(Icons.directions),
-                label: const Text('Navigate to Venue'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
+            ProviderGradientButton(
+              onPressed: () {
+                // Open maps navigation
+              },
+              icon: const Icon(Icons.directions),
+              label: 'Navigate to Venue',
             ),
             const SizedBox(height: 24),
 
-            const Text(
+            Text(
               'Payment Transactions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: ProviderAppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 12),
             StreamBuilder<List<FirebasePaymentTransactionModel>>(
@@ -236,10 +246,13 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
+                      color: ProviderAppColors.card,
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Text('No payment transactions yet.'),
+                    child: Text(
+                      'No payment transactions yet.',
+                      style: GoogleFonts.poppins(color: ProviderAppColors.textSecondary),
+                    ),
                   );
                 }
                 return Column(
@@ -257,11 +270,11 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: () => _declineBooking(context, booking, firestoreService),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
+                        foregroundColor: ProviderAppColors.error,
+                        side: const BorderSide(color: ProviderAppColors.error),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
                       child: const Text('Decline'),
@@ -269,17 +282,10 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
+                    child: ProviderSuccessButton(
                       onPressed: () => _acceptBooking(context, booking, firestoreService),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Accept'),
+                      label: 'Accept',
+                      minHeight: 52,
                     ),
                   ),
                 ],
@@ -287,20 +293,9 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
             else if (booking.status == 'confirmed' || booking.status == 'ongoing')
               Column(
                 children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => _markAsDone(context, booking, firestoreService),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Mark as Done'),
-                    ),
+                  ProviderGradientButton(
+                    onPressed: () => _markAsDone(context, booking, firestoreService),
+                    label: 'Mark as Done',
                   ),
                 ],
               ),
@@ -321,12 +316,13 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: ProviderAppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ProviderAppColors.outline.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.primary, size: 24),
+          Icon(icon, color: ProviderAppColors.primary, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -334,14 +330,18 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: ProviderAppColors.textTertiary,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
+                    color: ProviderAppColors.textPrimary,
                   ),
                 ),
               ],
@@ -376,8 +376,8 @@ class ProviderBookingDetailsScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: ProviderAppColors.card,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(

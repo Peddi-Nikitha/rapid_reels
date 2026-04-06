@@ -103,6 +103,12 @@
 - Removed **calendar** and **availability** `AppBar` actions; **notifications** kept.
 - **Title** column: small **Rapid Reels** + **business name**; `toolbarHeight` / `scrolledUnderElevation` tuned for a clearer shell.
 
+### 16. Provider portal shell, earnings, payout — **Done**
+
+- **Bottom navigation** on `/provider-portal/:providerId/...` (Home, Schedule, Bookings, Earnings, Account) with **provider-only** warm/orange theme (`provider_app_theme.dart`); customer routes unchanged.
+- **Schedule** combines **events calendar** and **availability** (embedded calendar screens).
+- **Earnings** from Firestore **`payment_transactions`** + **commission-based net estimate**; **bank details** on `providers.bankDetails` with edit screen (`provider_bank_details_screen.dart`).
+
 ---
 
 ## Suggested implementation order

@@ -69,6 +69,8 @@ sp.ServiceProvider serviceProviderFromFirebase(FirebaseProviderModel p) {
       ifscCode: p.bankDetails!.ifscCode,
       accountHolderName: p.bankDetails!.accountHolderName,
       upiId: p.bankDetails!.upiId,
+      bankName: p.bankDetails!.bankName,
+      countryCode: p.bankDetails!.countryCode,
     ) : null,
     commissionRate: p.commissionRate,
     isVerified: p.isVerified,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 
 class LiveEventModeScreen extends StatefulWidget {
   const LiveEventModeScreen({super.key});
@@ -94,7 +95,7 @@ class _LiveEventModeScreenState extends State<LiveEventModeScreen> {
                     LinearProgressIndicator(
                       value: _coverageProgress,
                       backgroundColor: Colors.grey[800],
-                      color: AppColors.primary,
+                      color: ProviderAppColors.primary,
                     ),
                   ],
                 ),
@@ -216,7 +217,7 @@ class _LiveEventModeScreenState extends State<LiveEventModeScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         title: const Text('Finish Session'),
         content: Text('${_capturedClips.length} clips captured. Ready to upload?'),
         actions: [
@@ -248,7 +249,7 @@ class _LiveEventModeScreenState extends State<LiveEventModeScreen> {
   void _showShotChecklist() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: ProviderAppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -276,20 +277,13 @@ class _LiveEventModeScreenState extends State<LiveEventModeScreen> {
                     _updateCoverageProgress();
                   });
                 },
-                activeColor: AppColors.primary,
+                activeColor: ProviderAppColors.primary,
               );
             }).toList(),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Done'),
-              ),
+            ProviderGradientButton(
+              onPressed: () => Navigator.pop(context),
+              label: 'Done',
             ),
           ],
         ),

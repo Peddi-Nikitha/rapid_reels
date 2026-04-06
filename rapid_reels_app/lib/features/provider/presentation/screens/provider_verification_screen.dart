@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/provider_app_colors.dart';
+import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import '../../../../core/constants/app_routes.dart';
 
 class ProviderVerificationScreen extends StatelessWidget {
@@ -12,9 +13,9 @@ class ProviderVerificationScreen extends StatelessWidget {
     final verificationStatus = 'pending'; // pending, approved, rejected
     
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: ProviderAppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: ProviderAppColors.surface,
         elevation: 0,
         title: const Text(
           'Verification Status',
@@ -70,7 +71,7 @@ class ProviderVerificationScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: ProviderAppColors.surface,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -98,41 +99,18 @@ class ProviderVerificationScreen extends StatelessWidget {
               
               // Action Button
               if (verificationStatus == 'pending')
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // Navigate to dashboard when verified
-                      context.go('${AppRoutes.providerDashboard}/provider_001');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Check Status'),
-                  ),
+                ProviderGradientButton(
+                  onPressed: () {
+                    context.go('${AppRoutes.providerDashboard}/provider_001');
+                  },
+                  label: 'Check Status',
                 )
               else if (verificationStatus == 'approved')
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      context.go('${AppRoutes.providerDashboard}/provider_001');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Go to Dashboard'),
-                  ),
+                ProviderSuccessButton(
+                  onPressed: () {
+                    context.go('${AppRoutes.providerDashboard}/provider_001');
+                  },
+                  label: 'Go to Dashboard',
                 ),
               const SizedBox(height: 16),
             ],
@@ -149,7 +127,7 @@ class ProviderVerificationScreen extends StatelessWidget {
         children: [
           Icon(
             isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-            color: isCompleted ? AppColors.success : Colors.grey[600],
+            color: isCompleted ? ProviderAppColors.success : Colors.grey[600],
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -180,11 +158,11 @@ class ProviderVerificationScreen extends StatelessWidget {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'approved':
-        return AppColors.success;
+        return ProviderAppColors.success;
       case 'rejected':
-        return AppColors.error;
+        return ProviderAppColors.error;
       default:
-        return AppColors.warning;
+        return ProviderAppColors.warning;
     }
   }
 
