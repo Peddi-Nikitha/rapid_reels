@@ -32,7 +32,7 @@ class WalletScreen extends ConsumerWidget {
             return Scaffold(
               backgroundColor: AppColors.background,
               appBar: AppBar(
-                backgroundColor: AppColors.surface,
+                backgroundColor: AppColors.background,
                 elevation: 0,
                 title: const Text(
                   'Wallet',
@@ -130,14 +130,14 @@ class WalletScreen extends ConsumerWidget {
                                 Icon(
                                   Icons.receipt_long_outlined,
                                   size: 64,
-                                  color: Colors.grey[400],
+                                  color: AppColors.textTertiary,
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
                                   'No transactions yet',
                                   style: TextStyle(
                                     fontSize: 16,
-                                    color: Colors.grey[600],
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
                               ],
@@ -213,7 +213,7 @@ class WalletScreen extends ConsumerWidget {
                   _formatDate(t.createdAt),
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.grey[600],
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],

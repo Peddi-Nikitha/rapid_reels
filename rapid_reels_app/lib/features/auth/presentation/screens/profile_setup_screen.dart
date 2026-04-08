@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -20,6 +21,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  String? _selectedGender;
   bool _isLoading = false;
 
   @override
@@ -37,10 +39,22 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Get current user or use a default user ID
-      final user = ref.read(currentUserProvider);
-      final userId = user?.uid ?? 'new_user_999';
-      final phoneNumber = user?.phoneNumber ?? '';
+      // Prefer FirebaseAuth current user to avoid Riverpod timing gaps.
+      final user = FirebaseAuth.instance.currentUser ?? ref.read(currentUserProvider);
+      if (user == null) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          Helpers.showSnackBar(
+            context,
+            'Session expired. Please login again.',
+            isError: true,
+          );
+          context.go(AppRoutes.login);
+        }
+        return;
+      }
+      final userId = user.uid;
+      final phoneNumber = user.phoneNumber ?? '';
 
       // Create user profile
       final fullName = _nameController.text.trim();
@@ -66,6 +80,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       final success = await ref
           .read(authNotifierProvider.notifier)
           .createUserProfile(userProfile);
+
+      if (success) {
+        await ref.read(authNotifierProvider.notifier).updateUserProfile(userId, {
+          'metadata': {
+            'clientProfileCompleted': true,
+            'gender': _selectedGender,
+          },
+        });
+      }
 
       setState(() => _isLoading = false);
 
@@ -142,7 +165,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
                 // Subtitle
                 Text(
-                  'We want to know more about you!',
+                  'Tell us a bit about you (first time only).',
                   style: AppTypography.bodyLarge.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -175,6 +198,43 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                     }
                     return null;
                   },
+                ),
+                const SizedBox(height: 24),
+
+                // Gender
+                _buildLabel('Gender'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _selectedGender,
+                  decoration: InputDecoration(
+                    hintText: 'Select gender',
+                    hintStyle: AppTypography.bodyLarge.copyWith(
+                      color: AppColors.textTertiary,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  dropdownColor: AppColors.surface,
+                  items: const [
+                    DropdownMenuItem(value: 'Male', child: Text('Male')),
+                    DropdownMenuItem(value: 'Female', child: Text('Female')),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
+                    DropdownMenuItem(
+                      value: 'Prefer not to say',
+                      child: Text('Prefer not to say'),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _selectedGender = value),
+                  validator: (value) =>
+                      value == null ? 'Please select gender' : null,
                 ),
                 const SizedBox(height: 40),
 

@@ -1,14 +1,15 @@
+// ignore_for_file: unused_element, unused_field
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/mock/mock_venues.dart';
-import '../../../../features/auth/presentation/providers/auth_provider.dart';
-import '../../../../features/profile/presentation/providers/profile_provider.dart';
 import '../../../../core/firebase/models/firebase_user_model.dart';
 import '../../../../shared/widgets/custom_app_bar.dart';
 import '../../../../shared/widgets/custom_button.dart';
@@ -30,6 +31,7 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _manualVenueNameController = TextEditingController();
   final TextEditingController _manualVenueAddressController = TextEditingController();
+  final TextEditingController _addressNoteController = TextEditingController();
   
   // Map state
   LatLng _currentLocation = const LatLng(18.1023, 78.8514); // Default: Siddipet
@@ -81,8 +83,43 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
     _searchController.dispose();
     _manualVenueNameController.dispose();
     _manualVenueAddressController.dispose();
+    _addressNoteController.dispose();
     _mapController?.dispose();
     super.dispose();
+  }
+
+  Future<void> _geocodeManualAddress() async {
+    final address = _manualVenueAddressController.text.trim();
+    if (address.length < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid venue address first.')),
+      );
+      return;
+    }
+    try {
+      final locations = await locationFromAddress(address);
+      if (locations.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not resolve this address.')),
+        );
+        return;
+      }
+      final first = locations.first;
+      if (!mounted) return;
+      setState(() {
+        _selectedVenue = null;
+        _manualVenueLocation = LatLng(first.latitude, first.longitude);
+        _showMapView = true;
+      });
+      _updateMarkers();
+      _moveCameraToLocation(_manualVenueLocation!);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Address lookup failed. Please try again.')),
+      );
+    }
   }
 
   List<Venue> _venuesForCity(String city) {
@@ -757,336 +794,80 @@ class _VenueSelectionScreenState extends ConsumerState<VenueSelectionScreen> {
     }
   }
 
-  void _continueWithVenue() {
-    final updatedData = Map<String, dynamic>.from(widget.bookingData);
-    
-    // If a venue is selected from map/list, use it
-    if (_selectedVenue != null) {
-      updatedData['venueName'] = _selectedVenue!.name;
-      updatedData['venueAddress'] = _selectedVenue!.address;
-      updatedData['venueCity'] = _selectedVenue!.city;
-      updatedData['venuePincode'] = _selectedVenue!.pincode;
-      updatedData['venueLatitude'] = _selectedVenue!.latitude;
-      updatedData['venueLongitude'] = _selectedVenue!.longitude;
-    } 
-    // Otherwise, use manual entry
-    else {
-      final manualName = _manualVenueNameController.text.trim();
-      final manualAddress = _manualVenueAddressController.text.trim();
-      
-      // Use manual entry if provided, otherwise use current location
-      if (manualName.isNotEmpty || manualAddress.isNotEmpty) {
-        updatedData['venueName'] = manualName.isNotEmpty ? manualName : 'Custom Venue';
-        updatedData['venueAddress'] = manualAddress.isNotEmpty ? manualAddress : 'Custom Location';
-        updatedData['venueCity'] = '';
-        updatedData['venuePincode'] = '';
-        // Use manual location if set, otherwise use current map center
-        final location = _manualVenueLocation ?? _currentLocation;
-        updatedData['venueLatitude'] = location.latitude;
-        updatedData['venueLongitude'] = location.longitude;
-      } else {
-        // If no manual entry and no venue selected, use current location with default name
-        updatedData['venueName'] = 'Custom Venue';
-        updatedData['venueAddress'] = 'Custom Location';
-        updatedData['venueCity'] = '';
-        updatedData['venuePincode'] = '';
-        final location = _manualVenueLocation ?? _currentLocation;
-        updatedData['venueLatitude'] = location.latitude;
-        updatedData['venueLongitude'] = location.longitude;
-      }
+  Future<void> _continueWithVenue() async {
+    final address = _searchController.text.trim();
+    if (address.length < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid address to continue.')),
+      );
+      return;
     }
 
+    LatLng resolved = _manualVenueLocation ?? _currentLocation;
+    try {
+      final result = await locationFromAddress(address);
+      if (result.isNotEmpty) {
+        resolved = LatLng(result.first.latitude, result.first.longitude);
+      }
+    } catch (_) {
+      // Keep fallback location to avoid blocking flow on geocoder failure.
+    }
+
+    final updatedData = Map<String, dynamic>.from(widget.bookingData);
+    updatedData['venueName'] = 'Address Venue';
+    updatedData['venueAddress'] = address;
+    updatedData['venueCity'] = '';
+    updatedData['venuePincode'] = '';
+    updatedData['venueLatitude'] = resolved.latitude;
+    updatedData['venueLongitude'] = resolved.longitude;
+    updatedData['venueAddressNote'] = '';
+
+    if (!mounted) return;
     context.push(AppRoutes.providerSelection, extra: updatedData);
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = ref.watch(currentUserProvider);
-    final userId = currentUser?.uid ?? '';
-    final userProfileAsync = ref.watch(userProfileProvider(userId));
-    userProfileAsync.whenData((profile) {
-      final saved = profile?.savedAddresses ?? const <SavedAddress>[];
-      if (userId.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _syncVenuesFromProfile(userId: userId, savedAddresses: saved);
-        });
-      }
-    });
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomAppBar(title: 'Select Venue'),
-      body: Column(
-        children: [
-          // Search Bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: AppColors.surface,
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search venues...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: AppColors.background,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    onChanged: (value) {
-                      _applySearchFilter(value);
-                      _updateMarkers();
-                    },
-                  ),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Enter venue address',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
-                const SizedBox(width: 12),
-                // Toggle Map/List View
-                IconButton(
-                  icon: Icon(_showMapView ? Icons.list : Icons.map),
-                  tooltip: _showMapView ? 'Show List' : 'Show Map',
-                  onPressed: () {
-                    setState(() {
-                      _showMapView = !_showMapView;
-                      if (_showMapView && !_mapInitialized) {
-                        _isMapLoading = true;
-                      }
-                    });
-                  },
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.all(12),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Location Button
-                IconButton(
-                  icon: _isLoadingLocation
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.my_location),
-                  onPressed: _getCurrentLocation,
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.all(12),
-                  ),
-                ),
-              ],
+              ),
+              maxLines: 2,
             ),
-          ),
-
-          // Manual Entry Section (shown when no venues found or when toggled)
-          if (_nearbyVenues.isEmpty || _showManualEntry)
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: AppColors.surface,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Manual Venue Entry',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (_nearbyVenues.isNotEmpty)
-                        TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _showManualEntry = !_showManualEntry;
-                            });
-                          },
-                          icon: Icon(
-                            _showManualEntry ? Icons.expand_less : Icons.expand_more,
-                          ),
-                          label: Text(_showManualEntry ? 'Hide' : 'Show'),
-                        ),
-                    ],
-                  ),
-                  if (_showManualEntry || _nearbyVenues.isEmpty) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _manualVenueNameController,
-                      decoration: InputDecoration(
-                        hintText: 'Enter venue name',
-                        prefixIcon: const Icon(Icons.business),
-                        filled: true,
-                        fillColor: AppColors.background,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          // Clear selected venue when manual entry is used
-                          if (value.isNotEmpty) {
-                            _selectedVenue = null;
-                            _updateMarkers();
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _manualVenueAddressController,
-                      decoration: InputDecoration(
-                        hintText: 'Enter venue address',
-                        prefixIcon: const Icon(Icons.location_on),
-                        filled: true,
-                        fillColor: AppColors.background,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      maxLines: 2,
-                      onChanged: (value) {
-                        setState(() {
-                          // Clear selected venue when manual entry is used
-                          if (value.isNotEmpty) {
-                            _selectedVenue = null;
-                            _updateMarkers();
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Tip: Tap on the map to set the exact location',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                ],
+            const SizedBox(height: 10),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Providers will be filtered by this address location.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ),
-
-          // Map or List View
-          Expanded(
-            child: _showMapView
-                ? _buildMapView()
-                : _buildVenueList(),
-          ),
-
-          // Nearby Venues List (if map view)
-          if (_showMapView && _nearbyVenues.isNotEmpty)
-            Container(
-              // Header (~48) + card height; 200 was shorter than cards (220) and caused clipping.
-              height: 288,
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Available Venues',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          '${_nearbyVenues.length} found',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                      itemCount: _nearbyVenues.length,
-                      itemBuilder: (context, index) {
-                        final venue = _nearbyVenues[index];
-                        return _buildVenueCard(venue);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Continue Button
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: SafeArea(
+            const Spacer(),
+            SafeArea(
               top: false,
               child: CustomButton(
-                text: _selectedVenue != null
-                    ? 'Continue with ${_selectedVenue!.name}'
-                    : (_manualVenueNameController.text.isNotEmpty || _manualVenueAddressController.text.isNotEmpty)
-                        ? 'Continue with Custom Venue'
-                        : 'Select Venue',
+                text: 'Continue',
                 onPressed: _continueWithVenue,
                 icon: Icons.arrow_forward,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

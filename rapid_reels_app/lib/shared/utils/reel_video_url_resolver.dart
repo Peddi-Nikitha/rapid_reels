@@ -7,8 +7,17 @@ import 'package:firebase_storage/firebase_storage.dart';
 /// - Direct `http/https` URLs
 /// - Bare Firebase Storage host paths by prepending `https://`
 Future<String?> resolvePlayableVideoUrl(String rawUrl) async {
-  final candidate = rawUrl.trim();
+  var candidate = rawUrl.trim();
   if (candidate.isEmpty) return null;
+
+  // Release builds enforce cleartext policy; prefer HTTPS for Firebase Storage hosts.
+  if (candidate.startsWith('http://')) {
+    final lower = candidate.toLowerCase();
+    if (lower.contains('firebasestorage.googleapis.com') ||
+        lower.contains('firebasestorage.app')) {
+      candidate = 'https://${candidate.substring('http://'.length)}';
+    }
+  }
 
   // Firebase Storage reference URL -> signed download URL
   if (candidate.startsWith('gs://')) {

@@ -22,6 +22,7 @@ class PackageSelectionScreen extends StatefulWidget {
 class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
   int _currentIndex = 2; // Default to Gold
   final CarouselSliderController _carouselController = CarouselSliderController();
+  final TextEditingController _customAmountController = TextEditingController();
 
   // Static packages (no backend)
   late final List<sp.PackageOffering> _packages = [
@@ -80,6 +81,12 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
   void initState() {
     super.initState();
     debugPrint('PackageSelectionScreen initialized with eventType: ${widget.eventType}');
+  }
+
+  @override
+  void dispose() {
+    _customAmountController.dispose();
+    super.dispose();
   }
 
   @override
@@ -354,6 +361,7 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                         extra: {
                           'eventType': widget.eventType,
                           'packageId': selectedPackage.packageId,
+                          'standardPackageSelected': true,
                           'package': {
                             'packageId': selectedPackage.packageId,
                             'name': selectedPackage.name,
@@ -368,6 +376,11 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
                       );
                     },
                             icon: Icons.arrow_forward_rounded,
+                          ),
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: _showCustomAmountDialog,
+                            child: const Text('Skip standard package and enter custom amount'),
                           ),
                         ],
                       ),
@@ -419,6 +432,59 @@ class _PackageSelectionScreenState extends State<PackageSelectionScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showCustomAmountDialog() {
+    _customAmountController.clear();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Custom Amount'),
+          content: TextField(
+            controller: _customAmountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Enter amount (£)',
+              prefixText: '£',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final amount = double.tryParse(_customAmountController.text.trim());
+                if (amount == null || amount <= 0) return;
+                Navigator.pop(context);
+                context.push(
+                  AppRoutes.eventDetails,
+                  extra: {
+                    'eventType': widget.eventType,
+                    'packageId': 'custom_amount',
+                    'standardPackageSelected': false,
+                    'customAmount': amount,
+                    'package': {
+                      'packageId': 'custom_amount',
+                      'name': 'Custom Amount',
+                      'price': amount,
+                      'duration': 0,
+                      'reelsCount': 0,
+                      'editingStyle': 'custom',
+                      'deliveryTime': 0,
+                      'features': const <String>[],
+                    },
+                  },
+                );
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

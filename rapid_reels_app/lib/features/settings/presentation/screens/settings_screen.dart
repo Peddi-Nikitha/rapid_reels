@@ -20,6 +20,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _dataSaver = false;
   String _selectedLanguage = 'English';
   String _selectedCurrency = 'GBP (£)';
+  final TextEditingController _ukPhoneController = TextEditingController();
+  String? _ukPhoneError;
+
+  @override
+  void initState() {
+    super.initState();
+    _ukPhoneController.text = '+44';
+  }
+
+  @override
+  void dispose() {
+    _ukPhoneController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +71,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildMenuItem(
               'Privacy Settings',
               Icons.privacy_tip_outlined,
-              Colors.purple,
+              AppColors.primary,
               () {},
             ),
             _buildMenuItem(
@@ -157,7 +171,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildMenuItem(
               'Download Quality',
               Icons.high_quality,
-              Colors.purple,
+              AppColors.primary,
               () {
                 _showQualityDialog();
               },
@@ -179,6 +193,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _buildSectionHeader('Payment & Billing'),
           _buildMenuCard([
             _buildMenuItem(
+              'UK Phone Number',
+              Icons.phone,
+              Colors.green,
+              _showUkPhoneDialog,
+              trailing: _ukPhoneController.text,
+            ),
+            _buildMenuItem(
               'Payment Methods',
               Icons.credit_card,
               Colors.blue,
@@ -193,7 +214,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildMenuItem(
               'Auto-pay Settings',
               Icons.autorenew,
-              Colors.purple,
+              AppColors.primary,
               () {},
             ),
           ]),
@@ -225,7 +246,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _buildMenuItem(
               'Login History',
               Icons.history,
-              Colors.purple,
+              AppColors.primary,
               () {},
             ),
           ]),
@@ -701,6 +722,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 foregroundColor: Colors.white,
               ),
               child: const Text('Delete Account'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showUkPhoneDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text('UK phone number'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _ukPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  hintText: '+44 7XXXXXXXXX',
+                  errorText: _ukPhoneError,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Enter a valid UK number starting with +44',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final raw = _ukPhoneController.text.trim().replaceAll(' ', '');
+                final ukRegex = RegExp(r'^\+44\d{10}$');
+                if (!ukRegex.hasMatch(raw)) {
+                  setState(() => _ukPhoneError = 'Use +44 followed by 10 digits');
+                  return;
+                }
+                setState(() {
+                  _ukPhoneError = null;
+                  _ukPhoneController.text = raw;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('UK number saved successfully.')),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
             ),
           ],
         );

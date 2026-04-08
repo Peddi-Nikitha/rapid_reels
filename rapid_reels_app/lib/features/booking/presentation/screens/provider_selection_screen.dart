@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+import 'dart:math' as math;
 import '../../../../core/booking/date_availability.dart';
 import '../../../../core/constants/app_cities.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -28,17 +31,78 @@ class ProviderSelectionScreen extends StatefulWidget {
 
 class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
   final _firestoreService = FirestoreService();
+  final TextEditingController _areaSearchController = TextEditingController();
   bool _isLoading = true;
-  String _sortBy = 'rating'; // rating, price, distance
+  String _sortBy = 'distance'; // rating, price, distance
   double _minRating = 0;
+  double _selectedRadiusKm = 10;
+  static const double _minRadiusKm = 1;
+  static const double _maxRadiusKm = 50;
   /// `__auto__` = venue + saved city; `__all__` = no city filter; else a city from [AppCities].
   String _cityFilterMode = '__auto__';
   List<FirebaseProviderModel>? _cachedProviders;
+  double? _searchOriginLat;
+  double? _searchOriginLng;
+  String? _resolvedSearchCity;
+  String? _resolvedSearchLabel;
+  Timer? _searchDebounce;
+
+  double _distanceKm(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const earthRadiusKm = 6371.0;
+    final dLat = _degToRad(lat2 - lat1);
+    final dLon = _degToRad(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_degToRad(lat1)) *
+            math.cos(_degToRad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  }
+
+  double _degToRad(double deg) => deg * (math.pi / 180);
+
+  bool _hasValidCoordinates(sp.ServiceProvider p) {
+    return p.location.latitude.abs() > 0.0001 || p.location.longitude.abs() > 0.0001;
+  }
+
+  bool _matchesAreaText(sp.ServiceProvider p, String areaText) {
+    final q = areaText.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    final city = p.location.city.toLowerCase();
+    final address = p.location.address.toLowerCase();
+    final state = p.location.state.toLowerCase();
+    final areas = p.serviceAreas.map((e) => e.toLowerCase()).join(' ');
+    return city.contains(q) ||
+        q.contains(city) ||
+        address.contains(q) ||
+        state.contains(q) ||
+        areas.contains(q);
+  }
 
   @override
   void initState() {
     super.initState();
+    _searchOriginLat = (widget.bookingData['venueLatitude'] as num?)?.toDouble();
+    _searchOriginLng = (widget.bookingData['venueLongitude'] as num?)?.toDouble();
+    final venueAddress = widget.bookingData['venueAddress']?.toString().trim() ?? '';
+    if (venueAddress.isNotEmpty) {
+      _areaSearchController.text = venueAddress;
+      _resolvedSearchLabel = venueAddress;
+    }
     _loadProviders();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _areaSearchController.dispose();
+    super.dispose();
   }
 
   sp.ServiceProvider _mapFirebaseToServiceProvider(FirebaseProviderModel p) {
@@ -136,7 +200,7 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
       updatedAt: p.updatedAt,
     );
   }
-  Future<void> _loadProviders() async {
+  Future<void> _loadProviders({String? cityHint}) async {
     try {
       if (mounted) setState(() => _isLoading = true);
 
@@ -147,7 +211,7 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
 
       String? cityForQuery;
       if (_cityFilterMode == '__auto__') {
-        String? city = widget.bookingData['venueCity'] as String?;
+        String? city = cityHint ?? _resolvedSearchCity ?? widget.bookingData['venueCity'] as String?;
         if (city == null || city.isEmpty) {
           final prefs = await SharedPreferences.getInstance();
           city = prefs.getString('selected_city');
@@ -192,9 +256,45 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
     }
   }
 
+  Future<void> _resolveAndSearchArea(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.length < 3) return;
+    try {
+      final locations = await locationFromAddress(trimmed);
+      if (locations.isEmpty) return;
+      final first = locations.first;
+      final placemarks = await placemarkFromCoordinates(
+        first.latitude,
+        first.longitude,
+      );
+      final placemark = placemarks.isNotEmpty ? placemarks.first : null;
+      final city = placemark?.locality?.trim().isNotEmpty == true
+          ? placemark!.locality!.trim()
+          : (placemark?.subAdministrativeArea?.trim().isNotEmpty == true
+              ? placemark!.subAdministrativeArea!.trim()
+              : null);
+      if (!mounted) return;
+      setState(() {
+        _searchOriginLat = first.latitude;
+        _searchOriginLng = first.longitude;
+        _resolvedSearchCity = city;
+        _resolvedSearchLabel = trimmed;
+      });
+      await _loadProviders(cityHint: city);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not find that area. Try a nearby landmark.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Build provider list from Firebase providers cached in state (loaded in _loadProviders)
+    final venueLat = _searchOriginLat;
+    final venueLng = _searchOriginLng;
+
     List<sp.ServiceProvider> providers = (_cachedProviders ?? [])
         .map(_mapFirebaseToServiceProvider)
         .where((p) => p.isActive && p.isVerified)
@@ -216,6 +316,30 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
       providers = mockList;
     }
 
+    final distanceByProvider = <String, double>{};
+    if (venueLat != null && venueLng != null) {
+      final areaText = _areaSearchController.text;
+      providers = providers.where((p) {
+        if (!_hasValidCoordinates(p)) {
+          // Provider without geo-point: fallback to text/city/service-area matching.
+          return _matchesAreaText(p, areaText) ||
+              (_resolvedSearchCity != null &&
+                  _matchesAreaText(p, _resolvedSearchCity!));
+        }
+        final d = _distanceKm(
+          venueLat,
+          venueLng,
+          p.location.latitude,
+          p.location.longitude,
+        );
+        distanceByProvider[p.providerId] = d;
+        final providerMaxRadius = p.serviceRadius > 0
+            ? p.serviceRadius.toDouble()
+            : _maxRadiusKm;
+        return d <= _selectedRadiusKm && d <= providerMaxRadius;
+      }).toList();
+    }
+
     // Apply filters
     if (_minRating > 0) {
       providers = providers.where((p) => p.rating >= _minRating).toList();
@@ -230,6 +354,12 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
         final aMinPrice = a.packages.map((p) => p.price).reduce((a, b) => a < b ? a : b);
         final bMinPrice = b.packages.map((p) => p.price).reduce((a, b) => a < b ? a : b);
         return aMinPrice.compareTo(bMinPrice);
+      });
+    } else if (_sortBy == 'distance') {
+      providers.sort((a, b) {
+        final ad = distanceByProvider[a.providerId] ?? double.infinity;
+        final bd = distanceByProvider[b.providerId] ?? double.infinity;
+        return ad.compareTo(bd);
       });
     }
 
@@ -252,6 +382,31 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                TextField(
+                  controller: _areaSearchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search area (e.g., Siddipet, Hyderabad, London)',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.my_location),
+                      onPressed: () => _resolveAndSearchArea(_areaSearchController.text),
+                    ),
+                    filled: true,
+                    fillColor: AppColors.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onChanged: (value) {
+                    _searchDebounce?.cancel();
+                    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+                      _resolveAndSearchArea(value);
+                    });
+                  },
+                  onSubmitted: _resolveAndSearchArea,
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -266,6 +421,8 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
                     _buildSortChip('Rating', 'rating', Icons.star),
                     const SizedBox(width: 8),
                     _buildSortChip('Price', 'price', Icons.currency_rupee),
+                    const SizedBox(width: 8),
+                    _buildSortChip('Distance', 'distance', Icons.near_me),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -278,6 +435,32 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                const SizedBox(height: 8),
+                if (venueLat != null && venueLng != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Search radius: ${_selectedRadiusKm.toStringAsFixed(0)} km',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Slider(
+                        value: _selectedRadiusKm,
+                        min: _minRadiusKm,
+                        max: _maxRadiusKm,
+                        divisions: (_maxRadiusKm - _minRadiusKm).toInt(),
+                        label: '${_selectedRadiusKm.toStringAsFixed(0)} km',
+                        activeColor: AppColors.primary,
+                        onChanged: (value) {
+                          setState(() => _selectedRadiusKm = value);
+                        },
+                      ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -299,6 +482,7 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
                             final provider = providers[index];
                             return ProviderCard(
                               provider: provider,
+                              distanceKm: distanceByProvider[provider.providerId],
                               onTap: () async {
                                 final updatedData =
                                     Map<String, dynamic>.from(widget.bookingData);
@@ -373,6 +557,10 @@ class _ProviderSelectionScreenState extends State<ProviderSelectionScreen> {
   }
 
   String _locationFilterSummary() {
+    final areaLabel = _resolvedSearchLabel?.trim() ?? '';
+    if (areaLabel.isNotEmpty) {
+      return 'Near $areaLabel | Radius: ${_selectedRadiusKm.toInt()} km';
+    }
     switch (_cityFilterMode) {
       case '__auto__':
         return 'Location: booking venue / saved city';

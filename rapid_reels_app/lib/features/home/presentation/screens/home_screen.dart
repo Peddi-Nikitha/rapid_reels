@@ -21,6 +21,7 @@ import '../../../notifications/presentation/screens/notifications_screen.dart';
 import '../../../providers/presentation/screens/provider_details_screen.dart';
 import '../../../../shared/widgets/glass_surface_card.dart';
 import '../../../../shared/widgets/premium_home_background.dart';
+import '../../../../shared/widgets/reel_video_layer.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -77,6 +78,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isLoadingProviders = false;
   List<FirebaseReelModel> _trendingReels = [];
   final Map<String, bool> _likedReels = {};
+  final ScrollController _trendingScrollController = ScrollController();
+  /// Trending strip: videos play only after explicit tap.
+  int? _trendingPlayingIndex;
+
+  static const double _trendingCardWidth = 140;
+  static const double _trendingCardRightMargin = 12;
+  static const double _trendingListHorizontalPad = 20;
 
   /// Minimum rating for nearby + featured provider strips; `null` = no floor.
   double? _providerRatingMin = 3.5;
@@ -93,6 +101,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _loadTrendingReels();
     _loadHomeBanners();
     _loadPromoPopupOffer();
+  }
+
+  @override
+  void dispose() {
+    _trendingScrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPromoPopupOffer() async {
@@ -331,10 +345,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _loadNearbyVenues();
         }
       } else {
-        // Use default city
+        // Keep dynamic behavior with neutral fallback.
         if (mounted) {
           setState(() {
-            _selectedCity = 'Siddipet';
+            _selectedCity = 'Current location unavailable';
           });
           _loadFeaturedProviders();
           _loadNearbyVenues();
@@ -344,7 +358,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       debugPrint('Error loading fallback city: $e');
       if (mounted) {
         setState(() {
-          _selectedCity = 'Siddipet';
+          _selectedCity = 'Current location unavailable';
         });
       }
     }
@@ -783,8 +797,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   SizedBox(
                     height: 180,
                     child: ListView.builder(
+                      controller: _trendingScrollController,
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: _trendingListHorizontalPad,
+                      ),
                       itemCount: _trendingReels.length,
                       itemBuilder: (context, index) {
                         final reel = _trendingReels[index];
@@ -1346,13 +1363,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final localShares = reel.shares;
 
     return GestureDetector(
-      onTap: () => _viewReel(reel, index),
+      onTap: () {
+        setState(() {
+          _trendingPlayingIndex =
+              (_trendingPlayingIndex == index) ? null : index;
+        });
+      },
+      onDoubleTap: () => _viewReel(reel, index),
       child: GlassSurfaceCard(
-        margin: const EdgeInsets.only(right: 12),
+        margin: const EdgeInsets.only(right: _trendingCardRightMargin),
         borderRadius: BorderRadius.circular(16),
         padding: EdgeInsets.zero,
         child: SizedBox(
-          width: 140,
+          width: _trendingCardWidth,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 179, maxHeight: 179),
             child: Column(
@@ -1377,7 +1400,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                         ),
-                        if (reel.thumbnailUrl.isNotEmpty)
+                        if (index == _trendingPlayingIndex)
+                          AbsorbPointer(
+                            child: ReelVideoLayer(
+                              reel: reel,
+                              isActive: true,
+                              muted: true,
+                            ),
+                          )
+                        else if (reel.thumbnailUrl.isNotEmpty)
                           CachedNetworkImage(
                             imageUrl: reel.thumbnailUrl,
                             fit: BoxFit.cover,
@@ -1396,24 +1427,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                         ),
-                        Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
-                                width: 2,
+                        if (index != _trendingPlayingIndex)
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.3),
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                size: 22,
+                                color: Colors.white,
                               ),
                             ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              size: 22,
-                              color: Colors.white,
-                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -1607,7 +1639,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: Icon(
                                 Icons.verified_rounded,
                                 size: 16,
-                                color: Color(0xFF1DA1F2),
+                                color: AppColors.info,
                               ),
                             ),
                         ],
@@ -2144,7 +2176,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ],
     };
 
-    final cityReviews = allCityReviews[city] ?? allCityReviews['Siddipet']!;
+    final cityReviews = allCityReviews[city] ?? allCityReviews.values.first;
     return cityReviews[index % cityReviews.length];
   }
 

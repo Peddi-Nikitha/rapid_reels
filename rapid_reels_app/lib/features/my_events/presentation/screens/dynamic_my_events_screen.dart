@@ -57,7 +57,7 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.background,
         elevation: 0,
         title: Text(
           'My Events',
@@ -142,6 +142,10 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.06),
+            width: 1,
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -236,6 +240,10 @@ class _DynamicMyEventsScreenState extends ConsumerState<DynamicMyEventsScreen> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.06),
+          width: 1,
+        ),
       ),
       child: InkWell(
         onTap: () {

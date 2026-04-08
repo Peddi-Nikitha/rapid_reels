@@ -22,6 +22,7 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _isResettingPassword = false;
   bool _obscurePassword = true;
   String _selectedCountryCode = '+91';
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -143,6 +144,82 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
       'Google Sign-In for providers is not available yet. Please use phone & password.',
       isError: true,
     );
+  }
+
+  Future<void> _forgotPassword() async {
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      Helpers.showSnackBar(
+        context,
+        'Enter your registered phone number first.',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() => _isResettingPassword = true);
+
+    try {
+      final provider = await _firestoreService.getProviderByPhone(
+        phone,
+        countryCode: _selectedCountryCode,
+      );
+
+      if (provider == null) {
+        if (!mounted) return;
+        Helpers.showSnackBar(
+          context,
+          'No provider account found for this phone number.',
+          isError: true,
+        );
+        return;
+      }
+
+      final email = provider.email.trim();
+      if (email.isEmpty) {
+        if (!mounted) return;
+        Helpers.showSnackBar(
+          context,
+          'No email found for this provider account. Please contact support.',
+          isError: true,
+        );
+        return;
+      }
+
+      await _auth.sendPasswordResetEmail(email: email);
+
+      if (!mounted) return;
+      Helpers.showSnackBar(
+        context,
+        'Password reset link sent to $email',
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String message = 'Could not send reset link. Please try again.';
+      if (e.code == 'invalid-email') {
+        message = 'Provider email is invalid. Please contact support.';
+      } else if (e.code == 'user-not-found') {
+        message = 'No login account found for this provider email.';
+      } else if (e.code == 'too-many-requests') {
+        message = 'Too many attempts. Please try again later.';
+      }
+      Helpers.showSnackBar(
+        context,
+        message,
+        isError: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Helpers.showSnackBar(
+        context,
+        'Unable to process forgot password right now.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isResettingPassword = false);
+      }
+    }
   }
 
   @override
@@ -297,13 +374,9 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () {
-                      // Navigate to forgot password
-                      Helpers.showSnackBar(
-                        context,
-                        'Forgot password feature coming soon',
-                      );
-                    },
+                    onPressed: (_isLoading || _isResettingPassword)
+                        ? null
+                        : _forgotPassword,
                     child: const Text('Forgot Password?'),
                   ),
                 ),

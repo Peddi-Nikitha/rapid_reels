@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
@@ -10,6 +11,7 @@ import '../utils/reel_video_url_resolver.dart';
 class ReelVideoLayer extends StatefulWidget {
   final FirebaseReelModel reel;
   final bool isActive;
+  final bool muted;
   /// Called on double-tap (e.g. like). Single tap toggles play/pause.
   final VoidCallback? onDoubleTap;
 
@@ -17,6 +19,7 @@ class ReelVideoLayer extends StatefulWidget {
     super.key,
     required this.reel,
     required this.isActive,
+    this.muted = false,
     this.onDoubleTap,
   });
 
@@ -83,12 +86,59 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
     return null;
   }
 
-  VideoPlayerController _buildController(String url) {
-    return VideoPlayerController.networkUrl(
-      Uri.parse(url),
-      formatHint: _inferFormatHint(url),
-      httpHeaders: const {'Cache-Control': 'no-cache'},
-    );
+  static const _videoHttpHeaders = <String, String>{
+    'Cache-Control': 'no-cache',
+    // Some CDNs / Storage gateways return errors without a conventional UA.
+    'User-Agent':
+        'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+  };
+
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Tries texture view, then platform view on Android — avoids release-only
+  /// ExoPlayer/MediaCodec failures on several OEM devices.
+  Future<VideoPlayerController?> _createInitializedController(
+    String playableUrl,
+  ) async {
+    final hint = _inferFormatHint(playableUrl);
+
+    Future<VideoPlayerController?> tryView(VideoViewType viewType) async {
+      var controller = VideoPlayerController.networkUrl(
+        Uri.parse(playableUrl),
+        formatHint: hint,
+        httpHeaders: _videoHttpHeaders,
+        viewType: viewType,
+      );
+      try {
+        await controller.initialize();
+        return controller;
+      } catch (e) {
+        debugPrint('ReelVideoLayer init failed ($viewType): $e');
+        await controller.dispose();
+        return null;
+      }
+    }
+
+    if (_isAndroid) {
+      final texture = await tryView(VideoViewType.textureView);
+      if (texture != null) return texture;
+      final surface = await tryView(VideoViewType.platformView);
+      if (surface != null) return surface;
+    } else {
+      final c = await tryView(VideoViewType.textureView);
+      if (c != null) return c;
+    }
+
+    try {
+      // ignore: deprecated_member_use — last-resort path; some streams only initialize via this API.
+      final legacy = VideoPlayerController.network(playableUrl);
+      await legacy.initialize();
+      return legacy;
+    } catch (e) {
+      debugPrint('ReelVideoLayer legacy network() init failed: $e');
+      return null;
+    }
   }
 
   @override
@@ -111,23 +161,12 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
       for (final rawUrl in rawCandidates) {
         final playableUrl = await resolvePlayableVideoUrl(rawUrl);
         if (!mounted || playableUrl == null || playableUrl.isEmpty) continue;
-        try {
-          var controller = _buildController(playableUrl);
-          try {
-            await controller.initialize();
-          } catch (_) {
-            // Fallback constructor for edge URL/platform cases.
-            await controller.dispose();
-            controller = VideoPlayerController.network(playableUrl);
-            await controller.initialize();
-          }
+        final controller = await _createInitializedController(playableUrl);
+        if (controller != null) {
           await controller.setLooping(true);
-          await controller.setVolume(1.0);
+          await controller.setVolume(widget.muted ? 0.0 : 1.0);
           initializedController = controller;
           break;
-        } catch (e) {
-          debugPrint('ReelVideoLayer playback init failed for $playableUrl: $e');
-          // Try next candidate URL
         }
       }
 
@@ -180,6 +219,11 @@ class _ReelVideoLayerState extends State<ReelVideoLayer> {
       } else {
         _controller!.pause();
       }
+    }
+    if (_controller != null &&
+        _controller!.value.isInitialized &&
+        oldWidget.muted != widget.muted) {
+      _controller!.setVolume(widget.muted ? 0.0 : 1.0);
     }
   }
 

@@ -182,10 +182,18 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   @override
   Widget build(BuildContext context) {
     final pkg = widget.bookingData['package'] as Map<String, dynamic>?;
+    final standardPackageSelected =
+        widget.bookingData['standardPackageSelected'] != false;
+    final customAmount =
+        (widget.bookingData['customAmount'] as num?)?.toDouble() ?? 0.0;
     final packageName = pkg?['name']?.toString() ?? '';
     final packagePrice = (pkg?['price'] as num?)?.toDouble() ?? 0.0;
     final packageDurationMinutes = (pkg?['duration'] as num?)?.toInt() ?? 0;
     final packageReelsCount = (pkg?['reelsCount'] as num?)?.toInt() ?? 0;
+    final additionalReels = (widget.bookingData['additionalReels'] as num?)?.toInt() ?? 0;
+    final includeDrone = widget.bookingData['includeDrone'] == true;
+    final additionalReelCost = additionalReels * 20.0;
+    final droneCost = includeDrone ? 50.0 : 0.0;
     final providerId = widget.bookingData['providerId']?.toString() ?? '';
     final currency =
         (widget.bookingData['paymentCurrency']?.toString().trim().toLowerCase().isNotEmpty ??
@@ -341,30 +349,43 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                     ),
 
                   // Package Details
-                  _buildSection('Package', [
-                    _buildDetailRow('Package', packageName),
-                    _buildDetailRow(
-                      'Coverage',
-                      '${packageDurationMinutes ~/ 60} hours',
-                    ),
-                    _buildDetailRow(
-                      'Reels',
-                      packageReelsCount == -1
-                          ? 'Unlimited'
-                          : '$packageReelsCount',
-                    ),
-                    _buildDetailRow(
-                      'Editing',
-                      widget.bookingData['editingStyle'],
-                    ),
-                    if (widget.bookingData['additionalReels'] > 0)
-                      _buildDetailRow(
-                        'Additional Reels',
-                        '+${widget.bookingData['additionalReels']}',
-                      ),
-                    if (widget.bookingData['includeDrone'])
-                      _buildDetailRow('Drone Footage', 'Included'),
-                  ]),
+                  _buildSection(
+                    standardPackageSelected ? 'Package' : 'Custom Amount',
+                    standardPackageSelected
+                        ? [
+                            _buildDetailRow('Package', packageName),
+                            _buildDetailRow(
+                              'Coverage',
+                              '${packageDurationMinutes ~/ 60} hours',
+                            ),
+                            _buildDetailRow(
+                              'Reels',
+                              packageReelsCount == -1
+                                  ? 'Unlimited'
+                                  : '$packageReelsCount',
+                            ),
+                            _buildDetailRow(
+                              'Editing',
+                              widget.bookingData['editingStyle'],
+                            ),
+                            if (additionalReels > 0)
+                              _buildDetailRow(
+                                'Additional Reels',
+                                '$additionalReels (+£${additionalReelCost.toStringAsFixed(2)})',
+                              ),
+                            if (includeDrone)
+                              _buildDetailRow(
+                                'Drone Footage',
+                                'Included (+£${droneCost.toStringAsFixed(2)})',
+                              ),
+                          ]
+                        : [
+                            _buildDetailRow(
+                              'Selected Amount',
+                              _formatMoney(customAmount, currency),
+                            ),
+                          ],
+                  ),
 
                   // Coupon
                   _buildSection(
@@ -451,8 +472,11 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                   // Payment Breakdown
                   _buildSection('Payment', [
                     _buildDetailRow(
-                      'Base Price',
-                      _formatMoney(packagePrice, currency),
+                      standardPackageSelected ? 'Base Price' : 'Custom Amount',
+                      _formatMoney(
+                        standardPackageSelected ? packagePrice : customAmount,
+                        currency,
+                      ),
                     ),
                     const Divider(height: 24),
                     _buildDetailRow(

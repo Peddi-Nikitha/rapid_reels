@@ -69,6 +69,11 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
 
+# Pinned: newer video_player_android builds can fail ExoPlayer/MediaCodec init on
+# some devices in release APKs (see flutter/flutter#181714, #166481).
+dependency_overrides:
+  video_player_android: 2.8.4
+
 flutter:
   uses-material-design: true
   

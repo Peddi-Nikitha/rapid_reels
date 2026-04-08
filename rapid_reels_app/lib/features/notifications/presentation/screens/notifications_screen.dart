@@ -96,7 +96,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
       'time': DateTime.now().subtract(const Duration(days: 2)),
       'isRead': true,
       'icon': Icons.message,
-      'color': Colors.purple,
+      'color': AppColors.primary,
       'actionText': 'Reply',
     },
     {
@@ -272,7 +272,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
         break;
       case 'provider_message':
         icon = Icons.message;
-        color = Colors.purple;
+        color = AppColors.primary;
         actionText = 'Reply';
         break;
       case 'offer':

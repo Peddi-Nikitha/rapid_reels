@@ -6,11 +6,13 @@ import '../../features/booking/data/models/service_provider_model.dart';
 class ProviderCard extends StatelessWidget {
   final ServiceProvider provider;
   final VoidCallback? onTap;
+  final double? distanceKm;
 
   const ProviderCard({
     super.key,
     required this.provider,
     this.onTap,
+    this.distanceKm,
   });
 
   @override
@@ -136,6 +138,22 @@ class ProviderCard extends StatelessWidget {
                           color: AppColors.textSecondary,
                         ),
                       ),
+                      if (distanceKm != null) ...[
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.near_me,
+                          size: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${distanceKm!.toStringAsFixed(1)} km',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -163,6 +181,32 @@ class ProviderCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (provider.equipment.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: provider.equipment.take(4).map((item) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.cardBackground,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            item,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   
                   // Price Range

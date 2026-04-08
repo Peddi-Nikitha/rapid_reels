@@ -71,11 +71,8 @@ class CatalogueSelectionScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   CustomButton(
-                    text: 'Choose a package',
-                    onPressed: () => context.push(
-                      AppRoutes.providerPackagePick,
-                      extra: {'provider': provider, 'bookingData': bookingData},
-                    ),
+                    text: 'Continue with selected package',
+                    onPressed: () => _skipToPackageFlow(context),
                   ),
                 ],
               ),
@@ -136,14 +133,29 @@ class CatalogueSelectionScreen extends StatelessWidget {
         child: SafeArea(
           top: false,
           child: TextButton(
-            onPressed: () => context.push(
-              AppRoutes.providerPackagePick,
-              extra: {'provider': provider, 'bookingData': bookingData},
-            ),
-            child: const Text('Skip to standard packages'),
+            onPressed: () => _skipToPackageFlow(context),
+            child: const Text('Skip offering and continue'),
           ),
         ),
       ),
+    );
+  }
+
+  void _skipToPackageFlow(BuildContext context) {
+    final hasSelectedPackage =
+        bookingData['package'] is Map<String, dynamic> &&
+        (bookingData['packageId']?.toString().trim().isNotEmpty ?? false);
+
+    if (hasSelectedPackage) {
+      // Keep the user's already selected package instead of forcing provider standard package.
+      context.push(AppRoutes.packageCustomization, extra: bookingData);
+      return;
+    }
+
+    // Fallback if there is genuinely no selected package in flow.
+    context.push(
+      AppRoutes.providerPackagePick,
+      extra: {'provider': provider, 'bookingData': bookingData},
     );
   }
 }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/models/firebase_provider_model.dart';
 import '../../../../core/firebase/models/firebase_reel_model.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
-import '../../../../shared/widgets/reel_viewer_screen.dart';
 import '../../../../shared/widgets/shimmer_loading.dart';
 
 class TrendingReelsScreen extends StatefulWidget {
@@ -60,21 +61,20 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
     }
   }
 
-  void _viewReel(FirebaseReelModel reel) {
-    final videoUrl = reel.videoUrl.trim().isNotEmpty
-        ? reel.videoUrl.trim()
-        : (reel.thumbnailUrl.trim().isNotEmpty &&
-                (reel.thumbnailUrl.contains('firebasestorage') ||
-                    reel.thumbnailUrl.contains('.mp4') ||
-                    reel.thumbnailUrl.contains('.mov') ||
-                    reel.thumbnailUrl.startsWith('gs://')))
-            ? reel.thumbnailUrl.trim()
-            : reel.videoUrl;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => ReelViewerScreen(videoUrl: videoUrl, title: reel.title),
-      ),
-    );
+  void _viewReel(FirebaseReelModel reel, int index) {
+    if (index < 0 || index >= _reels.length) return;
+    context
+        .push(
+      AppRoutes.reelPlayer,
+      extra: {
+        'reelId': reel.reelId,
+        'reels': List<FirebaseReelModel>.from(_reels),
+        'initialIndex': index,
+      },
+    )
+        .then((_) {
+      if (mounted) _loadReels();
+    });
   }
 
   @override
@@ -166,7 +166,7 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
         final rank = index + 1;
 
         return GestureDetector(
-          onTap: () => _viewReel(reel),
+          onTap: () => _viewReel(reel, index),
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),

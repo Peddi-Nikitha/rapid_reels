@@ -283,6 +283,36 @@ class _ProviderDetailsScreenState extends ConsumerState<ProviderDetailsScreen>
                           ),
                         ],
                       ),
+                      if (provider.equipment.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: provider.equipment.map((item) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: AppColors.primary.withOpacity(0.25),
+                                ),
+                              ),
+                              child: Text(
+                                item,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Stats Row

@@ -24,18 +24,18 @@ class RapidBottomNavBar extends StatelessWidget {
         minimum: const EdgeInsets.only(bottom: 4),
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: AppColors.surface.withValues(alpha: 0.92),
             border: Border(
               top: BorderSide(
-                color: AppColors.primary.withValues(alpha: 0.2),
+                color: Colors.white.withValues(alpha: 0.08),
                 width: 1,
               ),
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                blurRadius: 24,
-                offset: const Offset(0, -6),
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 20,
+                offset: const Offset(0, -4),
               ),
             ],
           ),
@@ -107,7 +107,7 @@ class RapidBottomNavBar extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: AppTypography.labelSmall.copyWith(
                     color: color,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     fontSize: 11,
                     height: 1.1,
                   ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/app_routes.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -29,11 +31,28 @@ class _SplashScreenState extends State<SplashScreen> {
   void _navigateToNext() {
     if (_hasNavigated) return;
     _hasNavigated = true;
-    
-    // Navigate to onboarding
-    if (mounted) {
-      context.go('/onboarding');
+
+    _routeBasedOnAuth();
+  }
+
+  Future<void> _routeBasedOnAuth() async {
+    final auth = FirebaseAuth.instance;
+    User? user = auth.currentUser;
+
+    // On cold starts currentUser may briefly be null before auth restores.
+    if (user == null) {
+      try {
+        user = await auth.authStateChanges().first.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => null,
+        );
+      } catch (_) {
+        user = null;
+      }
     }
+
+    if (!mounted) return;
+    context.go(user != null ? AppRoutes.home : AppRoutes.onboarding);
   }
 
   @override

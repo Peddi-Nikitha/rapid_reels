@@ -34,7 +34,7 @@ class _SupportScreenState extends State<SupportScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.background,
         elevation: 0,
         title: const Text(
           'Help & Support',
@@ -68,7 +68,7 @@ class _SupportScreenState extends State<SupportScreen> {
                         child: _buildQuickHelpCard(
                           icon: Icons.phone,
                           title: 'Call Us',
-                          subtitle: '+91 1800-REELS',
+                          subtitle: '+44 7596 251678',
                           onTap: () {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Opening dialer...')),
@@ -159,7 +159,7 @@ class _SupportScreenState extends State<SupportScreen> {
                         'Fill out the form and we\'ll get back to you',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.grey[600],
+                          color: AppColors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -283,7 +283,7 @@ class _SupportScreenState extends State<SupportScreen> {
               subtitle,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey[600],
+                color: AppColors.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
@@ -320,7 +320,7 @@ class _SupportScreenState extends State<SupportScreen> {
                 answer,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Colors.grey[600],
+                  color: AppColors.textSecondary,
                 ),
               ),
             ),

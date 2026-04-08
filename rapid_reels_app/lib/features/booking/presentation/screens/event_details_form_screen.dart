@@ -11,12 +11,16 @@ class EventDetailsFormScreen extends StatefulWidget {
   final String eventType;
   final String packageId;
   final Map<String, dynamic>? package;
+  final bool standardPackageSelected;
+  final double? customAmount;
 
   const EventDetailsFormScreen({
     super.key,
     required this.eventType,
     required this.packageId,
     this.package,
+    this.standardPackageSelected = true,
+    this.customAmount,
   });
 
   @override
@@ -552,6 +556,8 @@ class _EventDetailsFormScreenState extends State<EventDetailsFormScreen> {
           'eventType': widget.eventType,
           'packageId': widget.packageId,
           if (widget.package != null) 'package': widget.package,
+          'standardPackageSelected': widget.standardPackageSelected,
+          if (widget.customAmount != null) 'customAmount': widget.customAmount,
           'eventName': _eventNameController.text,
           'eventDate': _selectedDate,
           'eventTime': _selectedTime,

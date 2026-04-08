@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/constants/app_colors.dart';
@@ -46,12 +47,54 @@ class _ReelViewerScreenState extends State<ReelViewerScreen> {
     return null;
   }
 
-  VideoPlayerController _buildController(String url) {
-    return VideoPlayerController.networkUrl(
-      Uri.parse(url),
-      formatHint: _inferFormatHint(url),
-      httpHeaders: const {'Cache-Control': 'no-cache'},
-    );
+  static const _videoHttpHeaders = <String, String>{
+    'Cache-Control': 'no-cache',
+    'User-Agent':
+        'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+  };
+
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  Future<VideoPlayerController?> _createInitializedController(
+    String playableUrl,
+  ) async {
+    final hint = _inferFormatHint(playableUrl);
+
+    Future<VideoPlayerController?> tryView(VideoViewType viewType) async {
+      var controller = VideoPlayerController.networkUrl(
+        Uri.parse(playableUrl),
+        formatHint: hint,
+        httpHeaders: _videoHttpHeaders,
+        viewType: viewType,
+      );
+      try {
+        await controller.initialize();
+        return controller;
+      } catch (_) {
+        await controller.dispose();
+        return null;
+      }
+    }
+
+    if (_isAndroid) {
+      final texture = await tryView(VideoViewType.textureView);
+      if (texture != null) return texture;
+      final surface = await tryView(VideoViewType.platformView);
+      if (surface != null) return surface;
+    } else {
+      final c = await tryView(VideoViewType.textureView);
+      if (c != null) return c;
+    }
+
+    try {
+      // ignore: deprecated_member_use — last-resort path; some streams only initialize via this API.
+      final legacy = VideoPlayerController.network(playableUrl);
+      await legacy.initialize();
+      return legacy;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -84,16 +127,16 @@ class _ReelViewerScreenState extends State<ReelViewerScreen> {
         return;
       }
 
-      var controller = _buildController(playableUrl);
-      try {
-        await controller.initialize();
-      } catch (_) {
-        await controller.dispose();
-        controller = VideoPlayerController.network(playableUrl);
-        await controller.initialize();
-      }
+      final controller = await _createInitializedController(playableUrl);
       if (!mounted) {
-        controller.dispose();
+        controller?.dispose();
+        return;
+      }
+      if (controller == null) {
+        setState(() {
+          _loadError = true;
+          _isInitializing = false;
+        });
         return;
       }
       _controller?.dispose();

@@ -2,20 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 
-/// Comprehensive Typography System
-/// Using Inter font family for modern, clean, professional appearance
+/// Comprehensive typography system aligned with provider UI.
 class AppTypography {
   // Font Family
-  static String get fontFamily => 'Inter';
+  static String get fontFamily => 'Poppins';
 
-  // Base Text Style with Inter
+  // Base text style with Poppins
   static TextStyle _baseStyle({
     required double fontSize,
     required FontWeight fontWeight,
     double? letterSpacing,
     double? height,
   }) {
-    return GoogleFonts.inter(
+    return GoogleFonts.poppins(
       fontSize: fontSize,
       fontWeight: fontWeight,
       letterSpacing: letterSpacing,

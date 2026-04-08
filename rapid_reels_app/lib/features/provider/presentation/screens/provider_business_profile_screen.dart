@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geocoding/geocoding.dart';
 import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
@@ -28,6 +29,7 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
   String? _selectedProfileImage;
   List<String> _selectedCoverImages = [];
   List<String> _selectedEventTypes = [];
+  List<String> _selectedEquipment = [];
   bool _isSaving = false;
 
   final _auth = FirebaseAuth.instance;
@@ -40,6 +42,11 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
     'Engagement',
     'Corporate',
     'Brand',
+  ];
+  final List<String> _availableEquipment = const [
+    'Drone',
+    'Camera',
+    'iPhone',
   ];
 
   @override
@@ -258,6 +265,35 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
                 }).toList(),
               ),
               const SizedBox(height: 32),
+
+              const Text(
+                'Available Equipment',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: _availableEquipment.map((item) {
+                  final isSelected = _selectedEquipment.contains(item);
+                  return FilterChip(
+                    label: Text(item),
+                    selected: isSelected,
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedEquipment.add(item);
+                        } else {
+                          _selectedEquipment.remove(item);
+                        }
+                      });
+                    },
+                    selectedColor: ProviderAppColors.primary.withValues(alpha: 0.2),
+                    checkmarkColor: ProviderAppColors.primary,
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
               
               // Address
               CustomTextField(
@@ -453,6 +489,19 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
 
     try {
       final teamSize = int.tryParse(_teamSizeController.text.trim()) ?? 1;
+      double latitude = 0.0;
+      double longitude = 0.0;
+      final fullAddress =
+          '${_addressController.text.trim()}, ${_cityController.text.trim()}, ${_stateController.text.trim()}, ${_pincodeController.text.trim()}';
+      try {
+        final locations = await locationFromAddress(fullAddress);
+        if (locations.isNotEmpty) {
+          latitude = locations.first.latitude;
+          longitude = locations.first.longitude;
+        }
+      } catch (_) {
+        // Keep default coordinates; provider search has city fallback.
+      }
 
       await _firestoreService.updateProvider(user.uid, {
         'bio': _bioController.text.trim(),
@@ -463,11 +512,12 @@ class _ProviderBusinessProfileScreenState extends State<ProviderBusinessProfileS
           'state': _stateController.text.trim(),
           'pincode': _pincodeController.text.trim(),
           'coordinates': {
-            'latitude': 0.0,
-            'longitude': 0.0,
+            'latitude': latitude,
+            'longitude': longitude,
           },
         },
         'teamSize': teamSize,
+        'equipment': _selectedEquipment.map((e) => e.toLowerCase()).toList(),
       });
 
       if (!mounted) return;

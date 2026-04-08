@@ -25,6 +25,9 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
   String _musicPreference = 'bollywood';
   String _colorGrading = 'warm';
 
+  bool get _standardPackageSelected =>
+      widget.bookingData['standardPackageSelected'] != false;
+
   String get _packageId {
     final top = widget.bookingData['packageId']?.toString().trim() ?? '';
     final raw = widget.bookingData['package'];
@@ -43,12 +46,18 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
   double get _additionalCost {
     if (_isStripeTest) return 0;
     double cost = 0;
-    cost += _additionalReels * 1500; // £1500 per additional reel
-    cost += _includeDrone ? 3000 : 0; // £3000 for drone
+    cost += _additionalReels * 20; // £20 per add-on reel
+    cost += _includeDrone ? 50 : 0; // £50 for drone
     return cost;
   }
 
   double get _basePrice {
+    if (!_standardPackageSelected) {
+      final custom = widget.bookingData['customAmount'];
+      if (custom is num) return custom.toDouble();
+      if (custom is String) return double.tryParse(custom) ?? 0;
+      return 0;
+    }
     final pkg = widget.bookingData['package'] as Map<String, dynamic>?;
     final price = pkg?['price'];
     if (price is num) return price.toDouble();
@@ -132,6 +141,28 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  if (!_standardPackageSelected)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 24),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Text(
+                        'Standard package skipped. Using custom amount: £${_basePrice.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   
                   if (_isStripeTest) ...[
                     Container(
@@ -153,7 +184,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                       ),
                     ),
                     const SizedBox(height: 24),
-                  ] else ...[
+                  ] else if (_standardPackageSelected) ...[
                   const Text(
                     'Add-ons',
                     style: TextStyle(
@@ -169,7 +200,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                     icon: Icons.add_circle_outline,
                     title: 'Additional Reels',
                     description: 'Add more instant reels to your package',
-                    price: 1500,
+                    price: 20,
                     child: Row(
                       children: [
                         IconButton(
@@ -201,7 +232,7 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                     icon: Icons.flight,
                     title: 'Drone Footage',
                     description: 'Add stunning aerial shots to your coverage',
-                    price: 3000,
+                    price: 50,
                     child: Switch(
                       value: _includeDrone,
                       onChanged: (value) => setState(() => _includeDrone = value),
@@ -344,6 +375,8 @@ class _PackageCustomizationScreenState extends State<PackageCustomizationScreen>
                       updatedData['colorGrading'] = _colorGrading;
                       updatedData['additionalCost'] = _additionalCost;
                       updatedData['totalAmount'] = _totalPrice;
+                      updatedData['standardPackageSelected'] = _standardPackageSelected;
+                      updatedData['customAmount'] = !_standardPackageSelected ? _basePrice : null;
                       if (_isStripeTest) {
                         updatedData['packageId'] = StripeTestPackage.packageId;
                         updatedData['paymentCurrency'] = 'gbp';

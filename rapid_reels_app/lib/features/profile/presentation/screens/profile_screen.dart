@@ -8,6 +8,7 @@ import '../../../../core/constants/app_routes.dart';
 import '../../../../shared/widgets/firebase_storage_image.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
+import '../../../../core/theme/text_styles.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -40,14 +41,11 @@ class ProfileScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.background,
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Profile',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+          style: AppTypography.titleLarge,
         ),
       ),
       body: userProfileAsync.when(
@@ -66,16 +64,14 @@ class ProfileScreen extends ConsumerWidget {
           }
           
           // Use Firebase Auth user info as fallback if Firestore profile doesn't exist
-          // Priority: Firestore fullName > Firebase Auth displayName > email username > phone > 'User'
-          String displayName = 'User';
+          // Priority: Firestore fullName > Firebase Auth displayName > email username > 'Rapid Reels User'
+          String displayName = 'Rapid Reels User';
           if (userProfile != null && userProfile.fullName.trim().isNotEmpty) {
             displayName = userProfile.fullName;
           } else if (currentUser.displayName != null && currentUser.displayName!.trim().isNotEmpty) {
             displayName = currentUser.displayName!;
           } else if (currentUser.email != null) {
             displayName = currentUser.email!.split('@').first;
-          } else if (currentUser.phoneNumber != null) {
-            displayName = currentUser.phoneNumber!;
           }
           
           final email = userProfile?.email ?? currentUser.email;
@@ -156,9 +152,8 @@ class ProfileScreen extends ConsumerWidget {
                         onTap: () => context.push(AppRoutes.editProfile),
                         child: Text(
                           displayName,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
+                          style: AppTypography.headlineMedium.copyWith(
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ),
@@ -166,9 +161,8 @@ class ProfileScreen extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         email ?? phoneNumber ?? 'N/A',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -183,11 +177,9 @@ class ProfileScreen extends ConsumerWidget {
                             border: Border.all(color: AppColors.primary),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Edit Profile',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                            style: AppTypography.labelLarge.copyWith(
                               color: AppColors.primary,
                             ),
                           ),
@@ -218,7 +210,7 @@ class ProfileScreen extends ConsumerWidget {
                           title: 'Reels',
                           value: '${stats['totalReels']}',
                           icon: Icons.video_library,
-                          color: Colors.purple,
+                          color: AppColors.primary,
                         ),
                       ),
                     ],
@@ -285,11 +277,18 @@ class ProfileScreen extends ConsumerWidget {
                         title: 'Account Actions',
                         items: [
                           _buildMenuItem(
+                            icon: Icons.delete_forever,
+                            title: 'Delete Account',
+                            subtitle: 'Permanently remove your account and data',
+                            onTap: () => _showDeleteAccountDialog(context, ref),
+                            textColor: AppColors.error,
+                          ),
+                          _buildMenuItem(
                             icon: Icons.logout,
                             title: 'Logout',
                             subtitle: 'Sign out from your account',
                             onTap: () => _showLogoutDialog(context, ref),
-                            textColor: Colors.red,
+                            textColor: AppColors.error,
                           ),
                         ],
                       ),
@@ -315,14 +314,13 @@ class ProfileScreen extends ConsumerWidget {
                 const Icon(
                   Icons.error_outline,
                   size: 48,
-                  color: Colors.red,
+                  color: AppColors.error,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'Error loading profile',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
+                  style: AppTypography.bodyLarge.copyWith(
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -330,9 +328,8 @@ class ProfileScreen extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     error.toString(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textTertiary,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -371,18 +368,12 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppTypography.titleLarge.copyWith(color: AppColors.textPrimary),
           ),
           const SizedBox(height: 4),
           Text(
             title,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+            style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -405,10 +396,8 @@ class ProfileScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: Text(
               title,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
+              style: AppTypography.labelSmall.copyWith(
+                color: AppColors.textSecondary,
                 letterSpacing: 1,
               ),
             ),
@@ -430,15 +419,13 @@ class ProfileScreen extends ConsumerWidget {
       leading: Icon(icon, color: textColor ?? AppColors.primary),
       title: Text(
         title,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
+        style: AppTypography.titleSmall.copyWith(
           color: textColor,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(fontSize: 12),
+        style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
@@ -472,6 +459,54 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  void _showDeleteAccountDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Delete Account'),
+        content: const Text(
+          'This will permanently delete your account. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                await ref.read(authRepositoryProvider).deleteAccount();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Account deleted successfully.'),
+                  ),
+                );
+                context.go(AppRoutes.login);
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Unable to delete account. Please login again and retry.',
+                    ),
+                    backgroundColor: AppColors.error,
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogoutDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
@@ -497,7 +532,7 @@ class ProfileScreen extends ConsumerWidget {
             },
             child: const Text(
               'Logout',
-              style: TextStyle(color: Colors.red),
+              style: TextStyle(color: AppColors.error),
             ),
           ),
         ],

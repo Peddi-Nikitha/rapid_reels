@@ -194,6 +194,7 @@ See `pubspec.yaml` for the complete list of dependencies including:
 - [Technical Documentation](../../files/Rapid_Reels_Technical_Documentation.md)
 - [Quick Start Guide](../../files/Rapid_Reels_Quick_Start_Guide.md)
 - [Firebase Setup Guide](FIREBASE_SETUP_GUIDE.md)
+- [Website + Same Firebase Setup](docs/WEBSITE_FIREBASE_SETUP.md)
 
 ## Development Status
 

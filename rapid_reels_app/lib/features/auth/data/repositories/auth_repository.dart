@@ -273,7 +273,18 @@ class AuthRepository {
 
   Future<bool> userProfileExists(String userId) async {
     final user = await _firestore.getUser(userId);
-    return user != null;
+    if (user == null) return false;
+
+    // Profile is considered complete only after first-time details are filled.
+    final metadata = user.metadata ?? const <String, dynamic>{};
+    final isMarkedComplete = metadata['clientProfileCompleted'] == true;
+    if (isMarkedComplete) return true;
+
+    // Backward compatibility: treat legacy profiles as complete if key fields exist.
+    final hasName = user.fullName.trim().isNotEmpty;
+    final hasEmail = (user.email ?? '').trim().isNotEmpty;
+    final hasGender = (metadata['gender'] ?? '').toString().trim().isNotEmpty;
+    return hasName && hasEmail && hasGender;
   }
 
   Future<void> sendPasswordResetEmail(String email) async {

@@ -71,7 +71,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
     {
       'title': 'Reels & Content',
       'icon': Icons.video_library,
-      'color': Colors.purple,
+      'color': AppColors.primary,
       'faqs': [
         {
           'question': 'How many reels will I receive?',
@@ -237,6 +237,15 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            '+44 7596 251678',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 20),
@@ -424,7 +433,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
   }
 
   Future<void> _makePhoneCall() async {
-    final Uri phoneUri = Uri(scheme: 'tel', path: '+919876543210');
+    final Uri phoneUri = Uri(scheme: 'tel', path: '+447596251678');
     if (await canLaunchUrl(phoneUri)) {
       await launchUrl(phoneUri);
     } else {
@@ -433,7 +442,7 @@ class _HelpSupportScreenState extends ConsumerState<HelpSupportScreen> {
   }
 
   Future<void> _openWhatsApp() async {
-    final Uri whatsappUri = Uri.parse('https://wa.me/919876543210');
+    final Uri whatsappUri = Uri.parse('https://wa.me/447596251678');
     if (await canLaunchUrl(whatsappUri)) {
       await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
     } else {

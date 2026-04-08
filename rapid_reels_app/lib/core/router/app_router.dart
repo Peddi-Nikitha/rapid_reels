@@ -272,6 +272,9 @@ class AppRouter {
               eventType: extra['eventType'] as String? ?? 'wedding',
               packageId: extra['packageId'] as String? ?? 'pkg_gold',
               package: extra['package'] as Map<String, dynamic>?,
+              standardPackageSelected:
+                  extra['standardPackageSelected'] as bool? ?? true,
+              customAmount: (extra['customAmount'] as num?)?.toDouble(),
             ),
           );
         },
