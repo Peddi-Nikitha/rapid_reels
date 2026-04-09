@@ -22,7 +22,7 @@ class ProviderAppTheme {
       colorScheme: const ColorScheme.dark(
         primary: ProviderAppColors.primary,
         onPrimary: ProviderAppColors.onPrimary,
-        secondary: ProviderAppColors.surfaceElevated,
+        secondary: ProviderAppColors.textTertiary,
         onSecondary: ProviderAppColors.textPrimary,
         surface: ProviderAppColors.surface,
         onSurface: ProviderAppColors.textPrimary,

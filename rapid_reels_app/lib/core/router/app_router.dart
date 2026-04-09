@@ -9,6 +9,7 @@ import 'router_refresh_notifier.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/phone_login_screen.dart';
+import '../../features/auth/presentation/screens/role_selection_screen.dart';
 import '../../features/auth/presentation/screens/otp_verification_screen.dart';
 import '../../features/auth/presentation/screens/unauthorized_screen.dart';
 import '../../features/auth/presentation/screens/profile_setup_screen.dart';
@@ -92,7 +93,6 @@ import '../../features/provider/presentation/screens/provider_account_screen.dar
 import '../../core/theme/provider_app_theme.dart';
 
 // Admin screens
-import '../../features/admin/presentation/screens/admin_login_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/screens/admin_user_management_screen.dart';
 import '../../features/admin/presentation/screens/admin_booking_management_screen.dart';
@@ -126,7 +126,7 @@ Future<String?> _adminGuardRedirect(
   if (loc == AppRoutes.adminLogin || loc == AppRoutes.unauthorized) return null;
 
   final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return AppRoutes.adminLogin;
+  if (user == null) return AppRoutes.providerLogin;
 
   try {
     final isAdmin = await AdminRouteCache.isCurrentUserAdmin();
@@ -172,6 +172,15 @@ class AppRouter {
           context,
           state,
           const OnboardingScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.roleSelection,
+        name: 'roleSelection',
+        pageBuilder: (context, state) => _buildPageWithSlideTransition(
+          context,
+          state,
+          const RoleSelectionScreen(),
         ),
       ),
       GoRoute(
@@ -1077,11 +1086,7 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.adminLogin,
         name: 'adminLogin',
-        pageBuilder: (context, state) => _buildPageWithSlideTransition(
-          context,
-          state,
-          const AdminLoginScreen(),
-        ),
+        redirect: (context, state) => AppRoutes.providerLogin,
       ),
       GoRoute(
         path: AppRoutes.adminDashboard,

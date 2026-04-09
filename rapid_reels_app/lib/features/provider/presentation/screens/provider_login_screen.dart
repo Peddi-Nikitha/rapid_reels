@@ -1,48 +1,76 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../../../../core/admin/admin_route_cache.dart';
+import '../../../../core/admin/static_admin_session_provider.dart';
+import '../../../../core/router/router_refresh_notifier.dart';
+import '../../../../core/session/user_session_cleanup.dart';
 import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../shared/widgets/provider/provider_gradient_button.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/utils/helpers.dart';
 import '../../../../core/firebase/services/firestore_service.dart';
+import '../../../../core/firebase/models/firebase_provider_model.dart';
 
-class ProviderLoginScreen extends StatefulWidget {
+class ProviderLoginScreen extends ConsumerStatefulWidget {
   const ProviderLoginScreen({super.key});
 
   @override
-  State<ProviderLoginScreen> createState() => _ProviderLoginScreenState();
+  ConsumerState<ProviderLoginScreen> createState() =>
+      _ProviderLoginScreenState();
 }
 
-class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
-  final TextEditingController _phoneController = TextEditingController();
+class _ProviderLoginScreenState extends ConsumerState<ProviderLoginScreen> {
+  final TextEditingController _identifierController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isResettingPassword = false;
   bool _obscurePassword = true;
-  String _selectedCountryCode = '+91';
+  String _selectedCountryCode = '+44';
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirestoreService _firestoreService = FirestoreService();
 
-  // Common country codes
   final List<Map<String, String>> _countryCodes = [
-    {'code': '+91', 'name': 'India', 'flag': '🇮🇳'},
-    {'code': '+44', 'name': 'UK', 'flag': '🇬🇧'},
+    {'code': '+44', 'name': 'United Kingdom', 'flag': '🇬🇧'},
     {'code': '+1', 'name': 'USA', 'flag': '🇺🇸'},
     {'code': '+61', 'name': 'Australia', 'flag': '🇦🇺'},
     {'code': '+971', 'name': 'UAE', 'flag': '🇦🇪'},
     {'code': '+65', 'name': 'Singapore', 'flag': '🇸🇬'},
+    {'code': '+91', 'name': 'India', 'flag': '🇮🇳'},
   ];
+
+  bool get _identifierIsEmail =>
+      _identifierController.text.trim().contains('@');
 
   @override
   void dispose() {
-    _phoneController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  String? _providerGateMessage(FirebaseProviderModel provider) {
+    if (provider.verificationStatus == 'rejected') {
+      return 'Your provider account was rejected. Please contact support.';
+    }
+    if (!provider.isActive && provider.verificationStatus != 'pending') {
+      return 'Your provider account is not active. Please contact support.';
+    }
+    return null;
+  }
+
+  Future<void> _signOutAndInvalidate(String? uid) async {
+    try {
+      await _auth.signOut();
+    } catch (_) {}
+    if (uid != null && uid.isNotEmpty) {
+      invalidateUserSessionProviders(ref, uid);
+    }
   }
 
   Future<void> _login() async {
@@ -53,92 +81,131 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final phone = _phoneController.text.trim();
+      final id = _identifierController.text.trim();
+      final password = _passwordController.text;
 
-      // 1) Find provider by phone number in Firestore (handles multiple formats internally)
-      final provider = await _firestoreService.getProviderByPhone(
-        phone,
-        countryCode: _selectedCountryCode,
-      );
-      if (provider == null) {
-        setState(() => _isLoading = false);
-        if (mounted) {
-          Helpers.showSnackBar(
-            context,
-            'Provider not found. Please check your phone number or register first.',
-            isError: true,
-          );
-        }
-        return;
+      if (id.contains('@')) {
+        await _loginWithEmail(id, password);
+      } else {
+        await _loginWithPhone(id, password);
       }
-
-      // 2) Rejected accounts cannot sign in. Pending may sign in (limited dashboard until approved).
-      if (provider.verificationStatus == 'rejected') {
-        setState(() => _isLoading = false);
-        if (mounted) {
-          Helpers.showSnackBar(
-            context,
-            'Your provider account was rejected. Please contact support.',
-            isError: true,
-          );
-        }
-        return;
-      }
-      if (!provider.isActive && provider.verificationStatus != 'pending') {
-        setState(() => _isLoading = false);
-        if (mounted) {
-          Helpers.showSnackBar(
-            context,
-            'Your provider account is not active. Please contact support.',
-            isError: true,
-          );
-        }
-        return;
-      }
-
-      // 3) Sign in with email/password using provider's email
-      await _auth.signInWithEmailAndPassword(
-        email: provider.email,
-        password: _passwordController.text.trim(),
-      );
-
-      if (!mounted) return;
-
-      setState(() => _isLoading = false);
-
-      // 4) Navigate to provider dashboard for this providerId
-      context.go('${AppRoutes.providerPortal}/${provider.providerId}/home');
     } on FirebaseAuthException catch (e) {
-      setState(() => _isLoading = false);
-      String message = 'Login failed. Please try again.';
-      if (e.code == 'wrong-password') {
-        message = 'Incorrect password. Please try again.';
-      } else if (e.code == 'user-not-found') {
-        message = 'No user found for these credentials.';
-      } else if (e.code == 'user-disabled') {
-        message = 'This account has been disabled.';
-      }
-      if (mounted) {
-        Helpers.showSnackBar(
-          context,
-          message,
-          isError: true,
-        );
-      }
+      if (!mounted) return;
+      Helpers.showSnackBar(
+        context,
+        _mapAuthError(e),
+        isError: true,
+      );
     } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        Helpers.showSnackBar(
-          context,
-          'Unexpected error: $e',
-          isError: true,
-        );
-      }
+      if (!mounted) return;
+      Helpers.showSnackBar(
+        context,
+        'Unexpected error: $e',
+        isError: true,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  String _mapAuthError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'user-not-found':
+        return 'No user found for these credentials.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'invalid-email':
+        return 'Invalid email address.';
+      case 'invalid-credential':
+        return 'Incorrect email or password.';
+      default:
+        return e.message ?? 'Sign-in failed (${e.code}).';
+    }
+  }
+
+  Future<void> _loginWithEmail(String email, String password) async {
+    await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+
+    if (!mounted) return;
+
+    AdminRouteCache.invalidate();
+    final isAdmin = await AdminRouteCache.isCurrentUserAdmin();
+    if (isAdmin) {
+      ref.read(staticAdminSessionProvider.notifier).state = false;
+      appRouterAuthRefresh.refresh();
+      if (mounted) context.go(AppRoutes.adminDashboard);
+      return;
+    }
+
+    final uid = _auth.currentUser?.uid;
+    final provider =
+        uid != null ? await _firestoreService.getProvider(uid) : null;
+
+    if (provider == null) {
+      await _signOutAndInvalidate(uid);
+      if (mounted) {
+        Helpers.showSnackBar(
+          context,
+          'This account is not registered as a provider. Use the customer sign-in if you have a personal account.',
+          isError: true,
+        );
+      }
+      return;
+    }
+
+    final gate = _providerGateMessage(provider);
+    if (gate != null) {
+      await _signOutAndInvalidate(uid);
+      if (mounted) {
+        Helpers.showSnackBar(context, gate, isError: true);
+      }
+      return;
+    }
+
+    if (mounted) {
+      context.go('${AppRoutes.providerPortal}/${provider.providerId}/home');
+    }
+  }
+
+  Future<void> _loginWithPhone(String phone, String password) async {
+    final provider = await _firestoreService.getProviderByPhone(
+      phone,
+      countryCode: _selectedCountryCode,
+    );
+    if (provider == null) {
+      if (mounted) {
+        Helpers.showSnackBar(
+          context,
+          'Provider not found. Please check your phone number or register first.',
+          isError: true,
+        );
+      }
+      return;
+    }
+
+    final gate = _providerGateMessage(provider);
+    if (gate != null) {
+      if (mounted) {
+        Helpers.showSnackBar(context, gate, isError: true);
+      }
+      return;
+    }
+
+    await _auth.signInWithEmailAndPassword(
+      email: provider.email,
+      password: password,
+    );
+
+    if (!mounted) return;
+    context.go('${AppRoutes.providerPortal}/${provider.providerId}/home');
+  }
+
   Future<void> _signInWithGoogle() async {
-    // TODO: Implement real Google Sign-In for providers if needed.
     Helpers.showSnackBar(
       context,
       'Google Sign-In for providers is not available yet. Please use phone & password.',
@@ -147,11 +214,13 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
   }
 
   Future<void> _forgotPassword() async {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
+    final id = _identifierController.text.trim();
+    if (id.isEmpty) {
       Helpers.showSnackBar(
         context,
-        'Enter your registered phone number first.',
+        _identifierIsEmail
+            ? 'Enter your email first.'
+            : 'Enter your registered phone number first.',
         isError: true,
       );
       return;
@@ -160,8 +229,28 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
     setState(() => _isResettingPassword = true);
 
     try {
+      if (id.contains('@')) {
+        final email = id.trim();
+        if (Validators.validateEmail(email) != null) {
+          if (!mounted) return;
+          Helpers.showSnackBar(
+            context,
+            'Enter a valid email address.',
+            isError: true,
+          );
+          return;
+        }
+        await _auth.sendPasswordResetEmail(email: email);
+        if (!mounted) return;
+        Helpers.showSnackBar(
+          context,
+          'Password reset link sent to $email',
+        );
+        return;
+      }
+
       final provider = await _firestoreService.getProviderByPhone(
-        phone,
+        id,
         countryCode: _selectedCountryCode,
       );
 
@@ -222,6 +311,17 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
     }
   }
 
+  String? _validateIdentifier(String? value) {
+    final t = value?.trim() ?? '';
+    if (t.isEmpty) {
+      return 'This field is required';
+    }
+    if (t.contains('@')) {
+      return Validators.validateEmail(t);
+    }
+    return Validators.validatePhone(t);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -236,7 +336,6 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
               children: [
                 const SizedBox(height: 60),
 
-                // Logo/Icon
                 Center(
                   child: Container(
                     width: 100,
@@ -264,20 +363,11 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                Text(
-                  'Sign in to manage your bookings and earnings',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: ProviderAppColors.textSecondary,
-                  ),
-                ),
                 const SizedBox(height: 48),
 
-                // Phone number input with country code selector
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Country code dropdown
                     Container(
                       decoration: BoxDecoration(
                         color: ProviderAppColors.searchBarFill,
@@ -289,7 +379,10 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _selectedCountryCode,
-                          icon: Icon(Icons.arrow_drop_down, color: ProviderAppColors.textTertiary),
+                          icon: Icon(
+                            Icons.arrow_drop_down,
+                            color: ProviderAppColors.textTertiary,
+                          ),
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -318,33 +411,32 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Phone number field
                     Expanded(
                       child: TextFormField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(10),
-                        ],
+                        controller: _identifierController,
+                        keyboardType: TextInputType.emailAddress,
+                        onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
-                          labelText: 'Phone Number',
-                          hintText: '9876543210',
-                          prefixIcon: const Icon(Icons.phone),
+                          labelText: 'Provider phone',
+                          hintText: 'Enter phone number',
+                          prefixIcon: Icon(
+                            _identifierIsEmail
+                                ? Icons.email_outlined
+                                : Icons.phone,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
                           fillColor: ProviderAppColors.searchBarFill,
                         ),
-                        validator: Validators.validatePhone,
+                        validator: _validateIdentifier,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
 
-                // Password field
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -354,7 +446,9 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                     prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                        _obscurePassword
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
@@ -370,7 +464,6 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Forgot password
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
@@ -389,7 +482,6 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Divider
                 Row(
                   children: [
                     Expanded(child: Divider(color: ProviderAppColors.outline)),
@@ -408,7 +500,6 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Google Sign-In button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -440,7 +531,6 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Sign up link
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -462,14 +552,13 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Back to customer login
                 Center(
                   child: TextButton(
                     onPressed: () {
-                      context.go(AppRoutes.login);
+                      context.go(AppRoutes.roleSelection);
                     },
                     child: Text(
-                      'Login as Customer',
+                      'Choose account type',
                       style: GoogleFonts.poppins(
                         color: ProviderAppColors.textTertiary,
                       ),
@@ -484,4 +573,3 @@ class _ProviderLoginScreenState extends State<ProviderLoginScreen> {
     );
   }
 }
-

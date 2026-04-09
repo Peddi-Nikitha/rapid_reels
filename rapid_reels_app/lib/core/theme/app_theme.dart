@@ -16,13 +16,13 @@ class AppTheme {
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primary,
         onPrimary: AppColors.onPrimary,
-        secondary: AppColors.surfaceElevated,
+        secondary: AppColors.secondary,
         onSecondary: AppColors.textPrimary,
         surface: AppColors.surface,
         onSurface: AppColors.textPrimary,
         error: AppColors.error,
         onError: AppColors.onPrimary,
-        outline: Color(0xFF3A3A3A),
+        outline: AppColors.secondary,
       ),
       textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).copyWith(
         displayLarge: AppTypography.displayLarge,
@@ -139,7 +139,7 @@ class AppTheme {
         selectedColor: AppColors.primary.withValues(alpha: 0.28),
         labelStyle: AppTypography.labelSmall.copyWith(color: AppColors.textPrimary),
         secondaryLabelStyle: AppTypography.labelSmall.copyWith(color: AppColors.textSecondary),
-        side: const BorderSide(color: Color(0xFF3A3A3A), width: 1),
+        side: const BorderSide(color: AppColors.secondary, width: 1),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
         ),

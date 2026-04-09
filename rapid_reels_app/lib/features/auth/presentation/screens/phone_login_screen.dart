@@ -399,55 +399,16 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 32),
-                
-                // Provider Registration & Admin Login Links
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        context.push(AppRoutes.providerLogin);
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.business_center, size: 18),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Provider Login',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
+                const SizedBox(height: 24),
+                TextButton(
+                  onPressed: () => context.go(AppRoutes.roleSelection),
+                  child: const Text(
+                    'Choose account type',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
-                    Text(
-                      ' • ',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        context.push(AppRoutes.adminLogin);
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.admin_panel_settings, size: 18),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Admin Login',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),

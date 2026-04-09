@@ -1355,6 +1355,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildTrendingReelCard(FirebaseReelModel reel, int index) {
     final reelId = reel.reelId;
     final uid = ref.read(currentUserProvider)?.uid;
+    final previewImageUrl = _resolveReelPreviewImageUrl(reel);
     final isLiked = _likedReels.containsKey(reelId)
         ? _likedReels[reelId]!
         : (uid != null && reel.isLikedByUser(uid));
@@ -1408,12 +1409,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               muted: true,
                             ),
                           )
-                        else if (reel.thumbnailUrl.isNotEmpty)
+                        else if (previewImageUrl.isNotEmpty)
                           CachedNetworkImage(
-                            imageUrl: reel.thumbnailUrl,
+                            imageUrl: previewImageUrl,
                             fit: BoxFit.cover,
                             width: double.infinity,
                             height: double.infinity,
+                            errorWidget: (_, __, ___) => AbsorbPointer(
+                              child: ReelVideoLayer(
+                                reel: reel,
+                                isActive: false,
+                                muted: true,
+                              ),
+                            ),
+                          )
+                        else
+                          AbsorbPointer(
+                            child: ReelVideoLayer(
+                              reel: reel,
+                              isActive: false,
+                              muted: true,
+                            ),
                           ),
                         Container(
                           decoration: BoxDecoration(
@@ -1735,6 +1751,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return '${(views / 1000).toStringAsFixed(1)}K';
     }
     return views.toString();
+  }
+
+  String _resolveReelPreviewImageUrl(FirebaseReelModel reel) {
+    final thumb = reel.thumbnailUrl.trim();
+    if (_isLikelyImageUrl(thumb)) return thumb;
+    final video = reel.videoUrl.trim();
+    if (_isLikelyImageUrl(video)) return video;
+    return '';
+  }
+
+  bool _isLikelyImageUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('.jpg') ||
+        lower.contains('.jpeg') ||
+        lower.contains('.png') ||
+        lower.contains('.webp') ||
+        lower.contains('.gif');
   }
 
   void _showCityPicker() {

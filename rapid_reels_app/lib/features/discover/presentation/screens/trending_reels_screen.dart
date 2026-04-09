@@ -179,11 +179,20 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: CachedNetworkImage(
-                      imageUrl: reel.thumbnailUrl,
+                      imageUrl: _resolveReelPreviewImageUrl(reel),
                       fit: BoxFit.cover,
                       placeholder: (context, url) => const ShimmerLoading(
                         width: double.infinity,
                         height: double.infinity,
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: AppColors.surface,
+                        child: const Center(
+                          child: Icon(
+                            Icons.play_circle_outline,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -369,6 +378,23 @@ class _TrendingReelsScreenState extends State<TrendingReelsScreen>
       return '${(number / 1000).toStringAsFixed(1)}K';
     }
     return number.toString();
+  }
+
+  String _resolveReelPreviewImageUrl(FirebaseReelModel reel) {
+    final thumb = reel.thumbnailUrl.trim();
+    if (_isLikelyImageUrl(thumb)) return thumb;
+    final video = reel.videoUrl.trim();
+    if (_isLikelyImageUrl(video)) return video;
+    return thumb.isNotEmpty ? thumb : video;
+  }
+
+  bool _isLikelyImageUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('.jpg') ||
+        lower.contains('.jpeg') ||
+        lower.contains('.png') ||
+        lower.contains('.webp') ||
+        lower.contains('.gif');
   }
 }
 

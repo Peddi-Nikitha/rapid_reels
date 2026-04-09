@@ -18,8 +18,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final PageController _pageController = PageController();
   int _currentPage = 0;
   late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
   
   // Video controllers for slides 1 and 3
   VideoPlayerController? _videoController1;
@@ -102,22 +100,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       duration: const Duration(milliseconds: 800),
     );
 
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    ));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.2),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
-
     _animationController.forward();
   }
 
@@ -168,12 +150,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         curve: Curves.easeInOut,
       );
     } else {
-      context.go(AppRoutes.login);
+      context.go(AppRoutes.roleSelection);
     }
   }
 
   void _skip() {
-    context.go(AppRoutes.login);
+    context.go(AppRoutes.roleSelection);
   }
 
   @override
@@ -191,15 +173,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           // Content
           Stack(
             children: [
-              // Banner for slide 2 (Car) - positioned at top below status bar
-              if (_currentPage == 1)
-                Positioned(
-                  top: MediaQuery.of(context).padding.top,
-                  left: 0,
-                  right: 0,
-                  child: _buildCarBanner(),
-                ),
-
               // Page view with text overlay (must be below Skip so taps reach Skip)
               SafeArea(
                 child: PageView.builder(
@@ -207,7 +180,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   onPageChanged: _onPageChanged,
                   itemCount: _pages.length,
                   itemBuilder: (context, index) {
-                    return _buildPage(_pages[index]);
+                    return _buildPage();
                   },
                 ),
               ),
@@ -489,114 +462,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _buildPage(OnboardingData data) {
-    return Stack(
-      children: [
-        // Text overlay positioned at bottom left
-        Positioned(
-          bottom: 140,
-          left: 24,
-          right: 24,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title - Large and prominent
-                  Text(
-                    data.title,
-                    style: AppTypography.displaySmall.copyWith(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Subtitle - Refined typography
-                  Text(
-                    data.subtitle,
-                    style: AppTypography.bodyLarge.copyWith(
-                      fontSize: 15,
-                      color: Colors.white,
-                      height: 1.4,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          blurRadius: 6,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCarBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.blue.shade800,
-            Colors.blue.shade700,
-            Colors.blue.shade600,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Car icon on left
-          Icon(
-            Icons.directions_car,
-            color: Colors.white,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-          // Text
-          Expanded(
-            child: Text(
-              AppStrings.onboardingBanner2,
-              style: AppTypography.displaySmall.copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 0.8,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Car icon on right
-          Icon(
-            Icons.directions_car,
-            color: Colors.white,
-            size: 24,
-          ),
-        ],
-      ),
-    );
+  Widget _buildPage() {
+    return const SizedBox.expand();
   }
 
   Widget _buildDot(bool isActive) {

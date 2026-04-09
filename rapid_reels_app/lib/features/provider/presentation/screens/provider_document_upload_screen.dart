@@ -17,11 +17,11 @@ class ProviderDocumentUploadScreen extends StatefulWidget {
 
 class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScreen> {
   final Map<String, String?> _documents = {
-    'Aadhaar Card': null,
-    'PAN Card': null,
-    'Business License': null,
-    'GST Certificate': null,
-    'Bank Account Proof': null,
+    'UK Passport': null,
+    'UK Driving Licence': null,
+    'Biometric Residence Permit (BRP)': null,
+    'Proof of Address': null,
+    'Selfie / Liveness Check': null,
   };
 
   final _auth = FirebaseAuth.instance;
@@ -59,7 +59,7 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
             ),
             const SizedBox(height: 8),
             Text(
-              'Please upload clear photos of your documents for verification',
+              'Please upload clear images for UK identity verification.',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 32),
@@ -84,7 +84,7 @@ class _ProviderDocumentUploadScreenState extends State<ProviderDocumentUploadScr
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'All documents will be verified by our team. This process usually takes 24-48 hours.',
+                      'Your submitted documents will be reviewed by our UK verification team. This usually takes 24-48 hours.',
                       style: TextStyle(fontSize: 12, color: Colors.grey[300]),
                     ),
                   ),

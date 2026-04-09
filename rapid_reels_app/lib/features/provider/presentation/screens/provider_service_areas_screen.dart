@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/provider_app_colors.dart';
 import '../../../../core/constants/app_routes.dart';
@@ -13,20 +14,44 @@ class ProviderServiceAreasScreen extends StatefulWidget {
 
 class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen> {
   final List<String> _availableCities = [
-    'Mumbai',
-    'Delhi',
-    'Bangalore',
-    'Hyderabad',
-    'Chennai',
-    'Kolkata',
-    'Pune',
-    'Ahmedabad',
-    'Jaipur',
-    'Surat',
+    'London',
+    'Manchester',
+    'Birmingham',
+    'Leeds',
+    'Liverpool',
+    'Bristol',
+    'Glasgow',
+    'Edinburgh',
+    'Newcastle',
+    'Cardiff',
+    'Belfast',
+    'Nottingham',
   ];
+
+  static const Map<String, LatLng> _ukCityCoordinates = {
+    'London': LatLng(51.5072, -0.1276),
+    'Manchester': LatLng(53.4808, -2.2426),
+    'Birmingham': LatLng(52.4862, -1.8904),
+    'Leeds': LatLng(53.8008, -1.5491),
+    'Liverpool': LatLng(53.4084, -2.9916),
+    'Bristol': LatLng(51.4545, -2.5879),
+    'Glasgow': LatLng(55.8642, -4.2518),
+    'Edinburgh': LatLng(55.9533, -3.1883),
+    'Newcastle': LatLng(54.9783, -1.6178),
+    'Cardiff': LatLng(51.4816, -3.1791),
+    'Belfast': LatLng(54.5973, -5.9301),
+    'Nottingham': LatLng(52.9548, -1.1581),
+  };
   
   final Set<String> _selectedCities = {};
   double _serviceRadius = 50.0;
+  GoogleMapController? _mapController;
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +167,7 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
                         _selectedCities.remove(city);
                       }
                     });
+                    _focusMap(city, selected);
                   },
                   selectedColor: ProviderAppColors.primary.withValues(alpha: 0.2),
                   checkmarkColor: ProviderAppColors.primary,
@@ -160,23 +186,47 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
                 color: ProviderAppColors.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.map, size: 48, color: Colors.grey[600]),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Map Preview',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                children: [
+                  GoogleMap(
+                    initialCameraPosition: const CameraPosition(
+                      target: LatLng(54.5, -2.5),
+                      zoom: 5.2,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Service areas will be highlighted on map',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                    mapType: MapType.normal,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    compassEnabled: false,
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                    },
+                    markers: _buildCityMarkers(),
+                    circles: _buildServiceCircles(),
+                  ),
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _selectedCities.isEmpty
+                            ? 'Map Preview: Select cities to highlight your service areas'
+                            : 'Map Preview: ${_selectedCities.length} city(s) selected',
+                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 32),
@@ -200,6 +250,52 @@ class _ProviderServiceAreasScreenState extends State<ProviderServiceAreasScreen>
     }
 
     context.push(AppRoutes.providerDocumentUpload);
+  }
+
+  Set<Marker> _buildCityMarkers() {
+    final targets = _selectedCities.isEmpty ? _availableCities : _selectedCities.toList();
+
+    return targets
+        .where(_ukCityCoordinates.containsKey)
+        .map((city) {
+          final isSelected = _selectedCities.contains(city);
+          return Marker(
+            markerId: MarkerId(city),
+            position: _ukCityCoordinates[city]!,
+            infoWindow: InfoWindow(title: city),
+            icon: isSelected
+                ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure)
+                : BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose),
+          );
+        })
+        .toSet();
+  }
+
+  Set<Circle> _buildServiceCircles() {
+    return _selectedCities
+        .where(_ukCityCoordinates.containsKey)
+        .map((city) {
+          return Circle(
+            circleId: CircleId('service_$city'),
+            center: _ukCityCoordinates[city]!,
+            radius: _serviceRadius * 1000,
+            fillColor: ProviderAppColors.primary.withValues(alpha: 0.12),
+            strokeColor: ProviderAppColors.primary.withValues(alpha: 0.8),
+            strokeWidth: 2,
+          );
+        })
+        .toSet();
+  }
+
+  Future<void> _focusMap(String city, bool selected) async {
+    final controller = _mapController;
+    final target = _ukCityCoordinates[city];
+    if (!selected || controller == null || target == null) return;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: target, zoom: 8.0),
+      ),
+    );
   }
 }
 

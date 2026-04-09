@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_routes.dart';
 import '../../../../core/theme/provider_app_theme.dart';
 import '../../../../shared/widgets/provider/provider_action_card.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../notifications/presentation/screens/notifications_screen.dart';
 import 'provider_bank_details_screen.dart';
 
 /// Provider hub: profile shortcuts, bank, policy, logout.
-class ProviderAccountScreen extends StatelessWidget {
+class ProviderAccountScreen extends ConsumerWidget {
   const ProviderAccountScreen({super.key, required this.providerId});
 
   final String providerId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Account'),
@@ -81,16 +83,26 @@ class ProviderAccountScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           OutlinedButton.icon(
-            onPressed: () => _logout(context),
+            onPressed: () => _logout(context, ref),
             icon: const Icon(Icons.logout),
             label: const Text('Sign out'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => _deleteAccount(context, ref),
+            icon: const Icon(Icons.delete_forever),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+            ),
+            label: const Text('Delete account'),
           ),
         ],
       ),
     );
   }
 
-  void _logout(BuildContext context) {
+  void _logout(BuildContext context, WidgetRef ref) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -101,11 +113,59 @@ class ProviderAccountScreen extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              context.go(AppRoutes.providerLogin);
+              final authNotifier = ref.read(authNotifierProvider.notifier);
+              await authNotifier.signOut(ref);
+              if (context.mounted) {
+                context.go(AppRoutes.providerLogin);
+              }
             },
             child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteAccount(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account'),
+        content: const Text(
+          'This will permanently delete your login account and you will lose access immediately. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(authRepositoryProvider).deleteAccount();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Account deleted successfully.')),
+                );
+                context.go(AppRoutes.providerLogin);
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Unable to delete account. Please sign in again and retry.',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
